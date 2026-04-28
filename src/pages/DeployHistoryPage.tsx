@@ -16,6 +16,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
+import { subscribeToDeployHistory } from '../lib/deployment-service';
+import type { DeploymentRecord } from '../lib/types';
 
 const API_URL = 'http://localhost:5181';
 
@@ -29,10 +31,12 @@ interface Release {
   fileCount?: number;
   versionBytes?: string;
   message?: string;
+  duration?: number | null;
+  deployUrl?: string | null;
   // enriched on client
   appId?: string;
   appName?: string;
-  hostingTarget?: string;
+  hostingTarget?: string | null;
 }
 
 interface RollbackState {
@@ -46,6 +50,7 @@ interface RollbackState {
 
 export function DeployHistoryPage() {
   const { currentSuite } = useSuite();
+  const [firestoreRecords, setFirestoreRecords] = useState<DeploymentRecord[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -58,8 +63,54 @@ export function DeployHistoryPage() {
   // Per-release rollback progress
   const [rollbackState, setRollbackState] = useState<Record<string, RollbackState>>({});
 
+  // ── Firestore real-time subscription ─────────────────────
+  useEffect(() => {
+    if (!currentSuite) return;
+    setLoading(true);
+    setApiError(null);
+
+    const unsub = subscribeToDeployHistory(
+      currentSuite.id,
+      (records) => {
+        setFirestoreRecords(records);
+        // Map to Release shape so the rest of the UI is unchanged
+        const mapped: Release[] = records.map((r) => {
+          const appConfig = currentSuite.apps[r.appId];
+          return {
+            releaseId: r.id,
+            name: r.id,
+            versionName: r.firebaseVersionId || undefined,
+            createTime: r.startedAt
+              ? new Date((r.startedAt as unknown as { seconds: number }).seconds * 1000).toISOString()
+              : undefined,
+            status: r.status,
+            type: r.status === 'live' ? 'DEPLOY' : r.status.toUpperCase(),
+            fileCount: undefined,
+            versionBytes: r.buildSize ? String(r.buildSize) : undefined,
+            message: r.errorLogs || undefined,
+            appId: r.appId,
+            appName: r.displayName || appConfig?.displayName || r.appId,
+            hostingTarget: appConfig?.environments?.production?.hostingTarget || null,
+            duration: r.duration,
+            deployUrl: r.deployUrl || null,
+          };
+        });
+        setReleases(mapped);
+        setLoading(false);
+      },
+      (err) => {
+        setApiError(err.message);
+        setLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, [currentSuite]);
+
+  // ── Fallback: load from Hosting API if Firestore is empty ─
   const fetchReleases = useCallback(async () => {
     if (!currentSuite) return;
+    if (firestoreRecords.length > 0) return; // Firestore has data, skip
     setLoading(true);
     setApiError(null);
 
@@ -67,9 +118,7 @@ export function DeployHistoryPage() {
       const apps = Object.entries(currentSuite.apps).filter(
         ([, app]) => app.environments.production?.hostingTarget
       );
-
       const results: Release[] = [];
-
       await Promise.allSettled(
         apps.map(async ([appId, app]) => {
           const target = app.environments.production.hostingTarget!;
@@ -86,23 +135,17 @@ export function DeployHistoryPage() {
               hostingTarget: target,
             }));
             results.push(...enriched);
-          } catch {
-            // Skip apps that fail (API offline, site not created, etc.)
-          }
+          } catch { /* skip */ }
         })
       );
-
-      // Sort by createTime desc
-      results.sort((a, b) =>
-        (b.createTime || '').localeCompare(a.createTime || '')
-      );
+      results.sort((a, b) => (b.createTime || '').localeCompare(a.createTime || ''));
       setReleases(results);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to load releases');
     } finally {
       setLoading(false);
     }
-  }, [currentSuite]);
+  }, [currentSuite, firestoreRecords.length]);
 
   useEffect(() => {
     fetchReleases();
@@ -339,13 +382,29 @@ export function DeployHistoryPage() {
                   >
                     <td className="px-5 py-3.5 text-sm font-semibold text-white/80">
                       <div className="flex items-center gap-2">
-                        {release.appName}
+                        <a
+                          href={`https://${release.hostingTarget}.web.app`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-primary transition-colors flex items-center gap-1.5 group"
+                        >
+                          {release.appName}
+                          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                        </a>
                         {isFirst && idx === 0 && (
                           <span className="badge badge-success text-[9px]">Latest</span>
                         )}
                       </div>
-                      <p className="text-[10px] text-white/25 font-mono mt-0.5">{release.hostingTarget}</p>
+                      <a
+                        href={`https://${release.hostingTarget}.web.app`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-white/25 font-mono mt-0.5 hover:text-primary/60 transition-colors"
+                      >
+                        {release.hostingTarget}.web.app
+                      </a>
                     </td>
+
                     <td className="px-5 py-3.5">
                       <span className={`badge ${release.type === 'ROLLBACK' ? 'badge-warning' : 'badge-success'} flex items-center gap-1 w-fit`}>
                         {release.type === 'ROLLBACK' ? (

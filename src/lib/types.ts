@@ -70,6 +70,7 @@ export interface DeploymentRecord {
   suiteId: string;
   batchId: string;
   appId: string;
+  displayName: string;         // human-readable app name stored at write time
   environment: EnvironmentTag;
   status: DeployStatus;
   startedAt: Timestamp;
@@ -78,7 +79,8 @@ export interface DeploymentRecord {
   buildSize: number | null;
   errorLogs: string | null;
   deployMethod: DeployMethod;
-  // Rollback metadata (stored now, used later)
+  deployUrl: string | null;    // live URL captured from SSE response
+  // Rollback metadata
   firebaseVersionId: string | null;
   cloudRunRevision: string | null;
   gitCommitSha: string | null;

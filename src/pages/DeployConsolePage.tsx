@@ -16,8 +16,10 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
-import type { DeployStatus, EnvironmentTag } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
+import type { DeployStatus, EnvironmentTag, DeploymentRecord } from '../lib/types';
 import { getEstimate, formatDuration, formatElapsed } from '../lib/expert-system';
+import { saveDeployRecord, subscribeToDeployHistory } from '../lib/deployment-service';
 
 const API_URL = 'http://localhost:5181';
 
@@ -40,11 +42,13 @@ interface AppDeployState {
 
 export function DeployConsolePage() {
   const { currentSuite } = useSuite();
+  const { user } = useAuth();
   const [deployStates, setDeployStates] = useState<AppDeployState[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [deployHistory, setDeployHistory] = useState<DeploymentRecord[]>([]);
 
   // Per-app rollback state: stage | message | error | url
   const [rollbackStates, setRollbackStates] = useState<Record<string, { active: boolean; stage: string; message: string; error?: string; url?: string }>>({});
@@ -55,6 +59,16 @@ export function DeployConsolePage() {
       .then((r) => r.ok ? setApiAvailable(true) : setApiAvailable(false))
       .catch(() => setApiAvailable(false));
   }, []);
+
+  // Subscribe to Firestore deploy history for this suite (feeds expert system)
+  useEffect(() => {
+    if (!currentSuite) return;
+    const unsub = subscribeToDeployHistory(
+      currentSuite.id,
+      (records) => setDeployHistory(records),
+    );
+    return () => unsub();
+  }, [currentSuite]);
 
   // Initialize deploy states from suite apps
   useEffect(() => {
@@ -181,6 +195,28 @@ export function DeployConsolePage() {
               }
             }
           }
+          // Stream ended — read final state and persist to Firestore
+          setDeployStates((prev) => {
+            const final = prev.find((s) => s.appId === app.appId);
+            if (final && currentSuite) {
+              saveDeployRecord({
+                suiteId: currentSuite.id,
+                batchId: app.appId + '-' + Date.now(),
+                appId: app.appId,
+                displayName: app.displayName,
+                environment: app.environment,
+                status: final.status,
+                startedAt: app.startedAt || Date.now(),
+                duration: final.elapsed || null,
+                deployMethod: app.deployMethod,
+                hostingTarget: app.hostingTarget,
+                project: app.project,
+                errorLogs: final.error,
+                deployUrl: final.deployUrl,
+              }).catch((e) => console.warn('[Deploy] Firestore write failed:', e.message));
+            }
+            return prev;
+          });
           resolve();
         })
         .catch((err) => {
@@ -196,10 +232,28 @@ export function DeployConsolePage() {
                 : s
             )
           );
+          // Persist failure record
+          if (currentSuite) {
+            saveDeployRecord({
+              suiteId: currentSuite.id,
+              batchId: app.appId + '-' + Date.now(),
+              appId: app.appId,
+              displayName: app.displayName,
+              environment: app.environment,
+              status: 'failed',
+              startedAt: app.startedAt || Date.now(),
+              duration: null,
+              deployMethod: app.deployMethod,
+              hostingTarget: app.hostingTarget,
+              project: app.project,
+              errorLogs: err.message,
+              deployUrl: null,
+            }).catch(() => {});
+          }
           resolve();
         });
     });
-  }, []);
+  }, [currentSuite, user]);
 
   // Rollback — fetch last versionName then POST /api/rollback
   const rollbackApp = useCallback(async (app: AppDeployState) => {
@@ -355,7 +409,7 @@ export function DeployConsolePage() {
       {/* App Grid */}
       <div className="space-y-3">
         {deployStates.map((app) => {
-          const estimate = getEstimate(app.appId, app.deployMethod as 'firebase' | 'cloud-build');
+          const estimate = getEstimate(app.appId, app.deployMethod as 'firebase' | 'cloud-build', deployHistory);
           const isExpanded = expandedLog === app.appId;
 
           return (
