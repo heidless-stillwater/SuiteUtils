@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Wifi,
   WifiOff,
+  RotateCcw,
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import type { DeployStatus, EnvironmentTag } from '../lib/types';
@@ -44,6 +45,9 @@ export function DeployConsolePage() {
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Per-app rollback state: stage | message | error | url
+  const [rollbackStates, setRollbackStates] = useState<Record<string, { active: boolean; stage: string; message: string; error?: string; url?: string }>>({});
 
   // Check API health on mount
   useEffect(() => {
@@ -196,6 +200,91 @@ export function DeployConsolePage() {
         });
     });
   }, []);
+
+  // Rollback — fetch last versionName then POST /api/rollback
+  const rollbackApp = useCallback(async (app: AppDeployState) => {
+    if (!app.hostingTarget || !apiAvailable) return;
+
+    setRollbackStates((prev) => ({
+      ...prev,
+      [app.appId]: { active: true, stage: 'fetching', message: 'Fetching latest release...' },
+    }));
+
+    try {
+      // 1. Get the second-most-recent release (index 1 = previous deploy)
+      const relRes = await fetch(`${API_URL}/api/releases/${app.hostingTarget}?project=${app.project}`);
+      const relData = await relRes.json();
+      const releases: Array<{ versionName?: string; releaseId: string }> = relData.releases || [];
+
+      if (releases.length < 2) {
+        setRollbackStates((prev) => ({
+          ...prev,
+          [app.appId]: { active: false, stage: 'failed', message: 'No previous release to roll back to' },
+        }));
+        return;
+      }
+
+      const target = releases[1]; // [0] = current, [1] = previous
+      if (!target.versionName) {
+        setRollbackStates((prev) => ({
+          ...prev,
+          [app.appId]: { active: false, stage: 'failed', message: 'Previous release has no version data' },
+        }));
+        return;
+      }
+
+      setRollbackStates((prev) => ({
+        ...prev,
+        [app.appId]: { active: true, stage: 'rolling-back', message: `Rolling back to ${target.releaseId}...` },
+      }));
+
+      // 2. Stream rollback
+      const rbRes = await fetch(`${API_URL}/api/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostingTarget: app.hostingTarget,
+          versionName: target.versionName,
+          project: app.project,
+        }),
+      });
+
+      const reader = rbRes.body?.getReader();
+      if (!reader) throw new Error('No stream');
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            setRollbackStates((prev) => ({
+              ...prev,
+              [app.appId]: {
+                active: data.stage !== 'live' && data.stage !== 'failed',
+                stage: data.stage,
+                message: data.message || prev[app.appId]?.message,
+                error: data.error,
+                url: data.url,
+              },
+            }));
+          } catch { /* skip */ }
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Rollback failed';
+      setRollbackStates((prev) => ({
+        ...prev,
+        [app.appId]: { active: false, stage: 'failed', message: msg },
+      }));
+    }
+  }, [apiAvailable]);
 
   // Batch deploy — stagger by 1s
   const startBatch = useCallback(async () => {
@@ -352,6 +441,48 @@ export function DeployConsolePage() {
                       <Terminal className="w-4 h-4" />
                     </button>
                   )}
+
+                  {/* Rollback quick-action */}
+                  {apiAvailable && app.hostingTarget && !batchRunning && app.status !== 'building' && app.status !== 'deploying' && (() => {
+                    const rb = rollbackStates[app.appId];
+                    if (rb?.active) {
+                      return (
+                        <div className="flex items-center gap-1.5 text-amber-400 text-xs">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span className="hidden lg:inline">{rb.message}</span>
+                        </div>
+                      );
+                    }
+                    if (rb?.stage === 'live') {
+                      return (
+                        <div className="flex items-center gap-1.5 text-green-400 text-xs">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {rb.url && (
+                            <a href={rb.url} target="_blank" rel="noopener noreferrer" className="hidden lg:inline underline">
+                              Rolled back ↗
+                            </a>
+                          )}
+                        </div>
+                      );
+                    }
+                    if (rb?.stage === 'failed') {
+                      return (
+                        <div className="flex items-center gap-1.5 text-red-400 text-xs" title={rb.message}>
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span className="hidden lg:inline">Failed</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        onClick={() => rollbackApp(app)}
+                        title="Roll back to previous release"
+                        className="p-2 rounded-lg bg-white/5 hover:bg-cyan-400/10 text-white/20 hover:text-cyan-400 transition-all"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    );
+                  })()}
 
                   {/* Deploy URL */}
                   {app.deployUrl && (
