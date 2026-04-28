@@ -9,6 +9,7 @@ interface SuiteContextType {
   currentSuite: Suite | null;
   suites: Suite[];
   loading: boolean;
+  dbError: string | null;
   switchSuite: (suiteId: string) => void;
   createSuite: (name: string) => Promise<string>;
 }
@@ -24,6 +25,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
     () => localStorage.getItem(SUITE_STORAGE_KEY)
   );
   const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   const currentSuite = suites.find((s) => s.id === currentSuiteId) || suites[0] || null;
 
@@ -35,23 +37,31 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const unsub = onSnapshot(collection(db, 'suites'), (snap) => {
-      const loaded: Suite[] = [];
-      snap.forEach((doc) => {
-        const data = doc.data() as Omit<Suite, 'id'>;
-        if (data.ownerId === user.uid) {
-          loaded.push({ ...data, id: doc.id } as Suite);
+    const unsub = onSnapshot(
+      collection(db, 'suites'),
+      (snap) => {
+        const loaded: Suite[] = [];
+        snap.forEach((doc) => {
+          const data = doc.data() as Omit<Suite, 'id'>;
+          if (data.ownerId === user.uid) {
+            loaded.push({ ...data, id: doc.id } as Suite);
+          }
+        });
+        setSuites(loaded);
+
+        // Auto-seed "Stillwater" suite if none exist
+        if (loaded.length === 0) {
+          seedDefaultSuite(user.uid);
         }
-      });
-      setSuites(loaded);
 
-      // Auto-seed "Stillwater" suite if none exist
-      if (loaded.length === 0) {
-        seedDefaultSuite(user.uid);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn('[Suite] Firestore listener error:', error.message);
+        setDbError(error.message);
+        setLoading(false);
       }
-
-      setLoading(false);
-    });
+    );
 
     return () => unsub();
   }, [user]);
@@ -76,6 +86,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         displayName: config.displayName,
         path: config.path,
         database: config.database,
+        project: config.project,
         environments: {
           production: defaultEnv,
           staging: {
@@ -134,6 +145,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         currentSuite,
         suites,
         loading,
+        dbError,
         switchSuite,
         createSuite,
       }}

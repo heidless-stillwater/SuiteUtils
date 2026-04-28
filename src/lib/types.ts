@@ -44,6 +44,7 @@ export interface AppConfig {
   displayName: string;
   path: string;
   database: string;
+  project: string;
   environments: Record<EnvironmentTag, EnvironmentConfig>;
 }
 
@@ -134,42 +135,49 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     displayName: 'ag-video-system',
     path: '~/projects/ag-video-system',
     database: 'autovideo-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: 'videosystem-v0', deployMethod: 'firebase', status: 'live' },
   },
   'prompttool': {
     displayName: 'PromptTool',
     path: '~/projects/PromptTool',
     database: 'prompttool-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: 'prompttool-v0', deployMethod: 'firebase', status: 'live' },
   },
   'promptresources': {
     displayName: 'PromptResources',
     path: '~/projects/PromptResources',
     database: 'promptresources-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: 'promptresources-v0', deployMethod: 'firebase', status: 'live' },
   },
   'promptmasterspa': {
     displayName: 'PromptMasterSPA',
     path: '~/projects/PromptMasterSPA',
     database: 'promptmaster-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: 'promptmaster-v0', deployMethod: 'firebase', status: 'live' },
   },
   'promptaccreditation': {
     displayName: 'PromptAccreditation',
     path: '~/projects/PromptAccreditation',
     database: 'promptaccreditation-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: 'promptaccreditation-v0', deployMethod: 'firebase', status: 'live' },
   },
   'plantune': {
     displayName: 'PlanTune',
     path: '~/projects/PlanTune',
     database: 'plantune-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: null, deployMethod: 'cloud-build', status: 'live' },
   },
   'suiteutils': {
     displayName: 'SuiteUtils',
     path: '~/projects/SuiteUtils',
     database: 'suiteutils-db-0',
+    project: 'heidless-apps-0',
     defaultEnv: { hostingTarget: 'suiteutils-v0', deployMethod: 'firebase', status: 'not-configured' },
   },
 };

@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "heidless-apps-0"
-  }
+  },
+  "targets": {
+    "heidless-apps-0": {
+      "hosting": {
+        "suiteutils-v0": [
+          "suiteutils-v0"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

@@ -1,21 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Rocket,
   Play,
-  Pause,
   Square,
-  X,
   CheckCircle2,
   AlertTriangle,
   Clock,
   Loader2,
-  RotateCcw,
   Zap,
   ChevronDown,
+  Terminal,
+  ExternalLink,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import type { DeployStatus, EnvironmentTag } from '../lib/types';
 import { getEstimate, formatDuration, formatElapsed } from '../lib/expert-system';
+
+const API_URL = 'http://localhost:5181';
 
 interface AppDeployState {
   appId: string;
@@ -26,12 +29,28 @@ interface AppDeployState {
   startedAt: number | null;
   elapsed: number;
   deployMethod: string;
+  projectPath: string;
+  hostingTarget: string | null;
+  project: string;
+  logs: string[];
+  deployUrl: string | null;
+  error: string | null;
 }
 
 export function DeployConsolePage() {
   const { currentSuite } = useSuite();
   const [deployStates, setDeployStates] = useState<AppDeployState[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
+  const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Check API health on mount
+  useEffect(() => {
+    fetch(`${API_URL}/api/health`)
+      .then((r) => r.ok ? setApiAvailable(true) : setApiAvailable(false))
+      .catch(() => setApiAvailable(false));
+  }, []);
 
   // Initialize deploy states from suite apps
   useEffect(() => {
@@ -45,6 +64,12 @@ export function DeployConsolePage() {
       startedAt: null,
       elapsed: 0,
       deployMethod: app.environments.production?.deployMethod || 'firebase',
+      projectPath: app.path,
+      hostingTarget: app.environments.production?.hostingTarget || null,
+      project: app.project || 'heidless-apps-0',
+      logs: [],
+      deployUrl: null,
+      error: null,
     }));
     setDeployStates(states);
   }, [currentSuite]);
@@ -64,6 +89,13 @@ export function DeployConsolePage() {
     return () => clearInterval(interval);
   }, [batchRunning]);
 
+  // Auto-scroll log panels
+  useEffect(() => {
+    if (expandedLog && logRefs.current[expandedLog]) {
+      logRefs.current[expandedLog]!.scrollTop = logRefs.current[expandedLog]!.scrollHeight;
+    }
+  });
+
   const toggleSelect = (appId: string) => {
     setDeployStates((prev) =>
       prev.map((s) => (s.appId === appId ? { ...s, selected: !s.selected } : s))
@@ -81,58 +113,104 @@ export function DeployConsolePage() {
     );
   };
 
-  // Simulated deploy flow (UI demo — real execution requires Cloud Functions)
-  const startBatch = useCallback(() => {
+  // Real deploy via SSE
+  const deployApp = useCallback((app: AppDeployState) => {
+    return new Promise<void>((resolve) => {
+      setDeployStates((prev) =>
+        prev.map((s) =>
+          s.appId === app.appId
+            ? { ...s, status: 'building' as DeployStatus, startedAt: Date.now(), logs: [], error: null }
+            : s
+        )
+      );
+
+      // Use fetch + ReadableStream for SSE from POST
+      fetch(`${API_URL}/api/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appId: app.appId,
+          projectPath: app.projectPath,
+          hostingTarget: app.hostingTarget,
+          project: app.project,
+          deployMethod: app.deployMethod,
+        }),
+      })
+        .then(async (response) => {
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error('No response stream');
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const data = JSON.parse(line.slice(6));
+                setDeployStates((prev) =>
+                  prev.map((s) => {
+                    if (s.appId !== app.appId) return s;
+                    const newLogs = [...s.logs];
+                    if (data.output) newLogs.push(data.output);
+                    if (data.message) newLogs.push(`\n── ${data.message}`);
+
+                    return {
+                      ...s,
+                      status: (data.stage || s.status) as DeployStatus,
+                      logs: newLogs,
+                      elapsed: data.duration || s.elapsed,
+                      deployUrl: data.url || s.deployUrl,
+                      error: data.error || s.error,
+                    };
+                  })
+                );
+              } catch {
+                // skip malformed events
+              }
+            }
+          }
+          resolve();
+        })
+        .catch((err) => {
+          setDeployStates((prev) =>
+            prev.map((s) =>
+              s.appId === app.appId
+                ? {
+                    ...s,
+                    status: 'failed' as DeployStatus,
+                    error: `API error: ${err.message}`,
+                    logs: [...s.logs, `\n── ERROR: ${err.message}`],
+                  }
+                : s
+            )
+          );
+          resolve();
+        });
+    });
+  }, []);
+
+  // Batch deploy — stagger by 1s
+  const startBatch = useCallback(async () => {
     const selected = deployStates.filter((s) => s.selected);
     if (selected.length === 0) return;
 
     setBatchRunning(true);
-    const now = Date.now();
 
-    // Stagger deployments
-    selected.forEach((app, index) => {
-      const delay = index * 2000;
+    // Deploy sequentially to avoid overloading
+    for (const app of selected) {
+      await deployApp(app);
+    }
 
-      setTimeout(() => {
-        setDeployStates((prev) =>
-          prev.map((s) =>
-            s.appId === app.appId
-              ? { ...s, status: 'building', startedAt: Date.now() }
-              : s
-          )
-        );
-      }, delay);
-
-      setTimeout(() => {
-        setDeployStates((prev) =>
-          prev.map((s) =>
-            s.appId === app.appId ? { ...s, status: 'deploying' } : s
-          )
-        );
-      }, delay + 3000);
-
-      setTimeout(() => {
-        const success = Math.random() > 0.15; // 85% success rate demo
-        setDeployStates((prev) => {
-          const updated = prev.map((s) =>
-            s.appId === app.appId
-              ? {
-                  ...s,
-                  status: (success ? 'live' : 'failed') as DeployStatus,
-                  elapsed: Math.floor((Date.now() - (s.startedAt || now)) / 1000),
-                }
-              : s
-          );
-          // Check if all done
-          const active = updated.filter(
-            (s) => s.selected && (s.status === 'building' || s.status === 'deploying' || s.status === 'queued')
-          );
-          if (active.length === 0) setBatchRunning(false);
-          return updated;
-        });
-      }, delay + 6000);
-    });
-  }, [deployStates]);
+    setBatchRunning(false);
+  }, [deployStates, deployApp]);
 
   const selectedCount = deployStates.filter((s) => s.selected).length;
   const successCount = deployStates.filter((s) => s.selected && s.status === 'live').length;
@@ -149,192 +227,253 @@ export function DeployConsolePage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* API Status */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider ${
+            apiAvailable === null ? 'text-white/30 bg-white/5' :
+            apiAvailable ? 'text-green-400 bg-green-400/10' : 'text-amber-400 bg-amber-400/10'
+          }`}>
+            {apiAvailable ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+            {apiAvailable === null ? 'Checking...' : apiAvailable ? 'API Live' : 'API Offline'}
+          </div>
           <button onClick={toggleSelectAll} className="btn-ghost text-xs">
             {deployStates.every((s) => s.selected) ? 'Deselect All' : 'Select All'}
           </button>
           <button
             onClick={startBatch}
-            disabled={selectedCount === 0 || batchRunning}
+            disabled={selectedCount === 0 || batchRunning || !apiAvailable}
             className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Rocket className="w-4 h-4" />
-            Deploy {selectedCount > 0 ? `(${selectedCount})` : ''}
+            {batchRunning ? 'Deploying...' : `Deploy (${selectedCount})`}
           </button>
         </div>
       </div>
 
-      {/* App Deploy Cards */}
+      {/* API Offline Warning */}
+      {apiAvailable === false && (
+        <div className="glass-card-static p-4 border border-amber-500/20 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-white/80 font-medium">Deploy API not running</p>
+            <p className="text-xs text-white/40 mt-1">
+              Start it with: <code className="bg-white/10 px-2 py-0.5 rounded text-primary font-mono">npm run dev:api</code>
+              {' '}or use <code className="bg-white/10 px-2 py-0.5 rounded text-primary font-mono">npm run dev:all</code> to run both UI and API.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* App Grid */}
       <div className="space-y-3">
-        {deployStates.map((app) => (
-          <AppDeployCard
-            key={app.appId}
-            app={app}
-            onToggleSelect={() => toggleSelect(app.appId)}
-            onSetEnv={(env) => setEnvironment(app.appId, env)}
-            batchRunning={batchRunning}
-          />
-        ))}
+        {deployStates.map((app) => {
+          const estimate = getEstimate(app.appId, app.deployMethod as 'firebase' | 'cloud-build');
+          const isExpanded = expandedLog === app.appId;
+
+          return (
+            <div
+              key={app.appId}
+              className={`glass-card-static overflow-hidden transition-all ${
+                app.selected ? 'border-primary/30' : ''
+              }`}
+            >
+              <div className="p-4">
+                <div className="flex items-center gap-4">
+                  {/* Checkbox */}
+                  <button
+                    onClick={() => toggleSelect(app.appId)}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
+                      app.selected
+                        ? 'bg-primary border-primary text-white'
+                        : 'border-white/20 hover:border-white/40'
+                    }`}
+                  >
+                    {app.selected && <CheckCircle2 className="w-3 h-3" />}
+                  </button>
+
+                  {/* App Name */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white/90">{app.displayName}</h3>
+                      <StatusBadge status={app.status} />
+                      {app.hostingTarget && (
+                        <a
+                          href={app.deployUrl || `https://${app.hostingTarget}.web.app`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[10px] text-white/20 hover:text-primary transition-colors"
+                          title={`https://${app.hostingTarget}.web.app`}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span className="hidden lg:inline">{app.hostingTarget}.web.app</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-white/30 font-mono mt-0.5 truncate">
+                      {app.projectPath} → {app.hostingTarget || 'cloud-build'}
+                    </p>
+                  </div>
+
+                  {/* Environment Selector */}
+                  <div className="relative">
+                    <select
+                      value={app.environment}
+                      onChange={(e) => setEnvironment(app.appId, e.target.value as EnvironmentTag)}
+                      className="appearance-none bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white/70 pr-8 cursor-pointer focus:border-primary/50 outline-none"
+                    >
+                      <option value="production">Production</option>
+                      <option value="staging">Staging</option>
+                      <option value="dev">Dev</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
+                  </div>
+
+                  {/* Estimate */}
+                  <div className="text-right shrink-0 hidden md:block">
+                    <p className="text-[10px] text-white/20 uppercase tracking-wider">Est.</p>
+                    <p className="text-xs font-mono text-white/50">{formatDuration(estimate.estimatedDuration)}</p>
+                  </div>
+
+                  {/* Elapsed / Timer */}
+                  {app.startedAt && (
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-white/20 uppercase tracking-wider">Elapsed</p>
+                      <p className="text-xs font-mono text-primary">{formatElapsed(app.elapsed)}</p>
+                    </div>
+                  )}
+
+                  {/* Log toggle */}
+                  {app.logs.length > 0 && (
+                    <button
+                      onClick={() => setExpandedLog(isExpanded ? null : app.appId)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        isExpanded ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/30 hover:text-white/60'
+                      }`}
+                    >
+                      <Terminal className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Deploy URL */}
+                  {app.deployUrl && (
+                    <a
+                      href={app.deployUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+
+                {/* Progress Bar */}
+                {(app.status === 'building' || app.status === 'deploying') && (
+                  <div className="mt-3">
+                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          app.status === 'building'
+                            ? 'bg-amber-400 animate-pulse'
+                            : 'bg-primary animate-pulse'
+                        }`}
+                        style={{
+                          width: `${Math.min(
+                            (app.elapsed / estimate.estimatedDuration) * 100,
+                            95
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[10px] text-white/30 uppercase tracking-wider">
+                        {app.status === 'building' ? '🔨 Building...' : '🚀 Deploying...'}
+                      </span>
+                      <span className="text-[10px] text-white/30 font-mono">
+                        {formatElapsed(app.elapsed)} / ~{formatDuration(estimate.estimatedDuration)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Display */}
+                {app.error && (
+                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <p className="text-xs text-red-400 font-mono whitespace-pre-wrap">{app.error}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Expandable Log Panel */}
+              {isExpanded && app.logs.length > 0 && (
+                <div
+                  ref={(el) => { logRefs.current[app.appId] = el; }}
+                  className="border-t border-white/5 bg-black/40 p-4 max-h-64 overflow-y-auto font-mono text-[11px] text-white/50 leading-relaxed"
+                >
+                  {app.logs.map((line, i) => (
+                    <div key={i} className={line.startsWith('\n──') ? 'text-primary font-bold mt-2' : ''}>
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Batch Summary Bar */}
-      {selectedCount > 0 && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 border-t border-white/5"
-          style={{
-            background: 'rgba(15, 23, 42, 0.95)',
-            backdropFilter: 'blur(24px)',
-          }}
-        >
+      {/* Batch Summary */}
+      {(successCount > 0 || failCount > 0) && (
+        <div className="glass-card-static p-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="text-sm">
-              <span className="text-white/40">Selected: </span>
-              <span className="text-white/90 font-bold">{selectedCount}</span>
-            </div>
-            {batchRunning && (
-              <>
-                <div className="text-sm">
-                  <span className="text-green-400/60">Success: </span>
-                  <span className="text-green-400 font-bold">{successCount}</span>
-                </div>
-                <div className="text-sm">
-                  <span className="text-red-400/60">Failed: </span>
-                  <span className="text-red-400 font-bold">{failCount}</span>
-                </div>
-              </>
+            {successCount > 0 && (
+              <div className="flex items-center gap-2 text-green-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span className="text-sm font-bold">{successCount} Deployed</span>
+              </div>
+            )}
+            {failCount > 0 && (
+              <div className="flex items-center gap-2 text-red-400">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-bold">{failCount} Failed</span>
+              </div>
             )}
           </div>
-
-          {/* Rollback Placeholder */}
-          <div className="flex items-center gap-3">
-            <button className="btn-ghost text-xs opacity-40 cursor-not-allowed" disabled>
-              <RotateCcw className="w-3.5 h-3.5" />
-              Rollback
-              <span className="badge badge-info text-[8px] !px-1.5 !py-0.5">Soon</span>
-            </button>
-          </div>
+          {batchRunning && (
+            <div className="flex items-center gap-2 text-primary">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-xs font-bold uppercase tracking-wider">Batch in progress...</span>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// --- App Deploy Card ---
+// --- Sub-components ---
 
-function AppDeployCard({
-  app,
-  onToggleSelect,
-  onSetEnv,
-  batchRunning,
-}: {
-  app: AppDeployState;
-  onToggleSelect: () => void;
-  onSetEnv: (env: EnvironmentTag) => void;
-  batchRunning: boolean;
-}) {
-  const estimate = getEstimate(app.appId, app.deployMethod);
-  const progress =
-    app.status === 'live' || app.status === 'failed'
-      ? 100
-      : app.startedAt
-      ? Math.min(95, (app.elapsed / estimate.estimatedDuration) * 100)
-      : 0;
+function StatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    live: 'badge-success',
+    building: 'badge-warning',
+    deploying: 'badge-warning',
+    failed: 'badge-danger',
+    queued: 'badge-info',
+    'not-configured': 'badge-info',
+  };
 
-  const statusIcon: Record<string, React.ReactNode> = {
-    queued: <Clock className="w-4 h-4 text-white/30" />,
-    building: <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />,
-    deploying: <Loader2 className="w-4 h-4 text-primary animate-spin" />,
-    live: <CheckCircle2 className="w-4 h-4 text-green-400" />,
-    failed: <AlertTriangle className="w-4 h-4 text-red-400" />,
-    paused: <Pause className="w-4 h-4 text-amber-400" />,
-    stopped: <Square className="w-4 h-4 text-white/40" />,
+  const icons: Record<string, React.ReactNode> = {
+    live: <CheckCircle2 className="w-3 h-3" />,
+    building: <Loader2 className="w-3 h-3 animate-spin" />,
+    deploying: <Loader2 className="w-3 h-3 animate-spin" />,
+    failed: <AlertTriangle className="w-3 h-3" />,
+    queued: <Clock className="w-3 h-3" />,
   };
 
   return (
-    <div
-      className={`glass-card-static p-5 transition-all duration-300 ${
-        app.selected ? 'border-primary/20 bg-primary/[0.02]' : ''
-      }`}
-    >
-      <div className="flex items-center gap-4">
-        {/* Checkbox */}
-        <button
-          onClick={onToggleSelect}
-          disabled={batchRunning}
-          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-            app.selected
-              ? 'bg-primary border-primary'
-              : 'border-white/15 hover:border-white/30'
-          }`}
-        >
-          {app.selected && <Zap className="w-3 h-3 text-white" />}
-        </button>
-
-        {/* App Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold text-white/90">{app.displayName}</h3>
-            {statusIcon[app.status]}
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${
-              app.status === 'live' ? 'text-green-400' :
-              app.status === 'failed' ? 'text-red-400' :
-              app.status === 'building' || app.status === 'deploying' ? 'text-amber-400' :
-              'text-white/30'
-            }`}>
-              {app.status}
-            </span>
-          </div>
-
-          {/* Progress Bar */}
-          {app.selected && app.startedAt && (
-            <div className="mt-2">
-              <div className="progress-bar">
-                <div
-                  className={`progress-bar-fill ${
-                    app.status === 'failed' ? '!bg-red-500' : ''
-                  }`}
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Environment Selector */}
-        <select
-          value={app.environment}
-          onChange={(e) => onSetEnv(e.target.value as EnvironmentTag)}
-          disabled={batchRunning}
-          className="bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 outline-none focus:border-primary/50 transition-colors"
-        >
-          <option value="production">production</option>
-          <option value="staging">staging</option>
-          <option value="dev">dev</option>
-        </select>
-
-        {/* Deploy Method Badge */}
-        <span className="badge badge-primary text-[9px]">
-          {app.deployMethod}
-        </span>
-
-        {/* Timer */}
-        {app.startedAt && (
-          <div className="text-right min-w-[80px]">
-            <p className="text-sm font-mono text-white/70">
-              {formatDuration(app.elapsed)}
-            </p>
-            <p className="text-[10px] text-white/25">
-              est. {formatDuration(estimate.estimatedDuration)}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Expert System Reasoning (on hover / expanded) */}
-      {app.selected && !batchRunning && (
-        <p className="mt-3 text-[11px] text-white/20 italic pl-9">
-          {estimate.reasoning}
-        </p>
-      )}
-    </div>
+    <span className={`badge ${styles[status] || 'badge-info'} flex items-center gap-1`}>
+      {icons[status]}
+      {status}
+    </span>
   );
 }

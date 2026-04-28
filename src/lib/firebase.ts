@@ -11,12 +11,23 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+let app: ReturnType<typeof initializeApp>;
+let auth: ReturnType<typeof getAuth>;
+let db: ReturnType<typeof getFirestore>;
 
-export const auth = getAuth(app);
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  // SuiteUtils uses its own dedicated database — NOT "(default)"
+  const databaseId = import.meta.env.VITE_FIRESTORE_DATABASE_ID || 'suiteutils-db-0';
+  db = getFirestore(app, databaseId);
+} catch (err) {
+  console.error('[Firebase] Initialization failed:', err);
+  // Create a minimal fallback so the app doesn't crash
+  app = initializeApp(firebaseConfig, 'fallback');
+  auth = getAuth(app);
+  db = getFirestore(app);
+}
 
-// SuiteUtils uses its own dedicated database — NOT "(default)"
-const databaseId = import.meta.env.VITE_FIRESTORE_DATABASE_ID || 'suiteutils-db-0';
-export const db = getFirestore(app, databaseId);
-
+export { auth, db };
 export default app;

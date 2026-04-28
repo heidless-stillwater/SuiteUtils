@@ -12,8 +12,25 @@ import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
-  const { currentSuite } = useSuite();
+  const { currentSuite, dbError } = useSuite();
   const { profile } = useAuth();
+
+  // Show Firestore errors prominently for debugging
+  if (dbError) {
+    return (
+      <div className="page-enter space-y-4">
+        <h1 className="text-2xl font-bold text-red-400">Firestore Error</h1>
+        <div className="glass-card-static p-6 border border-red-500/20">
+          <p className="text-sm text-white/80 mb-2">The suites collection could not be loaded:</p>
+          <pre className="text-xs text-red-300 bg-black/30 p-4 rounded-xl overflow-auto">{dbError}</pre>
+          <p className="text-xs text-white/40 mt-4">
+            Check that the Firestore database "suiteutils-db-0" exists in project heidless-apps-0
+            and that security rules allow authenticated reads.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const apps = currentSuite ? Object.entries(currentSuite.apps) : [];
   const liveApps = apps.filter(([_, a]) => a.environments.production?.status === 'live');

@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "database": "suiteutils-db-0",
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "site": "suiteutils-v0",
     "public": "dist",

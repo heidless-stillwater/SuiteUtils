@@ -85,8 +85,9 @@ export function formatDuration(seconds: number): string {
   return secs > 0 ? `${mins}m${secs}s` : `${mins}m`;
 }
 
-/** Format elapsed time as a live counter string */
-export function formatElapsed(startTime: number): string {
-  const elapsed = Math.floor((Date.now() - startTime) / 1000);
-  return formatDuration(elapsed);
+/** Format elapsed time as mm:ss counter */
+export function formatElapsed(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
