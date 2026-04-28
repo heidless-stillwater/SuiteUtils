@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import { subscribeToDeployHistory } from '../lib/deployment-service';
+import { formatDuration } from '../lib/expert-system';
 import type { DeploymentRecord } from '../lib/types';
 
 const API_URL = 'http://localhost:5181';
@@ -362,6 +363,7 @@ export function DeployHistoryPage() {
                 <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">App</th>
                 <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Type</th>
                 <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Release ID</th>
+                <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Duration</th>
                 <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Size</th>
                 <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Date</th>
                 <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Actions</th>
@@ -425,6 +427,16 @@ export function DeployHistoryPage() {
                         {release.releaseId}
                         <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </a>
+                    </td>
+                    <td className="px-5 py-3.5 text-sm font-mono text-white/40">
+                      {release.duration != null ? (
+                        <div className="flex items-center gap-1.5" title={`${release.duration} seconds`}>
+                          <Clock className="w-3.5 h-3.5" />
+                          {formatDuration(release.duration)}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-mono text-white/40">
                       {formatBytes(release.versionBytes)}
