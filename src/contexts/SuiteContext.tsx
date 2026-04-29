@@ -12,6 +12,7 @@ interface SuiteContextType {
   dbError: string | null;
   switchSuite: (suiteId: string) => void;
   createSuite: (name: string) => Promise<string>;
+  updateAppStatus: (suiteId: string, appId: string, env: string, status: string) => Promise<void>;
 }
 
 const SuiteContext = createContext<SuiteContextType | undefined>(undefined);
@@ -41,10 +42,15 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
       collection(db, 'suites'),
       (snap) => {
         const loaded: Suite[] = [];
-        snap.forEach((doc) => {
-          const data = doc.data() as Omit<Suite, 'id'>;
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as Omit<Suite, 'id'>;
           if (data.ownerId === user.uid) {
-            loaded.push({ ...data, id: doc.id } as Suite);
+            // Self-healing: if suiteutils was seeded as not-configured, fix it locally and in DB
+            if (data.apps?.suiteutils?.environments?.production?.status === 'not-configured') {
+              data.apps.suiteutils.environments.production.status = 'live';
+              setDoc(docSnap.ref, { 'apps.suiteutils': data.apps.suiteutils }, { merge: true }).catch(() => {});
+            }
+            loaded.push({ ...data, id: docSnap.id } as Suite);
           }
         });
         setSuites(loaded);
@@ -139,6 +145,13 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
     return suiteRef.id;
   }, [user]);
 
+  const updateAppStatus = useCallback(async (suiteId: string, appId: string, env: string, status: string) => {
+    const suiteRef = doc(db, 'suites', suiteId);
+    await setDoc(suiteRef, {
+      [`apps.${appId}.environments.${env}.status`]: status
+    }, { merge: true });
+  }, []);
+
   return (
     <SuiteContext.Provider
       value={{
@@ -148,6 +161,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         dbError,
         switchSuite,
         createSuite,
+        updateAppStatus,
       }}
     >
       {children}

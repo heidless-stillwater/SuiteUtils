@@ -41,7 +41,7 @@ interface AppDeployState {
 }
 
 export function DeployConsolePage() {
-  const { currentSuite } = useSuite();
+  const { currentSuite, updateAppStatus } = useSuite();
   const { user } = useAuth();
   const [deployStates, setDeployStates] = useState<AppDeployState[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -214,6 +214,11 @@ export function DeployConsolePage() {
                 errorLogs: final.error,
                 deployUrl: final.deployUrl,
               }).catch((e) => console.warn('[Deploy] Firestore write failed:', e.message));
+
+              if (final.status === 'live') {
+                updateAppStatus(currentSuite.id, app.appId, app.environment, 'live')
+                  .catch(e => console.warn('[Deploy] Registry status update failed:', e.message));
+              }
             }
             return prev;
           });
