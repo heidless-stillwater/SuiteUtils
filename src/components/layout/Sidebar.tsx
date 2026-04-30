@@ -1,4 +1,4 @@
-import { useState } from 'react';
+
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -6,6 +6,9 @@ import {
   History,
   Palette,
   Settings,
+  Database,
+  ClipboardList,
+  Layers,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
@@ -18,12 +21,19 @@ const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/deploy', icon: Rocket, label: 'Deploy Console' },
   { path: '/history', icon: History, label: 'Deploy History' },
+  { path: '/workspace', icon: Layers, label: 'Workspace' },
+  { path: '/backups', icon: Database, label: 'Backups' },
+  { path: '/activity', icon: ClipboardList, label: 'Activity Log' },
   { path: '/themes', icon: Palette, label: 'Theme Studio' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { profile, signOut } = useAuth();
   const location = useLocation();
 
@@ -118,7 +128,7 @@ export function Sidebar() {
 
         {/* Collapse Toggle */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={onToggle}
           className="flex items-center gap-3 w-full px-3 py-2 mt-1 rounded-xl text-white/20 hover:text-white/50 hover:bg-white/5 transition-all duration-200 text-sm"
         >
           {collapsed ? (

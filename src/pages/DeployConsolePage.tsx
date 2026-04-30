@@ -38,6 +38,8 @@ interface AppDeployState {
   logs: string[];
   deployUrl: string | null;
   error: string | null;
+  releaseRef: string;
+  isIsolated: boolean;
 }
 
 export function DeployConsolePage() {
@@ -88,6 +90,8 @@ export function DeployConsolePage() {
       logs: [],
       deployUrl: null,
       error: null,
+      releaseRef: 'main',
+      isIsolated: false,
     }));
     setDeployStates(states);
   }, [currentSuite]);
@@ -142,7 +146,42 @@ export function DeployConsolePage() {
         )
       );
 
-      // Use fetch + ReadableStream for SSE from POST
+      // Route to Isolated Release API if requested
+      if (app.isIsolated) {
+        const url = `${API_URL}/api/releases/run?appId=${app.appId}&ref=${app.releaseRef}&env=${app.environment}`;
+        const eventSource = new EventSource(url);
+
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          setDeployStates((prev) =>
+            prev.map((s) => {
+              if (s.appId !== app.appId) return s;
+              const newLogs = [...s.logs];
+              if (data.message) newLogs.push(`\n── ${data.message}`);
+              
+              return {
+                ...s,
+                status: (data.type === 'success' ? 'live' : data.type === 'error' ? 'failed' : s.status) as DeployStatus,
+                logs: newLogs,
+                error: data.type === 'error' ? data.message : s.error,
+              };
+            })
+          );
+
+          if (data.type === 'success' || data.type === 'error') {
+            eventSource.close();
+            resolve();
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+          resolve();
+        };
+        return;
+      }
+
+      // Existing standard deploy logic...
       fetch(`${API_URL}/api/deploy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -360,6 +399,27 @@ export function DeployConsolePage() {
     setBatchRunning(false);
   }, [deployStates, deployApp]);
 
+  const cancelAppDeployment = async (appId: string) => {
+    const app = deployStates.find(s => s.appId === appId);
+    if (!app) return;
+
+    try {
+      if (app.isIsolated) {
+        await fetch(`${API_URL}/api/releases/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appId })
+        });
+      } else {
+        // Standard cancellation is handled by AbortController in deploy-api
+        // but we don't have a specific endpoint for it yet beyond backups.
+        // For now, isolated releases are the main target for cancellation.
+      }
+    } catch (err) {
+      console.error('Failed to cancel deployment:', err);
+    }
+  };
+
   const selectedCount = deployStates.filter((s) => s.selected).length;
   const successCount = deployStates.filter((s) => s.selected && s.status === 'live').length;
   const failCount = deployStates.filter((s) => s.selected && s.status === 'failed').length;
@@ -489,6 +549,19 @@ export function DeployConsolePage() {
                     </div>
                   )}
 
+                  {/* Active Operation Controls */}
+                  {(app.status === 'building' || app.status === 'deploying') && (
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => cancelAppDeployment(app.appId)}
+                        className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+                        title="Cancel Deployment"
+                      >
+                        <Square className="w-4 h-4 fill-current" />
+                      </button>
+                    </div>
+                  )}
+
                   {/* Log toggle */}
                   {app.logs.length > 0 && (
                     <button
@@ -592,6 +665,40 @@ export function DeployConsolePage() {
                   </div>
                 )}
               </div>
+
+              {/* Advanced Config Row (Only when selected) */}
+              {app.selected && !batchRunning && (
+                <div className="px-4 pb-4 pt-0 flex items-center gap-6 border-t border-white/5 bg-white/5 animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] uppercase tracking-wider text-white/40 font-bold">Release Ref</span>
+                    <input 
+                      type="text" 
+                      value={app.releaseRef}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDeployStates(prev => prev.map(s => s.appId === app.appId ? { ...s, releaseRef: val } : s));
+                      }}
+                      placeholder="main"
+                      className="bg-black/40 border-white/10 rounded-lg px-2 py-1 text-xs text-white w-32 focus:ring-primary/50"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox"
+                      checked={app.isIsolated}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setDeployStates(prev => prev.map(s => s.appId === app.appId ? { ...s, isIsolated: val } : s));
+                      }}
+                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-white/60 group-hover:text-white transition-colors">Isolated Build</span>
+                      <span className="text-[8px] text-white/20 uppercase tracking-tighter">Uses Git Worktree</span>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               {/* Expandable Log Panel */}
               {isExpanded && app.logs.length > 0 && (

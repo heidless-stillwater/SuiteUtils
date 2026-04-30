@@ -1,8 +1,54 @@
-import { User, Mail, Shield, LogOut, Crown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+
+const API_URL = 'http://localhost:5181';
 
 export function SettingsPage() {
   const { profile, user, signOut, isSu, effectiveRole, switchRole } = useAuth();
+  const [slackWebhook, setSlackWebhook] = useState('');
+  const [discordWebhook, setDiscordWebhook] = useState('');
+  const [strictMode, setStrictMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    // Fetch notifications
+    fetch(`${API_URL}/api/notifications`)
+      .then(res => res.json())
+      .then(data => {
+        setSlackWebhook(data.slackWebhook || '');
+        setDiscordWebhook(data.discordWebhook || '');
+      });
+
+    // Fetch global settings
+    fetch(`${API_URL}/api/settings`)
+      .then(res => res.json())
+      .then(data => {
+        setStrictMode(data.strictMode || false);
+      });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await Promise.all([
+        fetch(`${API_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slackWebhook, discordWebhook })
+        }),
+        fetch(`${API_URL}/api/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ strictMode })
+        })
+      ]);
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!profile || !user) return null;
 
@@ -60,6 +106,82 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      <div className="glass-card-static p-6 space-y-6 border-orange-500/10">
+        <div className="flex items-center gap-3">
+          <Shield className="w-5 h-5 text-orange-400" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-white/90">Safety Guardrails</h3>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-orange-500/5 rounded-2xl border border-orange-500/10 group hover:border-orange-500/30 transition-all">
+          <div className="flex-1 pr-8">
+            <h4 className="text-sm font-bold text-white/90">Strict Mode (Health Check)</h4>
+            <p className="text-[11px] text-white/40 mt-1 leading-relaxed">
+              When enabled, deployments will be <span className="text-orange-400 font-bold uppercase">automatically blocked</span> if the target application health check returns <span className="text-red-400">DOWN</span>.
+            </p>
+          </div>
+          <button 
+            onClick={() => setStrictMode(!strictMode)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              strictMode ? 'bg-orange-500' : 'bg-white/10'
+            }`}
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+              strictMode ? 'translate-x-5' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+      </div>
+
+      <div className="glass-card-static p-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <Bell className="w-5 h-5 text-primary" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-white/90">Infrastructure Notifications</h3>
+        </div>
+        
+        <p className="text-[11px] text-white/30 leading-relaxed">
+          Receive real-time alerts on Slack or Discord for backup completions, deployment failures, and system events.
+        </p>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-widest text-white/30 font-bold ml-1">Slack Webhook URL</label>
+            <div className="relative">
+              <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10" />
+              <input 
+                type="password" 
+                value={slackWebhook}
+                onChange={(e) => setSlackWebhook(e.target.value)}
+                placeholder="https://hooks.slack.com/services/..."
+                className="w-full bg-black/40 border-white/10 rounded-xl text-xs text-white py-3 pl-10 pr-4 focus:ring-primary/40"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-widest text-white/30 font-bold ml-1">Discord Webhook URL</label>
+            <div className="relative">
+              <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10" />
+              <input 
+                type="password" 
+                value={discordWebhook}
+                onChange={(e) => setDiscordWebhook(e.target.value)}
+                placeholder="https://discord.com/api/webhooks/..."
+                className="w-full bg-black/40 border-white/10 rounded-xl text-xs text-white py-3 pl-10 pr-4 focus:ring-primary/40"
+              />
+            </div>
+          </div>
+
+          <button 
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full btn-primary py-3 gap-2 mt-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? 'Saving Config...' : 'Save Notification Settings'}
+          </button>
+        </div>
+      </div>
 
       <button onClick={signOut} className="btn-danger w-full">
         <LogOut className="w-4 h-4" />Sign Out

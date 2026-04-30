@@ -1,15 +1,234 @@
 import express from 'express';
 import cors from 'cors';
+import multer from 'multer';
 import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 import { GoogleAuth } from 'google-auth-library';
+import { fileURLToPath } from 'url';
+import { GCSStorageProvider } from './services/GCSStorageProvider.js';
+import { BackupOrchestrator } from './services/BackupOrchestrator.js';
+import { ReleaseManager } from './services/ReleaseManager.js';
+import { RollbackManager } from './services/RollbackManager.js';
+import { healthScanner } from './services/HealthScanner.js';
+import { auditLogger } from './services/AuditLogger.js';
+import { scheduleManager } from './services/ScheduleManager.js';
+import { operationMonitor } from './services/OperationMonitor.js';
+import { notificationManager } from './services/NotificationManager.js';
+import { settingsManager } from './services/SettingsManager.js';
+import { workspaceManager } from './services/WorkspaceManager.js';
+import { invitationManager } from './services/InvitationManager.js';
+import { MigrationManager } from './services/MigrationManager.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
+// Multi-tenant Workspace Middleware
+app.use((req, res, next) => {
+  const wsId = req.headers['x-workspace-id'] as string || 'stillwater-suite';
+  (req as any).workspaceId = wsId;
+  next();
+});
 const PORT = 5181;
+
+// Initialize Services
+scheduleManager.init();
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+
+const releaseManager = new ReleaseManager();
+const activeReleaseControllers = new Map<string, AbortController>();
+
+app.get('/api/health/ping', (req, res) => {
+  res.json({ status: 'UP' });
+});
+
+app.get('/api/health', async (req, res) => {
+  const results = await healthScanner.scanAll((req as any).workspaceId);
+  res.json(results);
+});
+
+app.get('/api/audit-logs', async (req, res) => {
+  try {
+    const logs = await auditLogger.getLogs();
+    res.json(logs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/audit-logs', async (req, res) => {
+  try {
+    const { type } = req.query;
+    await auditLogger.clearLogs(type as string);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/audit-logs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await auditLogger.deleteLog(id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/schedules', async (req, res) => {
+  const schedules = await scheduleManager.getSchedules();
+  res.json(schedules);
+});
+
+app.patch('/api/schedules/:id', async (req, res) => {
+  try {
+    const updated = await scheduleManager.updateSchedule(req.params.id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post('/api/schedules', async (req, res) => {
+  const schedule = await scheduleManager.addSchedule(req.body);
+  res.json(schedule);
+});
+
+app.delete('/api/schedules/:id', async (req, res) => {
+  await scheduleManager.deleteSchedule(req.params.id);
+  res.json({ success: true });
+});
+
+app.get('/api/operations', (req, res) => {
+  res.json(operationMonitor.getOperations());
+});
+
+app.get('/api/operations/:id/events', (req, res) => {
+  const { id } = req.params;
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const onUpdate = (op: any) => {
+    res.write(`data: ${JSON.stringify({ 
+      step: op.status === 'completed' ? 'complete' : op.status === 'failed' ? 'error' : 'info',
+      message: op.message,
+      progress: op.progress,
+      percent: op.progress
+    })}\n\n`);
+    
+    if (op.status === 'completed' || op.status === 'failed') {
+      operationMonitor.removeListener(`update:${id}`, onUpdate);
+      res.end();
+    }
+  };
+
+  const current = operationMonitor.getOperations().find(o => o.id === id);
+  if (current) {
+    onUpdate(current);
+  }
+
+  operationMonitor.on(`update:${id}`, onUpdate);
+
+  req.on('close', () => {
+    operationMonitor.removeListener(`update:${id}`, onUpdate);
+  });
+});
+
+app.post('/api/schedules/:id/toggle-pause', async (req, res) => {
+  await scheduleManager.togglePause(req.params.id);
+  res.json({ success: true });
+});
+
+app.delete('/api/operations/:id', (req, res) => {
+  operationMonitor.cancelOperation(req.params.id);
+  res.json({ success: true });
+});
+
+app.post('/api/operations/cancel-bulk', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) {
+    return res.status(400).json({ error: 'ids must be an array' });
+  }
+  ids.forEach(id => operationMonitor.cancelOperation(id));
+  res.json({ success: true, cancelledCount: ids.length });
+});
+
+app.get('/api/notifications', (req, res) => {
+  res.json(notificationManager.getConfig());
+});
+
+app.post('/api/notifications', async (req, res) => {
+  const { slackWebhook, discordWebhook } = req.body;
+  await notificationManager.saveConfig(slackWebhook, discordWebhook);
+  res.json({ success: true });
+});
+
+app.get('/api/settings', (req, res) => {
+  res.json(settingsManager.getSettings());
+});
+
+app.post('/api/settings', async (req, res) => {
+  await settingsManager.update(req.body);
+  res.json({ success: true });
+});
+
+app.get('/api/workspaces', (req, res) => {
+  res.json(workspaceManager.getWorkspaces());
+});
+
+app.get('/api/workspaces/current', (req, res) => {
+  const ws = workspaceManager.getWorkspace((req as any).workspaceId);
+  res.json(ws);
+});
+
+app.post('/api/workspaces/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const updated = await workspaceManager.updateWorkspace(id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.get('/api/workspaces/:id/invitations', (req, res) => {
+  res.json(invitationManager.getInvitationsForWorkspace(req.params.id));
+});
+
+app.post('/api/workspaces/:id/invitations', async (req, res) => {
+  const { email, role, invitedBy } = req.body;
+  const inv = await invitationManager.createInvitation(email, req.params.id, role, invitedBy);
+  res.json(inv);
+});
+
+app.post('/api/migrate', async (req, res) => {
+  const { sourceBackupPath, targetWorkspaceId } = req.body;
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+  const credentialsPath = path.join(__dirname, 'config/service-account.json');
+  const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+  const migrationManager = new MigrationManager(storageProvider);
+
+  try {
+    await migrationManager.executeMigration(sourceBackupPath, targetWorkspaceId, (progress: any) => {
+      res.write(`data: ${JSON.stringify(progress)}\n\n`);
+    });
+    res.write(`data: ${JSON.stringify({ message: 'Migration Complete', type: 'success', percent: 100 })}\n\n`);
+  } catch (err: any) {
+    res.write(`data: ${JSON.stringify({ message: err.message, type: 'error' })}\n\n`);
+  } finally {
+    res.end();
+  }
+});
 
 // Resolve ~ to home directory
 function resolvePath(p: string): string {
@@ -357,6 +576,406 @@ app.post('/api/deploy', (req, res) => {
       console.log(`[Deploy] ${appId} — client aborted`);
     }
   });
+});
+
+// ============================================================
+// GET /api/backups/run
+// SSE-based global suite backup orchestrator
+// ============================================================
+
+let activeBackupController: AbortController | null = null;
+
+app.post('/api/backups/run', async (req, res) => {
+  const { appIds, version = '1.0.0', scope = 'StillwaterSuite', includeStorage = true, force = false, queue = false } = req.body;
+  
+  const currentController = new AbortController();
+  if (!queue) {
+    if (activeBackupController && force) {
+      console.log('[Backup] Aborting existing backup...');
+      activeBackupController.abort();
+    }
+    activeBackupController = currentController;
+  }
+  const signal = currentController.signal;
+
+  const metadata = { scope, appIds, version, includeStorage };
+  
+  if (!force && !queue) {
+    const conflict = operationMonitor.findIdenticalOperation('backup', metadata);
+    if (conflict) {
+      console.log(`[Backup] Conflict! Job ${id} (${scope}) blocked by active job ${conflict.id} (${conflict.metadata?.scope})`);
+      return res.status(409).json({ 
+        error: 'Conflict detected', 
+        message: `An identical backup job (${scope}) is already running.`,
+        conflictId: conflict.id,
+        metadata: conflict.metadata
+      });
+    }
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+  const timestamp = new Date().getTime();
+  const id = `${scope}_v${version}_${dateStr}_${timestamp}`;
+
+  const runBackup = async () => {
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const orchestrator = new BackupOrchestrator(storageProvider);
+
+    try {
+      await orchestrator.runFullSuiteBackup({
+        version,
+        scope,
+        includeStorage,
+        signal,
+        appIds,
+        releaseId: id
+      }, currentController);
+      
+      if (activeBackupController === currentController) {
+        activeBackupController = null;
+      }
+    } catch (err: any) {
+      console.error('[Backup] Error:', err);
+      if (activeBackupController === currentController) {
+        activeBackupController = null;
+      }
+    }
+  };
+
+  if (queue) {
+    operationMonitor.enqueue(id, runBackup, metadata);
+    return res.json({ id, status: 'queued' });
+  } else {
+    // Run in background
+    runBackup();
+    return res.json({ id, status: 'running' });
+  }
+});
+
+app.post('/api/backups/cancel', (req, res) => {
+  console.log('[Backup] Received cancellation request');
+  if (activeBackupController) {
+    console.log('[Backup] Aborting active controller...');
+    activeBackupController.abort();
+    activeBackupController = null;
+    res.json({ message: 'Backup cancellation requested' });
+  } else {
+    console.log('[Backup] No active backup found to cancel');
+    res.status(400).json({ message: 'No active backup to cancel' });
+  }
+});
+
+// ============================================================
+// GET /api/backups
+// Lists all backups in GCS
+// ============================================================
+
+app.get('/api/backups', async (req, res) => {
+  try {
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    // We search in AppSuite/backups (recursive listing logic is in the provider)
+    const files = await storageProvider.list('AppSuite/backups');
+    res.json({ files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/backups', async (req, res) => {
+  const { path: cloudPath } = req.query;
+  if (!cloudPath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    await storageProvider.delete(cloudPath as string);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// Storage Explorer API
+// ============================================================
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.get('/api/storage/list', async (req, res) => {
+  try {
+    const { path: directory = '' } = req.query;
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const items = await storageProvider.list(directory as string);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/storage/upload', upload.single('file'), async (req, res) => {
+  try {
+    const { destination } = req.body;
+    if (!req.file) throw new Error('No file uploaded');
+    
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const fullPath = path.join(destination || '', req.file.originalname);
+    await storageProvider.upload(req.file.buffer, fullPath, req.file.mimetype);
+    
+    res.json({ success: true, path: fullPath });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/storage/delete', async (req, res) => {
+  try {
+    const { path: cloudPath } = req.query;
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    await storageProvider.delete(cloudPath as string);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/storage/zip-contents', async (req, res) => {
+  const { path: filePath } = req.query;
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const bucket = (storageProvider as any).storage.bucket(bucketName);
+    const file = bucket.file(filePath as string);
+    
+    const [exists] = await file.exists();
+    if (!exists) return res.status(404).json({ error: 'File not found' });
+
+    const unzipper = await import('unzipper');
+    const [buffer] = await file.download();
+    const zip = await unzipper.Open.buffer(buffer);
+    
+    const files = zip.files.map(f => ({
+      path: f.path,
+      size: f.uncompressedSize,
+      isDir: f.type === 'Directory'
+    }));
+
+    res.json({ files });
+  } catch (err: any) {
+    console.error('[ZipInspect] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/storage/zip-file-content', async (req, res) => {
+  const { zipPath, filePath } = req.query;
+  if (!zipPath || !filePath) return res.status(400).json({ error: 'zipPath and filePath are required' });
+
+  try {
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const bucket = (storageProvider as any).storage.bucket(bucketName);
+    const zipFile = bucket.file(zipPath as string);
+    
+    const unzipper = await import('unzipper');
+    const [buffer] = await zipFile.download();
+    const zip = await unzipper.Open.buffer(buffer);
+    
+    const targetFile = zip.files.find(f => f.path === filePath);
+    if (!targetFile) return res.status(404).json({ error: 'File not found in zip' });
+
+    const contentBuffer = await targetFile.buffer();
+    const contentString = contentBuffer.toString();
+
+    // Try to parse as JSON if it looks like JSON
+    let content = contentString;
+    if ((filePath as string).toLowerCase().endsWith('.json')) {
+      try {
+        content = JSON.parse(contentString);
+      } catch (e) {
+        // Fallback to string if parsing fails
+      }
+    }
+
+    res.json({ content });
+  } catch (err: any) {
+    console.error('[ZipFileInspect] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/storage/delete-bulk', async (req, res) => {
+  try {
+    const { paths } = req.body;
+    if (!Array.isArray(paths)) throw new Error('paths must be an array');
+    
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const deletePromises = paths.map(p => storageProvider.delete(p as string));
+    await Promise.all(deletePromises);
+    
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/storage/mkdir', async (req, res) => {
+  try {
+    const { name, parentPath = '' } = req.body;
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const folderPath = await storageProvider.createFolder(name, parentPath);
+    res.json({ success: true, path: folderPath });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/storage/download', async (req, res) => {
+  try {
+    const { path: cloudPath } = req.query;
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    const url = await storageProvider.getDownloadUrl(cloudPath as string);
+    res.json({ url });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/delete-bulk', async (req, res) => {
+  const { paths } = req.body;
+  if (!Array.isArray(paths)) return res.status(400).json({ error: 'paths must be an array' });
+
+  try {
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const credentialsPath = path.join(__dirname, 'config/service-account.json');
+    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    
+    await Promise.all(paths.map(p => storageProvider.delete(p)));
+    res.json({ success: true, deletedCount: paths.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// GET /api/releases/run
+// Isolated build & deploy using git worktrees
+// ============================================================
+app.get('/api/releases/run', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (event: any) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+  const { appId, ref, env } = req.query as any;
+  if (!appId || !ref || !env) {
+    sendEvent({ type: 'error', message: 'appId, ref, and env are required.' });
+    res.end();
+    return;
+  }
+
+  const controller = new AbortController();
+  activeReleaseControllers.set(appId, controller);
+
+  try {
+    await releaseManager.enqueueRelease({
+      appId,
+      ref,
+      env,
+      signal: controller.signal,
+      onProgress: (p) => sendEvent(p)
+    });
+  } catch (err: any) {
+    sendEvent({ type: 'error', message: err.message });
+  } finally {
+    activeReleaseControllers.delete(appId);
+    res.end();
+  }
+});
+
+app.post('/api/releases/cancel', (req, res) => {
+  const { appId } = req.body;
+  console.log(`[Release] Cancellation requested for appId: ${appId}`);
+  const controller = activeReleaseControllers.get(appId);
+  if (controller) {
+    console.log(`[Release] Found controller for ${appId}, aborting...`);
+    controller.abort();
+    res.json({ message: 'Release cancellation requested' });
+  } else {
+    console.log(`[Release] No active controller found for ${appId}. Active apps:`, Array.from(activeReleaseControllers.keys()));
+    res.status(400).json({ message: 'No active release found for this app' });
+  }
+});
+
+// ============================================================
+// GET /api/backups/restore
+// Global suite rollback to a past snapshot
+// ============================================================
+app.get('/api/backups/restore', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (event: any) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+  const { cloudPath, appIds, includeStorage, confirmation } = req.query as any;
+  
+  if (!cloudPath || !appIds || !confirmation) {
+    sendEvent({ type: 'error', message: 'cloudPath, appIds, and confirmation are required.' });
+    res.end();
+    return;
+  }
+
+  // SaaS-style safety check: Confirmation must match appId (or just be present for global)
+  // For now, we'll assume confirmation is the appId or a secret string if global.
+  
+  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+  const credentialsPath = path.join(__dirname, 'config/service-account.json');
+  const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+  const rollbackManager = new RollbackManager(storageProvider);
+
+  try {
+    await rollbackManager.performRollback({
+      cloudPath,
+      appIds: appIds.split(','),
+      includeStorage: includeStorage === 'true',
+      onProgress: (p) => sendEvent(p)
+    });
+  } catch (err: any) {
+    sendEvent({ type: 'error', message: err.message });
+  } finally {
+    res.end();
+  }
 });
 
 app.listen(PORT, '0.0.0.0', () => {

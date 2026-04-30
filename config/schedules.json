@@ -1,0 +1,18 @@
+[
+  {
+    "cronExpression": "*/1 * * * *",
+    "scope": "backup_promptaccreditation-prompttool-promptresources_and_3_more",
+    "appIds": [
+      "promptaccreditation",
+      "prompttool",
+      "promptresources",
+      "plantune",
+      "suiteutils",
+      "promptmasterspa"
+    ],
+    "includeStorage": false,
+    "id": "excy1f",
+    "status": "paused",
+    "lastRun": "2026-04-30T14:50:08.069Z"
+  }
+]

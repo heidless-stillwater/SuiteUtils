@@ -1,5 +1,7 @@
 # backups
 BACKUPS/
+worktrees/
+server/config/service-account.json
 
 # Logs
 logs

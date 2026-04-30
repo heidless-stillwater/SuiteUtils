@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Activity,
   Rocket,
@@ -6,14 +7,48 @@ import {
   Clock,
   Server,
   ArrowRight,
+  RefreshCw
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
+
+const API_URL = 'http://localhost:5181';
+
+interface HealthResult {
+  appId: string;
+  name: string;
+  status: 'UP' | 'DOWN';
+  latency: number;
+  lastChecked: string;
+}
 
 export function DashboardPage() {
   const { currentSuite, dbError } = useSuite();
   const { profile } = useAuth();
+  const [healthResults, setHealthResults] = useState<HealthResult[]>([]);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+
+  useEffect(() => {
+    const wsId = currentSuite?.id || 'stillwater-suite';
+
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/health`, {
+          headers: { 'x-workspace-id': wsId }
+        });
+        const data = await res.json();
+        setHealthResults(data);
+      } catch (err) {
+        console.error('Failed to fetch health:', err);
+      }
+    };
+
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 30000);
+    return () => clearInterval(interval);
+  }, [currentSuite?.id]);
 
   // Show Firestore errors prominently for debugging
   if (dbError) {
@@ -94,35 +129,54 @@ export function DashboardPage() {
           {apps.map(([id, app]) => {
             const prodEnv = app.environments.production;
             const status = prodEnv?.status || 'not-configured';
+            const health = healthResults.find(h => 
+              h.appId.trim().toLowerCase() === id.trim().toLowerCase()
+            );
 
             return (
               <div
                 key={id}
-                className="glass-card p-5 group"
+                className="glass-card p-5 group relative overflow-hidden"
               >
+                {/* Real-time Health Pulse */}
+                <div className="absolute top-0 right-0 p-3">
+                  <div className={`w-2 h-2 rounded-full transition-all duration-500 ${
+                    health?.status === 'UP' ? 'bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]' : 
+                    health?.status === 'DOWN' ? 'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.5)]' :
+                    'bg-white/10'
+                  }`} />
+                </div>
+
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-bold text-white/90 group-hover:text-primary transition-colors">
                       {app.displayName}
                     </h3>
-                    <p className="text-[11px] text-white/30 mt-0.5 font-mono">
-                      {app.database}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-[10px] text-white/30 font-mono">
+                        {app.database}
+                      </p>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        health?.status === 'UP' ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
+                      }`}>
+                        {health?.status || 'UNKNOWN'}
+                      </span>
+                    </div>
                   </div>
                   <StatusBadge status={status} />
                 </div>
 
                 <div className="space-y-2 text-xs text-white/40">
                   <div className="flex items-center justify-between">
-                    <span>Method</span>
+                    <span>Latency</span>
                     <span className="font-mono text-white/60">
-                      {prodEnv?.deployMethod || '—'}
+                      {health?.latency ? `${health.latency}ms` : '—'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span>Target</span>
+                    <span>Last Check</span>
                     <span className="font-mono text-white/60">
-                      {prodEnv?.hostingTarget || 'Cloud Run'}
+                      {health?.lastChecked ? format(new Date(health.lastChecked), 'HH:mm:ss') : '—'}
                     </span>
                   </div>
                 </div>
@@ -132,7 +186,7 @@ export function DashboardPage() {
                     to="/deploy"
                     className="flex items-center gap-1.5 text-[11px] text-white/25 hover:text-primary transition-colors font-medium"
                   >
-                    Deploy now
+                    Manage App
                     <ArrowRight className="w-3 h-3" />
                   </Link>
                 </div>
