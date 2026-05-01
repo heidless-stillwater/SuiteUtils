@@ -24,7 +24,7 @@ export class MigrationManager {
     // For now, we assume the standard Stillwater app set.
     const sourceApps = [
       'ag-video-system', 'PromptTool', 'PromptResources', 
-      'PromptMasterSPA', 'PromptAccreditation', 'PlanTune', 'SuiteUtils'
+      'PromptMaster v1', 'PromptAccreditation', 'PlanTune', 'SuiteUtils'
     ];
 
     return sourceApps.map(appId => {

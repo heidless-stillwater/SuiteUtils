@@ -44,7 +44,7 @@ export class WorkspaceManager {
             { id: 'ag-video-system', name: 'ag-video-system', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'heidless-ag-video' },
             { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'heidless-prompt-tool' },
             { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'heidless-prompt-resources' },
-            { id: 'promptmasterspa', name: 'PromptMasterSPA', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },
+            { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },
             { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'heidless-prompt-accreditation' },
             { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'heidless-plan-tune' },
             { id: 'suiteutils', name: 'SuiteUtils', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suite-utils' }
@@ -82,7 +82,7 @@ export class WorkspaceManager {
           { id: 'ag-video-system', name: 'ag-video-system', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'heidless-ag-video' },
           { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'heidless-prompt-tool' },
           { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'heidless-prompt-resources' },
-          { id: 'promptmasterspa', name: 'PromptMasterSPA', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },
+          { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },
           { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'heidless-prompt-accreditation' },
           { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'heidless-plan-tune' },
           { id: 'suiteutils', name: 'SuiteUtils', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suite-utils' }

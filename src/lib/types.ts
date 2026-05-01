@@ -155,7 +155,7 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     defaultEnv: { hostingTarget: 'promptresources-v0', deployMethod: 'firebase', status: 'live' },
   },
   'promptmasterspa': {
-    displayName: 'PromptMasterSPA',
+    displayName: 'PromptMaster v1',
     path: '~/projects/PromptMasterSPA',
     database: 'promptmaster-spa-db-0',
     project: 'heidless-apps-0',

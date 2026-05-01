@@ -14,7 +14,7 @@ const APPS_TO_BACKUP = [
   { name: 'ag-video-system', dbId: 'autovideo-db-0' },
   { name: 'PromptTool', dbId: 'prompttool-db-0' },
   { name: 'PromptResources', dbId: 'promptresources-db-0' },
-  { name: 'PromptMasterSPA', dbId: 'promptmaster-spa-db-0' },
+  { name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0' },
   { name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0' },
   { name: 'PlanTune', dbId: 'plantune-db-0' },
   { name: 'SuiteUtils', dbId: 'suiteutils-db-0' }

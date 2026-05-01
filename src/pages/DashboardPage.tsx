@@ -13,15 +13,16 @@ import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
+import { API_URL } from '../lib/api-config';
 
-const API_URL = 'http://localhost:5181';
 
 interface HealthResult {
   appId: string;
   name: string;
-  status: 'UP' | 'DOWN';
+  status: 'UP' | 'DOWN' | 'DEGRADED' | 'UNKNOWN';
   latency: number;
   lastChecked: string;
+  appVersion?: string;
 }
 
 export function DashboardPage() {
@@ -149,9 +150,16 @@ export function DashboardPage() {
 
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-sm font-bold text-white/90 group-hover:text-primary transition-colors">
-                      {app.displayName}
-                    </h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-bold text-white/90 group-hover:text-primary transition-colors">
+                        {app.displayName}
+                      </h3>
+                      {health?.appVersion && health.appVersion !== 'unknown' && (
+                        <span className="text-[10px] font-mono text-primary/60 bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10">
+                          v{health.appVersion}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] text-white/30 font-mono">
                         {app.database}

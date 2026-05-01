@@ -1,4 +1,7 @@
 import { appRegistry } from './AppRegistry.js';
+import path from 'path';
+import os from 'os';
+import fs from 'fs-extra';
 
 export interface HealthStatus {
   appId: string;
@@ -6,6 +9,7 @@ export interface HealthStatus {
   lastChecked: string;
   responseTime?: number;
   error?: string;
+  appVersion?: string;
 }
 
 export class HealthScanner {
@@ -22,27 +26,50 @@ export class HealthScanner {
     if (!app) return { appId, status: 'UNKNOWN', lastChecked: new Date().toISOString() };
 
     // Determine the health URL
-    // For local dev, we map known ports. In prod, this would be an actual URL.
+    const isProd = process.env.NODE_ENV === 'production';
     let url = '';
-    if (appId === 'SuiteUtils') {
-      url = 'http://localhost:5181/api/health/ping'; // Self-check endpoint
+
+    if (appId.toLowerCase() === 'suiteutils') {
+      url = isProd 
+        ? 'https://suite-utils.web.app/api/health/ping'
+        : 'http://localhost:5181/api/health/ping';
     } else {
-      // Placeholder: In a real multi-tenant app, these would be in the DB
-      // For now, we use a port mapping convention for the Stillwater Suite
+      // Current Real Port Map (Dev)
       const portMap: Record<string, number> = {
-        'ag-video-system': 3001,
-        'prompttool': 3002,
-        'promptresources': 3003,
-        'promptmasterspa': 3004,
-        'promptaccreditation': 3005,
-        'plantune': 3006,
-        'suiteutils': 5181
+        'ag-video-system': 3000,
+        'prompttool': 3001,
+        'promptresources': 3002,
+        'promptmasterspa': 5173,
+        'promptaccreditation': 3003,
+        'plantune': 3004
       };
-      const port = portMap[appId] || 3000;
-      url = `http://localhost:${port}/health`;
+
+      if (isProd && app.hostingTarget) {
+        url = `https://${app.hostingTarget}.web.app/`;
+      } else {
+        const port = portMap[appId] || 3000;
+        // Try root for SPAs/Next.js as /health might not exist
+        url = `http://localhost:${port}/`;
+      }
     }
 
     const start = Date.now();
+    let appVersion = 'unknown';
+
+    // Try to read local package.json version
+    try {
+      const projectPath = app.projectPath.startsWith('~/') 
+        ? path.join(os.homedir(), app.projectPath.slice(2))
+        : app.projectPath;
+      const pkgPath = path.join(projectPath, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = fs.readJsonSync(pkgPath);
+        appVersion = pkg.version || 'unknown';
+      }
+    } catch (e) {
+      // Ignore version read errors
+    }
+
     try {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), 2000);
@@ -54,7 +81,8 @@ export class HealthScanner {
         appId,
         status: res.ok ? 'UP' : 'DEGRADED',
         lastChecked: new Date().toISOString(),
-        responseTime: Date.now() - start
+        responseTime: Date.now() - start,
+        appVersion
       };
       this.statusMap.set(appId, status);
       return status;
@@ -64,7 +92,8 @@ export class HealthScanner {
         appId,
         status: 'DOWN',
         lastChecked: new Date().toISOString(),
-        error: err.name === 'AbortError' ? 'Timeout' : err.message
+        error: err.name === 'AbortError' ? 'Timeout' : err.message,
+        appVersion
       };
       this.statusMap.set(appId, status);
       return status;

@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import type { Suite, AppConfig, EnvironmentConfig } from '../lib/types';
 import { STILLWATER_APPS } from '../lib/types';
+import { API_URL } from '../lib/api-config';
 
 interface SuiteContextType {
   currentSuite: Suite | null;
@@ -79,7 +80,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
       
       // Update role in AuthContext (Prioritize SaaS Invitation over Firestore Ownership)
       if (user) {
-        fetch(`http://localhost:5181/api/workspaces/${currentSuite.id}/my-role?email=${user.email}`)
+        fetch(`${API_URL}/api/workspaces/${currentSuite.id}/my-role?email=${user.email}`)
           .then(res => res.json())
           .then(data => {
             if (data.role) {
