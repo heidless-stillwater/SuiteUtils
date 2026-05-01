@@ -13,6 +13,7 @@ export interface Workspace {
   id: string;
   name: string;
   description: string;
+  ownerEmail?: string;
   apps: AppConfig[];
   createdAt: string;
 }
@@ -66,6 +67,7 @@ export class WorkspaceManager {
   }
 
   getWorkspace(id: string): Workspace | undefined {
+    this.load(); // Always reload to ensure sync with manual file edits
     let ws = this.workspaces.get(id);
     
     // Self-healing: If unknown ID, provision with default Stillwater apps

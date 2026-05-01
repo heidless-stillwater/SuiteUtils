@@ -13,6 +13,7 @@ import { ActivityLogPage } from './pages/ActivityLogPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { PricingPage } from './pages/PricingPage';
+import InvitationPage from './pages/InvitationPage';
 import { Loader2 } from 'lucide-react';
 
 function App() {
@@ -50,6 +51,7 @@ function App() {
             <Route path="/themes" element={<ThemeStudioPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/workspace/:workspaceId/invitations" element={<InvitationPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

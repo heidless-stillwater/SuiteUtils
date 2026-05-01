@@ -21,8 +21,12 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   effectiveRole: UserRole;
+  workspaceRole: 'admin' | 'operator' | 'viewer' | null;
   isAdmin: boolean;
   isSu: boolean;
+  isViewer: boolean;
+  isOperator: boolean;
+  setWorkspaceRole: (role: 'admin' | 'operator' | 'viewer' | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,12 +34,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [workspaceRole, setWorkspaceRole] = useState<'admin' | 'operator' | 'viewer' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const effectiveRole: UserRole = profile?.actingAs || profile?.role || 'member';
   const isAdmin = profile?.role === 'admin' || profile?.role === 'su';
   const isSu = profile?.role === 'su';
+  const isViewer = workspaceRole === 'viewer';
+  const isOperator = workspaceRole === 'operator';
 
   // Create or update user profile in suiteutils-db-0
   const createOrUpdateProfile = useCallback(async (firebaseUser: User): Promise<UserProfile> => {
@@ -144,8 +151,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshProfile,
         switchRole,
         effectiveRole,
+        workspaceRole,
         isAdmin,
         isSu,
+        isViewer,
+        isOperator,
+        setWorkspaceRole,
       }}
     >
       {children}

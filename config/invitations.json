@@ -1,0 +1,20 @@
+[
+  {
+    "id": "3ec17328-65a0-4e19-b10d-3b8068676e0f",
+    "email": "heidlessemail16@gmail.com",
+    "workspaceId": "OlgqXSyKR8Cm3gUZErE7",
+    "role": "viewer",
+    "invitedBy": "heidlessemail18@gmail.com",
+    "status": "accepted",
+    "createdAt": "2026-04-30T18:39:18.007Z"
+  },
+  {
+    "id": "a467767a-f6be-451a-888a-d8553db00a06",
+    "email": "heidlessemail19@gmail.com",
+    "workspaceId": "OlgqXSyKR8Cm3gUZErE7",
+    "role": "operator",
+    "invitedBy": "heidlessemail18@gmail.com",
+    "status": "accepted",
+    "createdAt": "2026-04-30T19:37:03.724Z"
+  }
+]

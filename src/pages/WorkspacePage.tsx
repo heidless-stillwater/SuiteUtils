@@ -37,8 +37,8 @@ interface Invitation {
 
 export function WorkspacePage() {
   const { currentSuite } = useSuite();
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'apps' | 'team'>('apps');
+  const { user, workspaceRole, isViewer } = useAuth();
+  const [activeTab, setActiveTab] = useState<'apps' | 'team' | 'settings'>('apps');
   const [apps, setApps] = useState<AppConfig[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,14 +187,24 @@ export function WorkspacePage() {
           >
             Team Members
           </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === 'settings' ? 'bg-primary text-white shadow-lg' : 'text-white/40 hover:text-white/60'
+            }`}
+          >
+            Settings
+          </button>
         </div>
-        <button 
-          onClick={() => activeTab === 'apps' ? setShowAdd(true) : setShowInvite(true)}
-          className="btn-primary"
-        >
-          <Plus className="w-4 h-4" />
-          {activeTab === 'apps' ? 'Add App' : 'Invite User'}
-        </button>
+        {!isViewer && (
+          <button 
+            onClick={() => activeTab === 'apps' ? setShowAdd(true) : setShowInvite(true)}
+            className="h-12 px-6 bg-primary/10 text-primary hover:bg-primary/20 rounded-2xl transition-all font-bold text-sm flex items-center gap-2 border border-primary/20"
+          >
+            {activeTab === 'apps' ? <Plus className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+            {activeTab === 'apps' ? 'Add App' : 'Invite Member'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -239,7 +249,7 @@ export function WorkspacePage() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : activeTab === 'team' ? (
         <div className="space-y-4">
           <div className="glass-card-static p-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -247,19 +257,36 @@ export function WorkspacePage() {
                 {user?.email?.[0].toUpperCase()}
               </div>
               <div>
-                <p className="text-sm font-bold text-white/90">{user?.email} <span className="ml-2 text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase">Owner</span></p>
+                <p className="text-sm font-bold text-white/90">{user?.email} <span className="ml-2 text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase">{workspaceRole || 'Member'}</span></p>
                 <p className="text-xs text-white/30 italic">You</p>
               </div>
             </div>
           </div>
 
+          {/* Active Team */}
+          <div className="grid grid-cols-1 gap-4">
+            {invitations.filter(i => i.status === 'accepted').map((inv) => (
+              <div key={inv.id} className="glass-card-static p-6 flex items-center justify-between group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">
+                    {inv.email[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white/90">{inv.email} <span className="ml-2 text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase">{inv.role}</span></p>
+                    <p className="text-xs text-white/30 italic">Active Member</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/20 px-2 mt-8">Pending Invitations</h3>
           
-          {invitations.length === 0 ? (
+          {invitations.filter(i => i.status === 'pending').length === 0 ? (
             <p className="text-sm text-white/10 italic px-2">No pending invitations</p>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {invitations.map((inv) => (
+              {invitations.filter(i => i.status === 'pending').map((inv) => (
                 <div key={inv.id} className="glass-card-static p-6 flex items-center justify-between group border-dashed border-white/10 bg-transparent">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
@@ -281,6 +308,37 @@ export function WorkspacePage() {
               ))}
             </div>
           )}
+        </div>
+      ) : (
+        <div className="max-w-2xl space-y-6">
+          <div className="glass-card-static p-8">
+            <h3 className="text-xl font-bold text-white mb-6">General Settings</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Workspace Name</label>
+                <input 
+                  defaultValue={currentSuite?.name}
+                  className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-primary/50"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Workspace ID</label>
+                <input 
+                  readOnly
+                  value={currentSuite?.id}
+                  className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white/40 outline-none cursor-not-allowed"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card-static p-8 border-red-500/20">
+            <h3 className="text-xl font-bold text-red-400 mb-2">Danger Zone</h3>
+            <p className="text-xs text-white/30 mb-6">Irreversible actions for this workspace.</p>
+            <button className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl font-bold text-sm transition-all">
+              Delete Workspace
+            </button>
+          </div>
         </div>
       )}
 

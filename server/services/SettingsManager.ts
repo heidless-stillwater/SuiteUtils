@@ -5,6 +5,7 @@ export interface AppSettings {
   strictMode: boolean; // If true, block deploys if health is DOWN
   autoRetryBackups: boolean;
   retentionDays: number;
+  activeStorageProvider: 'gcs' | 'google-drive';
 }
 
 export class SettingsManager {
@@ -12,7 +13,8 @@ export class SettingsManager {
   private settings: AppSettings = {
     strictMode: false,
     autoRetryBackups: true,
-    retentionDays: 30
+    retentionDays: 30,
+    activeStorageProvider: 'gcs'
   };
 
   constructor() {

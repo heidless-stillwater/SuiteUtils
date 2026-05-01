@@ -111,6 +111,10 @@ export class GCSStorageProvider implements IStorageProvider {
     }
   }
 
+  async deleteBulk(paths: string[]): Promise<void> {
+    await Promise.all(paths.map(p => this.delete(p)));
+  }
+
   async createFolder(name: string, parentId?: string): Promise<string> {
     // GCS doesn't have real folders, just prefixes. 
     // We create a 0-byte object with a trailing slash to simulate a folder.

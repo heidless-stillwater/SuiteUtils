@@ -20,7 +20,7 @@ const SuiteContext = createContext<SuiteContextType | undefined>(undefined);
 const SUITE_STORAGE_KEY = 'suiteutils-active-suite';
 
 export function SuiteProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, setWorkspaceRole } = useAuth();
   const [suites, setSuites] = useState<Suite[]>([]);
   const [currentSuiteId, setCurrentSuiteId] = useState<string | null>(
     () => localStorage.getItem(SUITE_STORAGE_KEY)
@@ -76,8 +76,29 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (currentSuite) {
       localStorage.setItem(SUITE_STORAGE_KEY, currentSuite.id);
+      
+      // Update role in AuthContext (Prioritize SaaS Invitation over Firestore Ownership)
+      if (user) {
+        fetch(`http://localhost:5181/api/workspaces/${currentSuite.id}/my-role?email=${user.email}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.role) {
+              setWorkspaceRole(data.role);
+            } else if (currentSuite.ownerId === user.uid) {
+              setWorkspaceRole('admin');
+            } else {
+              setWorkspaceRole('viewer');
+            }
+          })
+          .catch(() => {
+            if (currentSuite.ownerId === user.uid) setWorkspaceRole('admin');
+            else setWorkspaceRole('viewer');
+          });
+      }
+    } else {
+      setWorkspaceRole(null);
     }
-  }, [currentSuite]);
+  }, [currentSuite, user, setWorkspaceRole]);
 
   const seedDefaultSuite = async (uid: string) => {
     const suiteRef = doc(collection(db, 'suites'));

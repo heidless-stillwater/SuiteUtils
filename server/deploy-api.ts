@@ -7,6 +7,8 @@ import os from 'os';
 import { GoogleAuth } from 'google-auth-library';
 import { fileURLToPath } from 'url';
 import { GCSStorageProvider } from './services/GCSStorageProvider.js';
+import { GoogleDriveStorageProvider } from './services/GoogleDriveStorageProvider.js';
+import { IStorageProvider } from './services/IStorageProvider.js';
 import { BackupOrchestrator } from './services/BackupOrchestrator.js';
 import { ReleaseManager } from './services/ReleaseManager.js';
 import { RollbackManager } from './services/RollbackManager.js';
@@ -206,6 +208,35 @@ app.post('/api/workspaces/:id/invitations', async (req, res) => {
   res.json(inv);
 });
 
+app.delete('/api/workspaces/:id/invitations/:invId', async (req, res) => {
+  await invitationManager.revokeInvitation(req.params.invId);
+  res.json({ success: true });
+});
+
+app.post('/api/invitations/:invId/accept', async (req, res) => {
+  try {
+    const inv = await invitationManager.acceptInvitation(req.params.invId);
+    res.json(inv);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.get('/api/workspaces/:id/my-role', (req, res) => {
+  const { email } = req.query;
+  const workspace = workspaceManager.getWorkspace(req.params.id);
+  
+  // 1. Check if user is the Workspace Owner
+  if (workspace && workspace.ownerEmail === email) {
+    return res.json({ role: 'admin' });
+  }
+
+  // 2. Check Invitations
+  const invitations = invitationManager.getInvitationsForWorkspace(req.params.id);
+  const inv = invitations.find(i => i.email === email);
+  res.json({ role: inv ? inv.role : 'viewer' });
+});
+
 app.post('/api/migrate', async (req, res) => {
   const { sourceBackupPath, targetWorkspaceId } = req.body;
   
@@ -213,9 +244,7 @@ app.post('/api/migrate', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-  const credentialsPath = path.join(__dirname, 'config/service-account.json');
-  const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+  const storageProvider = getStorageProvider();
   const migrationManager = new MigrationManager(storageProvider);
 
   try {
@@ -236,6 +265,15 @@ function resolvePath(p: string): string {
     return path.join(os.homedir(), p.slice(2));
   }
   return p;
+}
+function getStorageProvider(): IStorageProvider {
+  const settings = settingsManager.getSettings();
+  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+  const credentialsPath = path.join(__dirname, 'config/service-account.json');
+  if (settings.activeStorageProvider === 'google-drive') {
+    return new GoogleDriveStorageProvider(credentialsPath);
+  }
+  return new GCSStorageProvider(bucketName, credentialsPath);
 }
 
 // ============================================================
@@ -618,9 +656,7 @@ app.post('/api/backups/run', async (req, res) => {
   const id = `${scope}_v${version}_${dateStr}_${timestamp}`;
 
   const runBackup = async () => {
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     const orchestrator = new BackupOrchestrator(storageProvider);
 
     try {
@@ -674,9 +710,7 @@ app.post('/api/backups/cancel', (req, res) => {
 
 app.get('/api/backups', async (req, res) => {
   try {
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
     // We search in AppSuite/backups (recursive listing logic is in the provider)
     const files = await storageProvider.list('AppSuite/backups');
@@ -691,9 +725,7 @@ app.delete('/api/backups', async (req, res) => {
   if (!cloudPath) return res.status(400).json({ error: 'path is required' });
 
   try {
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     await storageProvider.delete(cloudPath as string);
     res.json({ success: true });
   } catch (err: any) {
@@ -707,12 +739,20 @@ app.delete('/api/backups', async (req, res) => {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+app.get('/api/storage/quota', async (req, res) => {
+  try {
+    const provider = getStorageProvider();
+    const quota = await provider.getQuota();
+    res.json(quota);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/storage/list', async (req, res) => {
   try {
     const { path: directory = '' } = req.query;
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
     const items = await storageProvider.list(directory as string);
     res.json({ items });
@@ -726,9 +766,7 @@ app.post('/api/storage/upload', upload.single('file'), async (req, res) => {
     const { destination } = req.body;
     if (!req.file) throw new Error('No file uploaded');
     
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
     const fullPath = path.join(destination || '', req.file.originalname);
     await storageProvider.upload(req.file.buffer, fullPath, req.file.mimetype);
@@ -742,9 +780,7 @@ app.post('/api/storage/upload', upload.single('file'), async (req, res) => {
 app.delete('/api/storage/delete', async (req, res) => {
   try {
     const { path: cloudPath } = req.query;
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
     await storageProvider.delete(cloudPath as string);
     res.json({ success: true });
@@ -758,10 +794,12 @@ app.get('/api/storage/zip-contents', async (req, res) => {
   if (!filePath) return res.status(400).json({ error: 'path is required' });
 
   try {
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
+    if (!(storageProvider instanceof GCSStorageProvider)) {
+      return res.status(400).json({ error: 'Zip inspection is only supported on GCS for now.' });
+    }
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const file = bucket.file(filePath as string);
     
@@ -790,10 +828,12 @@ app.get('/api/storage/zip-file-content', async (req, res) => {
   if (!zipPath || !filePath) return res.status(400).json({ error: 'zipPath and filePath are required' });
 
   try {
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
+    if (!(storageProvider instanceof GCSStorageProvider)) {
+      return res.status(400).json({ error: 'Zip file extraction is only supported on GCS for now.' });
+    }
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const zipFile = bucket.file(zipPath as string);
     
@@ -829,12 +869,8 @@ app.post('/api/storage/delete-bulk', async (req, res) => {
     const { paths } = req.body;
     if (!Array.isArray(paths)) throw new Error('paths must be an array');
     
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
-    
-    const deletePromises = paths.map(p => storageProvider.delete(p as string));
-    await Promise.all(deletePromises);
+    const storageProvider = getStorageProvider();
+    await storageProvider.deleteBulk(paths);
     
     res.json({ success: true });
   } catch (err: any) {
@@ -845,9 +881,7 @@ app.post('/api/storage/delete-bulk', async (req, res) => {
 app.post('/api/storage/mkdir', async (req, res) => {
   try {
     const { name, parentPath = '' } = req.body;
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
     const folderPath = await storageProvider.createFolder(name, parentPath);
     res.json({ success: true, path: folderPath });
@@ -859,9 +893,7 @@ app.post('/api/storage/mkdir', async (req, res) => {
 app.get('/api/storage/download', async (req, res) => {
   try {
     const { path: cloudPath } = req.query;
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+    const storageProvider = getStorageProvider();
     
     const url = await storageProvider.getDownloadUrl(cloudPath as string);
     res.json({ url });
@@ -875,11 +907,8 @@ app.post('/api/backups/delete-bulk', async (req, res) => {
   if (!Array.isArray(paths)) return res.status(400).json({ error: 'paths must be an array' });
 
   try {
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-    const credentialsPath = path.join(__dirname, 'config/service-account.json');
-    const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
-    
-    await Promise.all(paths.map(p => storageProvider.delete(p)));
+    const storageProvider = getStorageProvider();
+    await storageProvider.deleteBulk(paths);
     res.json({ success: true, deletedCount: paths.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -959,9 +988,7 @@ app.get('/api/backups/restore', async (req, res) => {
   // SaaS-style safety check: Confirmation must match appId (or just be present for global)
   // For now, we'll assume confirmation is the appId or a secret string if global.
   
-  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
-  const credentialsPath = path.join(__dirname, 'config/service-account.json');
-  const storageProvider = new GCSStorageProvider(bucketName, credentialsPath);
+  const storageProvider = getStorageProvider();
   const rollbackManager = new RollbackManager(storageProvider);
 
   try {

@@ -52,12 +52,21 @@ export class InvitationManager {
   }
 
   getInvitationsForWorkspace(workspaceId: string) {
+    this.load(); // Always reload to ensure sync with manual file edits
     return this.invitations.filter(i => i.workspaceId === workspaceId);
   }
 
   async revokeInvitation(id: string) {
     this.invitations = this.invitations.filter(i => i.id !== id);
     await this.save();
+  }
+  
+  async acceptInvitation(id: string) {
+    const inv = this.invitations.find(i => i.id === id);
+    if (!inv) throw new Error('Invitation not found');
+    inv.status = 'accepted';
+    await this.save();
+    return inv;
   }
 }
 

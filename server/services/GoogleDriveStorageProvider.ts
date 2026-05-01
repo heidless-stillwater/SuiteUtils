@@ -22,15 +22,19 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
     let res = await this.drive.files.list({
       q,
       fields: 'files(id)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     // If not found in root, and we are looking at the root level, 
-    // search broadly (for shared folders)
+    // search broadly (for shared folders or items shared with the service account)
     if ((!res.data.files || res.data.files.length === 0) && parentId === 'root') {
-      q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+      q = `name = '${name}' and trashed = false`;
       res = await this.drive.files.list({
         q,
         fields: 'files(id)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
       });
     }
 
@@ -82,6 +86,7 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
       },
       media,
       fields: 'id',
+      supportsAllDrives: true,
     });
 
     return res.data.id!;
@@ -90,7 +95,7 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
   async download(path: string): Promise<Buffer> {
     const id = await this.resolvePathToId(path);
     const res = await this.drive.files.get(
-      { fileId: id, alt: 'media' },
+      { fileId: id, alt: 'media', supportsAllDrives: true },
       { responseType: 'arraybuffer' }
     );
     return Buffer.from(res.data as ArrayBuffer);
@@ -101,6 +106,8 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
     const res = await this.drive.files.list({
       q: `'${parentId}' in parents and trashed = false`,
       fields: 'files(id, name, mimeType, size, modifiedTime)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     return (res.data.files || []).map(f => ({
@@ -124,7 +131,11 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
 
   async delete(path: string): Promise<void> {
     const id = await this.resolvePathToId(path);
-    await this.drive.files.delete({ fileId: id });
+    await this.drive.files.delete({ fileId: id, supportsAllDrives: true });
+  }
+
+  async deleteBulk(paths: string[]): Promise<void> {
+    await Promise.all(paths.map(p => this.delete(p)));
   }
 
   async createFolder(name: string, parentId: string = 'root'): Promise<string> {
@@ -135,7 +146,24 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
         parents: [parentId],
       },
       fields: 'id',
+      supportsAllDrives: true,
     });
     return res.data.id!;
+  }
+
+  async getDownloadUrl(path: string): Promise<string> {
+    const id = await this.resolvePathToId(path);
+    const res = await this.drive.files.get({
+      fileId: id,
+      fields: 'webContentLink',
+      supportsAllDrives: true,
+    });
+    
+    const url = res.data.webContentLink;
+    if (!url) {
+      // Fallback for folders or files without a webContentLink
+      return `https://drive.google.com/open?id=${id}`;
+    }
+    return url;
   }
 }

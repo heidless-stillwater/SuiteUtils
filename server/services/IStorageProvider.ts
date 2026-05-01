@@ -15,6 +15,7 @@ export interface IStorageProvider {
   list(directory: string): Promise<StorageMetadata[]>;
   getQuota(): Promise<{ used: number; total: number }>;
   delete(path: string): Promise<void>;
+  deleteBulk(paths: string[]): Promise<void>;
   createFolder(name: string, parentId?: string): Promise<string>;
   getDownloadUrl(path: string): Promise<string>;
 }

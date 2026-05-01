@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2 } from 'lucide-react';
+import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2, HardDrive, Database, Cloud } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const API_URL = 'http://localhost:5181';
@@ -9,6 +9,7 @@ export function SettingsPage() {
   const [slackWebhook, setSlackWebhook] = useState('');
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [strictMode, setStrictMode] = useState(false);
+  const [activeStorageProvider, setActiveStorageProvider] = useState<'gcs' | 'google-drive'>('google-drive');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -25,6 +26,7 @@ export function SettingsPage() {
       .then(res => res.json())
       .then(data => {
         setStrictMode(data.strictMode || false);
+        setActiveStorageProvider(data.activeStorageProvider || 'google-drive');
       });
   }, []);
 
@@ -40,7 +42,7 @@ export function SettingsPage() {
         fetch(`${API_URL}/api/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ strictMode })
+          body: JSON.stringify({ strictMode, activeStorageProvider })
         })
       ]);
     } catch (err) {
@@ -129,6 +131,55 @@ export function SettingsPage() {
             <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
               strictMode ? 'translate-x-5' : 'translate-x-0'
             }`} />
+          </button>
+        </div>
+      </div>
+ 
+      <div className="glass-card-static p-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <HardDrive className="w-5 h-5 text-indigo-400" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-white/90">Storage Infrastructure</h3>
+        </div>
+
+        <p className="text-[11px] text-white/30 leading-relaxed">
+          Select the primary storage backend for backups and migration archives.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => setActiveStorageProvider('google-drive')}
+            className={`p-4 rounded-2xl border transition-all text-left group ${
+              activeStorageProvider === 'google-drive' 
+                ? 'bg-indigo-500/10 border-indigo-500/50' 
+                : 'bg-white/5 border-white/10 hover:bg-white/10'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-indigo-500/20 rounded-lg group-hover:scale-110 transition-transform">
+                <Cloud className="w-4 h-4 text-indigo-400" />
+              </div>
+              {activeStorageProvider === 'google-drive' && <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />}
+            </div>
+            <h4 className="text-sm font-bold text-white/90">Google Drive</h4>
+            <p className="text-[10px] text-white/40 mt-1">Recommended for general suite backups.</p>
+          </button>
+
+          <button 
+            onClick={() => setActiveStorageProvider('gcs')}
+            className={`p-4 rounded-2xl border transition-all text-left group ${
+              activeStorageProvider === 'gcs' 
+                ? 'bg-amber-500/10 border-amber-500/50' 
+                : 'bg-white/5 border-white/10 hover:bg-white/10'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-amber-500/20 rounded-lg group-hover:scale-110 transition-transform">
+                <Database className="w-4 h-4 text-amber-400" />
+              </div>
+              {activeStorageProvider === 'gcs' && <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />}
+            </div>
+            <h4 className="text-sm font-bold text-white/90">Google Cloud Storage</h4>
+            <p className="text-[10px] text-white/40 mt-1">Enterprise-tier resilience and high availability.</p>
           </button>
         </div>
       </div>

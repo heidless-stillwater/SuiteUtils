@@ -28,6 +28,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useSuite } from '../contexts/SuiteContext';
+import { useAuth } from '../contexts/AuthContext';
 import StorageExplorer from '../components/storage/StorageExplorer';
 
 const API_URL = 'http://localhost:5181';
@@ -52,6 +53,7 @@ interface BackupEvent {
 
 export function BackupAdminPage() {
   const { currentSuite } = useSuite();
+  const { isViewer } = useAuth();
   const [searchParams] = useSearchParams();
   const [backups, setBackups] = useState<BackupFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -503,23 +505,25 @@ export function BackupAdminPage() {
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            {running ? (
-              <button
-                onClick={() => setCancelConfirmModal({ open: true, ids: [], type: 'single' })}
-                className="px-4 py-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all font-bold text-xs flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Cancel Job
-              </button>
-            ) : (
-              <button
-                onClick={() => runBackup()}
-                disabled={running}
-                className="btn-primary group"
-              >
-                <Play className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                Run Global Snapshot
-              </button>
+            {!isViewer && (
+              running ? (
+                <button
+                  onClick={() => setCancelConfirmModal({ open: true, ids: [], type: 'single' })}
+                  className="px-4 py-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all font-bold text-xs flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Cancel Job
+                </button>
+              ) : (
+                <button
+                  onClick={() => runBackup()}
+                  disabled={running}
+                  className="btn-primary group disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  Run Global Snapshot
+                </button>
+              )
             )}
           </div>
         </div>

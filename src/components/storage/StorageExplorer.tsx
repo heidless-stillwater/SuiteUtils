@@ -2,19 +2,32 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Folder, 
   File, 
-  ChevronRight, 
   Search, 
-  Upload, 
+  ChevronRight, 
   Download, 
   Trash2, 
-  MoreVertical,
-  Plus,
+  Upload, 
+  FolderPlus, 
+  ChevronLeft, 
   RefreshCw,
-  FolderPlus,
+  HardDrive,
+  Database,
+  ArrowRight,
+  Shield,
+  Clock,
+  MoreVertical,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Lock,
+  FileJson,
+  Archive,
+  ExternalLink,
+  ChevronDown,
   FileIcon,
-  ArrowUp,
-  X
+  ArrowUp
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 
 const API_URL = 'http://localhost:5181';
@@ -136,6 +149,7 @@ interface StorageItem {
 }
 
 export default function StorageExplorer({ initialSearch = '', initialPath = 'AppSuite/backups/', initialSelected = '' }: { initialSearch?: string, initialPath?: string, initialSelected?: string }) {
+  const { isViewer } = useAuth();
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [items, setItems] = useState<StorageItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,6 +162,26 @@ export default function StorageExplorer({ initialSearch = '', initialPath = 'App
   const [expandedZip, setExpandedZip] = useState<string | null>(null);
   const [zipContents, setZipContents] = useState<any[] | null>(null);
   const [zipLoading, setZipLoading] = useState(false);
+  const [quota, setQuota] = useState<{ limit: number; usage: number } | null>(null);
+  const [activeProvider, setActiveProvider] = useState<string>('gcs');
+
+  const fetchQuota = async () => {
+    try {
+      const qRes = await fetch(`${API_URL}/api/storage/quota`);
+      const qData = await qRes.json();
+      setQuota(qData);
+
+      const sRes = await fetch(`${API_URL}/api/settings`);
+      const sData = await sRes.json();
+      setActiveProvider(sData.activeStorageProvider || 'gcs');
+    } catch (err) {
+      console.error('Failed to fetch storage info:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuota();
+  }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -350,39 +384,65 @@ export default function StorageExplorer({ initialSearch = '', initialPath = 'App
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {selectedItems.size > 0 && (
+        {!isViewer && (
+          <div className="flex items-center gap-2">
+            {selectedItems.size > 0 && (
+              <button 
+                onClick={handleBulkDelete}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all border border-red-500/20 mr-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete ({selectedItems.size})
+              </button>
+            )}
             <button 
-              onClick={handleBulkDelete}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all border border-red-500/20 mr-2"
+              onClick={() => setShowMkdir(true)}
+              className="p-2 rounded-xl bg-white/5 text-white/60 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
+              title="New Folder"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Delete ({selectedItems.size})
+              <FolderPlus className="w-4 h-4" />
             </button>
-          )}
-          <button 
-            onClick={() => setShowMkdir(true)}
-            className="p-2 rounded-xl bg-white/5 text-white/60 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
-            title="New Folder"
-          >
-            <FolderPlus className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-[10px] font-bold uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-          >
-            {uploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            Upload
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleUpload} 
-            className="hidden" 
-          />
-        </div>
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-[10px] font-bold uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+            >
+              {uploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              Upload
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleUpload} 
+              className="hidden" 
+            />
+          </div>
+        )}
       </div>
+
+      {quota && (
+        <div className="px-4 py-2 bg-white/[0.01] border-b border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="flex-1">
+              <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-[0.2em] text-white/20 mb-1.5">
+                <span>Storage Quota</span>
+                <span>{formatSize(String(quota.usage))} / {formatSize(String(quota.limit))}</span>
+              </div>
+              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${
+                    (quota.usage / quota.limit) > 0.9 ? 'bg-red-500' : (quota.usage / quota.limit) > 0.7 ? 'bg-amber-500' : 'bg-primary'
+                  }`}
+                  style={{ width: `${Math.min(100, (quota.usage / quota.limit) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="text-[10px] text-white/20 font-medium ml-4 italic">
+            Primary Backend: <span className="text-white/40 uppercase font-bold tracking-tighter not-italic">{activeProvider === 'gcs' ? 'Google Cloud Storage' : 'Google Drive'}</span>
+          </div>
+        </div>
+      )}
 
       {/* Explorer Content */}
       <div className="flex-1 overflow-auto custom-scrollbar">
@@ -472,13 +532,15 @@ export default function StorageExplorer({ initialSearch = '', initialPath = 'App
                             <Download className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        <button 
-                          onClick={() => handleDelete(item)}
-                          className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isViewer && (
+                          <button 
+                            onClick={() => handleDelete(item)}
+                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

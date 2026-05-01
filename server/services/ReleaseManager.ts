@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs-extra';
+import os from 'os';
 import { healthScanner } from './HealthScanner.js';
 import { auditLogger } from './AuditLogger.js';
 import { settingsManager } from './SettingsManager.js';
@@ -21,7 +22,7 @@ export class ReleaseManager {
   private activeProcesses = new Map<string, ChildProcess>();
 
   constructor() {
-    this.worktreeRoot = path.join(process.cwd(), 'worktrees');
+    this.worktreeRoot = path.join(os.homedir(), '.suiteutils_workspaces');
   }
 
   async enqueueRelease(options: ReleaseOptions): Promise<void> {
@@ -57,6 +58,13 @@ export class ReleaseManager {
 
   private async processRelease(options: ReleaseOptions) {
     const { appId, ref, env, onProgress, signal } = options;
+    
+    // Strict Taxonomy Validation
+    const taxonomyRegex = /^[A-Za-z0-9]+_v\d+\.\d+\.\d+_\d{8}(-[A-Za-z0-9]+)?$/;
+    if (!taxonomyRegex.test(ref)) {
+      onProgress?.({ message: `⚠️ WARNING: Ref "${ref}" does not follow strict taxonomy {Scope}_v{SemVer}_{YYYYMMDD}. Proceeding...`, type: 'info' });
+    }
+
     const worktreePath = path.join(this.worktreeRoot, `${appId}_${env}_${Date.now()}`);
     
     if (signal?.aborted) throw new Error('Release cancelled before start');
