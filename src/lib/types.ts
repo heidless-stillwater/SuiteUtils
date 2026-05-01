@@ -134,7 +134,7 @@ export interface Theme {
 
 export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & { defaultEnv: Omit<EnvironmentConfig, 'lastDeployAt'> }> = {
   'ag-video-system': {
-    displayName: 'ag-video-system',
+    displayName: 'Video System',
     path: '~/projects/ag-video-system',
     database: 'autovideo-db-0',
     project: 'heidless-apps-0',

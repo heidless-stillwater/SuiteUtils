@@ -55,19 +55,29 @@ export class HealthScanner {
 
     const start = Date.now();
     let appVersion = 'unknown';
-
     // Try to read local package.json version
     try {
-      const projectPath = app.projectPath.startsWith('~/') 
-        ? path.join(os.homedir(), app.projectPath.slice(2))
-        : app.projectPath;
-      const pkgPath = path.join(projectPath, 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const pkg = fs.readJsonSync(pkgPath);
-        appVersion = pkg.version || 'unknown';
+      let resolvedPath = app.projectPath;
+      if (resolvedPath.startsWith('~/')) {
+        resolvedPath = path.join(os.homedir(), resolvedPath.slice(2));
+      }
+
+      // Check primary path, then fallback to relative lookup
+      const pathsToTry = [
+        path.join(resolvedPath, 'package.json'),
+        path.resolve(process.cwd(), '..', appId, 'package.json'),
+        path.resolve(process.cwd(), '..', path.basename(resolvedPath), 'package.json')
+      ];
+
+      for (const p of pathsToTry) {
+        if (fs.existsSync(p)) {
+          const pkg = fs.readJsonSync(p);
+          appVersion = pkg.version || 'unknown';
+          break;
+        }
       }
     } catch (e) {
-      // Ignore version read errors
+      // Quietly fail if version cannot be read
     }
 
     try {

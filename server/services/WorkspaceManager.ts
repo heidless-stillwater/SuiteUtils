@@ -41,7 +41,7 @@ export class WorkspaceManager {
           description: 'Production Hub for Stillwater Core Apps',
           createdAt: new Date().toISOString(),
           apps: [
-            { id: 'ag-video-system', name: 'ag-video-system', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'heidless-ag-video' },
+            { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'heidless-ag-video' },
             { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'heidless-prompt-tool' },
             { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'heidless-prompt-resources' },
             { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },
@@ -79,7 +79,7 @@ export class WorkspaceManager {
         description: 'Auto-provisioned Production Hub',
         createdAt: new Date().toISOString(),
         apps: [
-          { id: 'ag-video-system', name: 'ag-video-system', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'heidless-ag-video' },
+          { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'heidless-ag-video' },
           { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'heidless-prompt-tool' },
           { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'heidless-prompt-resources' },
           { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },

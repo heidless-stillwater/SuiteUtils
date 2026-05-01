@@ -8,7 +8,7 @@
     "apps": [
       {
         "id": "ag-video-system",
-        "name": "ag-video-system",
+        "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
         "hostingTarget": "heidless-ag-video"
@@ -66,7 +66,7 @@
     "apps": [
       {
         "id": "ag-video-system",
-        "name": "ag-video-system",
+        "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
         "hostingTarget": "heidless-ag-video"
@@ -123,7 +123,7 @@
     "apps": [
       {
         "id": "ag-video-system",
-        "name": "ag-video-system",
+        "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
         "hostingTarget": "heidless-ag-video"
@@ -180,7 +180,7 @@
     "apps": [
       {
         "id": "ag-video-system",
-        "name": "ag-video-system",
+        "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
         "hostingTarget": "heidless-ag-video"
@@ -237,7 +237,7 @@
     "apps": [
       {
         "id": "ag-video-system",
-        "name": "ag-video-system",
+        "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
         "hostingTarget": "heidless-ag-video"
@@ -294,7 +294,7 @@
     "apps": [
       {
         "id": "ag-video-system",
-        "name": "ag-video-system",
+        "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
         "hostingTarget": "heidless-ag-video"
