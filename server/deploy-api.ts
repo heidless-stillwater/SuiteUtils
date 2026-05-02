@@ -545,6 +545,33 @@ app.post('/api/deploy', (req, res) => {
   buildProc.on('close', (buildCode) => {
     if (buildCode !== 0) {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      
+      // Persist failure status and timestamp
+      const workspaceId = (req as any).workspaceId || 'stillwater-suite';
+      const suiteRef = firestore.collection('suites').doc(workspaceId);
+      suiteRef.set({
+        [`apps.${appId}.environments.production.status`]: 'failed',
+        [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      }, { merge: true }).catch(err => console.error(`[Deploy] Build Failure Persistence Failed:`, err.message));
+
+      // Save to deployment history
+      firestore.collection('deployments').add({
+        suiteId: workspaceId,
+        batchId: `${appId}-${startTime}`,
+        appId,
+        displayName: displayName || appId,
+        environment: 'production',
+        status: 'failed',
+        startedAt: Timestamp.fromMillis(startTime),
+        completedAt: Timestamp.now(),
+        duration: elapsed,
+        deployMethod: deployMethod || 'firebase',
+        hostingTarget: hostingTarget || null,
+        project: firebaseProject,
+        errorLogs: buildError || buildOutput || 'Build failed'
+      }).catch(err => console.error(`[Deploy] Build History Persistence Failed:`, err.message));
+
       sendEvent({
         stage: 'failed',
         message: `Build failed with exit code ${buildCode}`,
@@ -609,6 +636,33 @@ app.post('/api/deploy', (req, res) => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
 
       if (deployCode !== 0) {
+        const workspaceId = (req as any).workspaceId || 'stillwater-suite';
+        const suiteRef = firestore.collection('suites').doc(workspaceId);
+        
+        // Persist failure status and timestamp
+        suiteRef.set({
+          [`apps.${appId}.environments.production.status`]: 'failed',
+          [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        }, { merge: true }).catch(err => console.error(`[Deploy] Deploy Failure Persistence Failed:`, err.message));
+
+        // Save to deployment history
+        firestore.collection('deployments').add({
+          suiteId: workspaceId,
+          batchId: `${appId}-${startTime}`,
+          appId,
+          displayName: displayName || appId,
+          environment: 'production',
+          status: 'failed',
+          startedAt: Timestamp.fromMillis(startTime),
+          completedAt: Timestamp.now(),
+          duration: elapsed,
+          deployMethod: deployMethod || 'firebase',
+          hostingTarget: hostingTarget || null,
+          project: firebaseProject,
+          errorLogs: deployError || deployOutput || 'Deploy failed'
+        }).catch(err => console.error(`[Deploy] Deploy History Persistence Failed:`, err.message));
+
         sendEvent({
           stage: 'failed',
           message: `Deploy failed with exit code ${deployCode}`,

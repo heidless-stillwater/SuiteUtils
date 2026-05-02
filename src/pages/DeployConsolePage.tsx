@@ -15,6 +15,8 @@ import {
   WifiOff,
   RotateCcw,
   Calendar,
+  History,
+  Info,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useSuite } from '../contexts/SuiteContext';
@@ -610,7 +612,7 @@ export function DeployConsolePage() {
                         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/5 shadow-inner">
                           <Calendar className="w-2.5 h-2.5 text-white/20" />
                           <span className="text-[10px] text-white/40 font-medium whitespace-nowrap">
-                            Deployed {formatDistanceToNow(new Date(app.lastDeployAt), { addSuffix: true })}
+                            {app.status === 'live' ? 'Deployed' : 'Attempted'} {formatDistanceToNow(new Date(app.lastDeployAt), { addSuffix: true })}
                           </span>
                         </div>
                       )}
@@ -632,9 +634,37 @@ export function DeployConsolePage() {
                   </div>
 
                   {/* Estimate */}
-                  <div className="text-right shrink-0 hidden md:block">
+                  <div className="text-right shrink-0 hidden md:block group/est cursor-help relative">
                     <p className="text-[10px] text-white/20 uppercase tracking-wider">Est.</p>
-                    <p className="text-xs font-mono text-white/50">{formatDuration(estimate.estimatedDuration)}</p>
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <p className="text-xs font-mono text-white/50">{formatDuration(estimate.estimatedDuration)}</p>
+                      {estimate.confidence > 0.7 ? (
+                        <Zap className="w-2.5 h-2.5 text-amber-400/50" />
+                      ) : (
+                        <Info className="w-2.5 h-2.5 text-white/10" />
+                      )}
+                    </div>
+                    
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/est:opacity-100 transition-all pointer-events-none z-50 scale-95 group-hover/est:scale-100 origin-bottom-right">
+                       <div className="flex items-center gap-2 mb-1.5">
+                         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                         <span className="text-[10px] font-bold uppercase tracking-wider text-white/80 text-left">Smart Estimate</span>
+                       </div>
+                       <p className="text-[10px] leading-relaxed text-white/50 text-left">{estimate.reasoning}</p>
+                       <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+                         <span className="text-[9px] text-white/30 uppercase tracking-tighter">Confidence</span>
+                         <div className="flex items-center gap-1">
+                           <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
+                             <div 
+                               className="h-full bg-primary" 
+                               style={{ width: `${estimate.confidence * 100}%` }}
+                             />
+                           </div>
+                           <span className="text-[9px] font-mono text-primary">{Math.round(estimate.confidence * 100)}%</span>
+                         </div>
+                       </div>
+                    </div>
                   </div>
 
                   {/* Elapsed / Timer */}
@@ -806,18 +836,56 @@ export function DeployConsolePage() {
                   </label>
                 </div>
               )}
+              {/* Expandable Log Panel & History */}
+              {isExpanded && (
+                <div className="border-t border-white/5">
+                  <div
+                    ref={(el) => { logRefs.current[app.appId] = el; }}
+                    className="bg-black/40 p-4 h-[300px] overflow-y-auto overflow-x-hidden font-mono text-[11px] text-white/50 leading-relaxed whitespace-pre-wrap break-words"
+                  >
+                    {app.logs.map((line, i) => (
+                      <div key={i} className={line.startsWith('\n──') ? 'text-primary font-bold mt-2' : ''}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
 
-              {/* Expandable Log Panel */}
-              {isExpanded && app.logs.length > 0 && (
-                <div
-                  ref={(el) => { logRefs.current[app.appId] = el; }}
-                  className="border-t border-white/5 bg-black/40 p-4 h-[300px] overflow-y-auto overflow-x-hidden font-mono text-[11px] text-white/50 leading-relaxed whitespace-pre-wrap break-words"
-                >
-                  {app.logs.map((line, i) => (
-                    <div key={i} className={line.startsWith('\n──') ? 'text-primary font-bold mt-2' : ''}>
-                      {line}
+                  {/* History Section */}
+                  <div className="border-t border-white/5 bg-black/20 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 flex items-center gap-2">
+                        <History className="w-3 h-3" />
+                        Recent Deployment History
+                      </h4>
+                      <span className="text-[9px] text-white/10">Showing last 5 attempts</span>
                     </div>
-                  ))}
+                    <div className="space-y-1">
+                      {deployHistory
+                        .filter(h => h.appId === app.appId)
+                        .slice(0, 5)
+                        .map((h) => (
+                          <div key={h.id} className="flex items-center justify-between text-[10px] py-1.5 border-b border-white/[0.02] last:border-0 group/hist">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-1.5 h-1.5 rounded-full ${h.status === 'live' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.3)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]'}`} />
+                              <span className="text-white/40 group-hover/hist:text-white/60 transition-colors">
+                                {h.completedAt ? formatDistanceToNow(h.completedAt.toDate(), { addSuffix: true }) : 'Recently'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className="font-mono text-white/30 group-hover/hist:text-white/50">
+                                {h.duration ? formatDuration(h.duration) : '—'}
+                              </span>
+                              <span className="text-white/10 text-[9px] uppercase tracking-tighter">{h.deployMethod}</span>
+                            </div>
+                          </div>
+                        ))}
+                      {deployHistory.filter(h => h.appId === app.appId).length === 0 && (
+                        <div className="text-center py-6 border border-dashed border-white/5 rounded-xl">
+                          <p className="text-white/10 text-[10px] italic">No historical data found for this app.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
