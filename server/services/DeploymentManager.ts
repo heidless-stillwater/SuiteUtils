@@ -122,6 +122,7 @@ class DeploymentManager extends EventEmitter {
     private failJob(jobId: string, error: string) {
         const job = this.activeJobs.get(jobId);
         if (job) {
+            if (job.status === 'live' || job.status === 'failed') return;
             job.status = 'failed';
             job.error = error;
             job.duration = Math.floor((Date.now() - job.startedAt) / 1000);
@@ -137,6 +138,7 @@ class DeploymentManager extends EventEmitter {
     private finishJob(jobId: string) {
         const job = this.activeJobs.get(jobId);
         if (job) {
+            if (job.status === 'live' || job.status === 'failed') return;
             job.status = 'live';
             job.duration = Math.floor((Date.now() - job.startedAt) / 1000);
             job.logs.push(`\n── Deployment successful and live!`);

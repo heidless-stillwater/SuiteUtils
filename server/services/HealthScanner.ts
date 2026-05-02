@@ -44,11 +44,10 @@ export class HealthScanner {
         'plantune': 3004
       };
 
-      if (isProd && app.hostingTarget) {
+      if (app.hostingTarget) {
         url = `https://${app.hostingTarget}.web.app/`;
       } else {
         const port = portMap[appId] || 3000;
-        // Try root for SPAs/Next.js as /health might not exist
         url = `http://localhost:${port}/`;
       }
     }

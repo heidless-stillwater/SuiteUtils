@@ -609,6 +609,16 @@ export function DeployConsolePage() {
                           'text-white/20'
                         }`}>{app.status}</span>
                         
+                        {/* Health Status */}
+                        <div className="w-1 h-1 rounded-full bg-white/10" />
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                          currentSuite?.apps?.[app.appId]?.health?.status === 'healthy' ? 'text-green-400' :
+                          currentSuite?.apps?.[app.appId]?.health?.status === 'degraded' ? 'text-amber-400' :
+                          'text-red-400'
+                        }`}>
+                          Health: {currentSuite?.apps?.[app.appId]?.health?.status || 'Unknown'}
+                        </span>
+                        
                         {/* Last Deployed Badge */}
                         {deployHistory.find(h => h.appId === app.appId && h.status === 'live') && (
                           <>

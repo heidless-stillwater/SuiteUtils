@@ -22,7 +22,7 @@ import { settingsManager } from './services/SettingsManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
 import { invitationManager } from './services/InvitationManager.js';
 import { MigrationManager } from './services/MigrationManager.js';
-import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { deploymentManager } from './services/DeploymentManager.js';
 
@@ -106,9 +106,7 @@ async function verifyDeployment(url: string, onProgress?: (msg: string) => void,
   
   while (Date.now() - startTime < timeoutMs) {
     try {
-      // Use no-cache to bypass any interim CDN caching of 404s
       const res = await fetch(url, { method: 'GET', cache: 'no-store' });
-      // Accept both 2xx (Success) and 3xx (Redirects, e.g. to /login) as evidence that the app is live
       if (res.status >= 200 && res.status < 400) {
         onProgress?.(`Readiness probe successful (Status: ${res.status})`);
         return true;
@@ -117,10 +115,34 @@ async function verifyDeployment(url: string, onProgress?: (msg: string) => void,
     } catch (e: any) {
       onProgress?.(`Readiness probe: URL not yet reachable (${e.message}). Retrying...`);
     }
-    await new Promise(resolve => setTimeout(resolve, 10000)); // Poll every 10s
+    await new Promise(resolve => setTimeout(resolve, 10000));
   }
   return false;
 }
+
+// BACKGROUND HEALTH SYNC
+setInterval(async () => {
+  try {
+    const suites = await firestore.collection('suites').get();
+    for (const doc of suites.docs) {
+      const healthResults = await healthScanner.scanAll(doc.id);
+      const updates: any = {};
+      healthResults.forEach(res => {
+        updates[`apps.${res.appId}.health`] = {
+          status: res.status.toLowerCase() === 'up' ? 'healthy' : res.status.toLowerCase() === 'down' ? 'unhealthy' : 'degraded',
+          lastChecked: res.lastChecked,
+          responseTime: res.responseTime || 0,
+          appVersion: res.appVersion || 'unknown'
+        };
+      });
+      if (Object.keys(updates).length > 0) {
+        await doc.ref.update(updates);
+      }
+    }
+  } catch (err: any) {
+    console.error('[HealthSync] Failed:', err.message);
+  }
+}, 60000);
 
 app.get('/api/health/ping', (req, res) => {
   res.json({ status: 'UP' });
