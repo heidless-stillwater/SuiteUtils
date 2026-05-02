@@ -11,42 +11,42 @@
         "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-ag-video"
+        "hostingTarget": "videosystem-v0"
       },
       {
         "id": "prompttool",
         "name": "PromptTool",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "hostingTarget": "prompttool-v0"
       },
       {
         "id": "promptresources",
         "name": "PromptResources",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "promptresources-v0"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "promptmaster-v0"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "hostingTarget": "promptaccreditation-v0"
       },
       {
         "id": "plantune",
         "name": "PlanTune",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune"
+        "hostingTarget": "plantune-v0"
       },
       {
         "id": "suiteutils",
@@ -69,42 +69,42 @@
         "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-ag-video"
+        "hostingTarget": "videosystem-v0"
       },
       {
         "id": "prompttool",
         "name": "PromptTool",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "hostingTarget": "prompttool-v0"
       },
       {
         "id": "promptresources",
         "name": "PromptResources",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "promptresources-v0"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "promptmaster-v0"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "hostingTarget": "promptaccreditation-v0"
       },
       {
         "id": "plantune",
         "name": "PlanTune",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune"
+        "hostingTarget": "plantune-v0"
       },
       {
         "id": "suiteutils",
@@ -126,42 +126,42 @@
         "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-ag-video"
+        "hostingTarget": "videosystem-v0"
       },
       {
         "id": "prompttool",
         "name": "PromptTool",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "hostingTarget": "prompttool-v0"
       },
       {
         "id": "promptresources",
         "name": "PromptResources",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "promptresources-v0"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "promptmaster-v0"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "hostingTarget": "promptaccreditation-v0"
       },
       {
         "id": "plantune",
         "name": "PlanTune",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune"
+        "hostingTarget": "plantune-v0"
       },
       {
         "id": "suiteutils",
@@ -183,42 +183,42 @@
         "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-ag-video"
+        "hostingTarget": "videosystem-v0"
       },
       {
         "id": "prompttool",
         "name": "PromptTool",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "hostingTarget": "prompttool-v0"
       },
       {
         "id": "promptresources",
         "name": "PromptResources",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "promptresources-v0"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "promptmaster-v0"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "hostingTarget": "promptaccreditation-v0"
       },
       {
         "id": "plantune",
         "name": "PlanTune",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune"
+        "hostingTarget": "plantune-v0"
       },
       {
         "id": "suiteutils",
@@ -240,42 +240,42 @@
         "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-ag-video"
+        "hostingTarget": "videosystem-v0"
       },
       {
         "id": "prompttool",
         "name": "PromptTool",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "hostingTarget": "prompttool-v0"
       },
       {
         "id": "promptresources",
         "name": "PromptResources",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "promptresources-v0"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "promptmaster-v0"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "hostingTarget": "promptaccreditation-v0"
       },
       {
         "id": "plantune",
         "name": "PlanTune",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune"
+        "hostingTarget": "plantune-v0"
       },
       {
         "id": "suiteutils",
@@ -297,42 +297,42 @@
         "name": "Video System",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-ag-video"
+        "hostingTarget": "videosystem-v0"
       },
       {
         "id": "prompttool",
         "name": "PromptTool",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "hostingTarget": "prompttool-v0"
       },
       {
         "id": "promptresources",
         "name": "PromptResources",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "promptresources-v0"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "promptmaster-v0"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "hostingTarget": "promptaccreditation-v0"
       },
       {
         "id": "plantune",
         "name": "PlanTune",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune"
+        "hostingTarget": "plantune-v0"
       },
       {
         "id": "suiteutils",

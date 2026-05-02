@@ -167,11 +167,15 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
     return suiteRef.id;
   }, [user]);
 
-  const updateAppStatus = useCallback(async (suiteId: string, appId: string, env: string, status: string) => {
+  const updateAppStatus = useCallback(async (suiteId: string, appId: string, env: string, status: string, deployUrl?: string) => {
     const suiteRef = doc(db, 'suites', suiteId);
-    await setDoc(suiteRef, {
+    const updateData: any = {
       [`apps.${appId}.environments.${env}.status`]: status
-    }, { merge: true });
+    };
+    if (deployUrl) {
+      updateData[`apps.${appId}.environments.${env}.deployUrl`] = deployUrl;
+    }
+    await setDoc(suiteRef, updateData, { merge: true });
   }, []);
 
   return (

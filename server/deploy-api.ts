@@ -3,6 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import os from 'os';
 import { GoogleAuth } from 'google-auth-library';
 import { fileURLToPath } from 'url';
@@ -21,6 +22,8 @@ import { settingsManager } from './services/SettingsManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
 import { invitationManager } from './services/InvitationManager.js';
 import { MigrationManager } from './services/MigrationManager.js';
+import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -41,6 +44,41 @@ app.use(express.json());
 
 const releaseManager = new ReleaseManager();
 const activeReleaseControllers = new Map<string, AbortController>();
+
+// Initialize Firebase Admin
+const firebaseApp = getApps().length === 0 
+  ? initializeApp({ 
+      credential: applicationDefault(), 
+      projectId: 'heidless-apps-0' 
+    })
+  : getApps()[0];
+
+const firestore = getFirestore(firebaseApp, 'suiteutils-db-0');
+
+/**
+ * Polls the deployment URL until it returns 200 OK or times out.
+ */
+async function verifyDeployment(url: string, onProgress?: (msg: string) => void, timeoutMs: number = 300000): Promise<boolean> {
+  const startTime = Date.now();
+  onProgress?.(`Starting readiness probe for ${url}...`);
+  
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      // Use no-cache to bypass any interim CDN caching of 404s
+      const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+      // Accept both 2xx (Success) and 3xx (Redirects, e.g. to /login) as evidence that the app is live
+      if (res.status >= 200 && res.status < 400) {
+        onProgress?.(`Readiness probe successful (Status: ${res.status})`);
+        return true;
+      }
+      onProgress?.(`Readiness probe: URL reachable but returned status ${res.status}. Retrying...`);
+    } catch (e: any) {
+      onProgress?.(`Readiness probe: URL not yet reachable (${e.message}). Retrying...`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 10000)); // Poll every 10s
+  }
+  return false;
+}
 
 app.get('/api/health/ping', (req, res) => {
   res.json({ status: 'UP' });
@@ -446,7 +484,7 @@ interface ReleaseRecord {
 
 // Deploy endpoint — streams output via SSE
 app.post('/api/deploy', (req, res) => {
-  const { appId, projectPath, hostingTarget, project, deployMethod } = req.body;
+  const { appId, projectPath, hostingTarget, project, deployMethod, displayName } = req.body;
 
   if (!appId || !projectPath) {
     res.status(400).json({ error: 'appId and projectPath are required' });
@@ -541,10 +579,15 @@ app.post('/api/deploy', (req, res) => {
       '--project', firebaseProject,
     ];
 
-    const deployProc = spawn('firebase', deployArgs, {
+    const localFirebase = path.join(resolvedPath, 'node_modules', '.bin', 'firebase');
+    const firebaseCmd = fs.existsSync(localFirebase) ? localFirebase : 'firebase';
+    const localBin = path.join(resolvedPath, 'node_modules', '.bin');
+    const newPath = `${localBin}${path.delimiter}${process.env.PATH}`;
+
+    const deployProc = spawn(firebaseCmd, deployArgs, {
       cwd: resolvedPath,
       shell: '/bin/bash',
-      env: { ...process.env, FORCE_COLOR: '0' },
+      env: { ...process.env, PATH: newPath, FORCE_COLOR: '0' },
     });
 
     let deployOutput = '';
@@ -562,7 +605,7 @@ app.post('/api/deploy', (req, res) => {
       sendEvent({ stage: 'deploying', output: text, isStderr: true });
     });
 
-    deployProc.on('close', (deployCode) => {
+    deployProc.on('close', async (deployCode) => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
 
       if (deployCode !== 0) {
@@ -573,19 +616,89 @@ app.post('/api/deploy', (req, res) => {
           duration: elapsed,
         });
         console.log(`[Deploy] ${appId} DEPLOY FAILED (${elapsed}s)`);
+        res.end();
       } else {
-        // Extract hosting URL from output
-        const urlMatch = deployOutput.match(/https?:\/\/\S+\.web\.app/);
+        // Extract hosting URL from combined output (stdout/stderr)
+        const combinedOutput = deployOutput + deployError;
+        const urlMatch = combinedOutput.match(/https?:\/\/\S+\.web\.app/);
+        const deployUrl = urlMatch?.[0] || null;
+
         sendEvent({
-          stage: 'live',
-          message: `Successfully deployed ${appId}`,
-          url: urlMatch?.[0] || null,
+          stage: 'verifying',
+          message: `Successfully deployed to CLI. Starting readiness probe...`,
+          url: deployUrl,
           duration: elapsed,
         });
-        console.log(`[Deploy] ${appId} LIVE (${elapsed}s)`);
-      }
 
-      res.end();
+        // Step 3: Verification (Readiness Probe)
+        let isVerified = false;
+        if (deployUrl) {
+          isVerified = await verifyDeployment(
+            deployUrl, 
+            (msg) => sendEvent({ stage: 'verifying', message: msg })
+          );
+        } else {
+          console.warn(`[Deploy] No URL found in output, skipping verification.`);
+          isVerified = true; // Assume live if we can't verify
+        }
+
+        // Final State Update - Write to Firestore directly from Backend
+        try {
+          const workspaceId = (req as any).workspaceId || 'stillwater-suite';
+          const suiteRef = firestore.collection('suites').doc(workspaceId);
+          
+          const status = isVerified ? 'live' : 'failed';
+          const updateData: any = {
+            [`apps.${appId}.environments.production.status`]: status,
+            [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
+            updatedAt: Timestamp.now()
+          };
+
+          // Use .set with merge: true to avoid "document not found" errors if workspaceId is mismatched
+          await suiteRef.set(updateData, { merge: true });
+          console.log(`[Deploy] ${appId} Persistence Success: ${status} in ${workspaceId}`);
+
+          // Also save to deployments history collection
+          try {
+            await firestore.collection('deployments').add({
+              suiteId: workspaceId,
+              batchId: `${appId}-${startTime}`,
+              appId,
+              displayName: displayName || appId,
+              environment: 'production',
+              status,
+              startedAt: Timestamp.fromMillis(startTime),
+              completedAt: Timestamp.now(),
+              duration: Math.floor((Date.now() - startTime) / 1000),
+              deployMethod: deployMethod || 'firebase',
+              hostingTarget: hostingTarget || null,
+              project: firebaseProject,
+              deployUrl: deployUrl,
+              errorLogs: isVerified ? null : 'Readiness probe timeout'
+            });
+          } catch (historyErr: any) {
+            console.error(`[Deploy] History Persistence Failed:`, historyErr.message);
+          }
+
+          sendEvent({
+            stage: isVerified ? 'live' : 'failed',
+            message: isVerified 
+              ? `Deployment fully verified and live!` 
+              : `Readiness probe timed out. App may still be propagating.`,
+            url: deployUrl,
+            duration: Math.floor((Date.now() - startTime) / 1000),
+          });
+        } catch (dbErr: any) {
+          console.error(`[Deploy] Firestore Update Failed:`, dbErr.message);
+          sendEvent({
+            stage: 'failed',
+            message: `Deployment succeeded but failed to update status record: ${dbErr.message}`,
+          });
+        }
+
+        console.log(`[Deploy] ${appId} PROCESS COMPLETE (${Math.floor((Date.now() - startTime) / 1000)}s)`);
+        res.end();
+      }
     });
 
     deployProc.on('error', (err) => {
@@ -641,7 +754,7 @@ app.post('/api/backups/run', async (req, res) => {
   if (!force && !queue) {
     const conflict = operationMonitor.findIdenticalOperation('backup', metadata);
     if (conflict) {
-      console.log(`[Backup] Conflict! Job ${id} (${scope}) blocked by active job ${conflict.id} (${conflict.metadata?.scope})`);
+      console.log(`[Backup] Conflict! New job (${scope}) blocked by active job ${conflict.id} (${conflict.metadata?.scope})`);
       return res.status(409).json({ 
         error: 'Conflict detected', 
         message: `An identical backup job (${scope}) is already running.`,

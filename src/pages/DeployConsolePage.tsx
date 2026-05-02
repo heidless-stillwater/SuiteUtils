@@ -14,7 +14,9 @@ import {
   Wifi,
   WifiOff,
   RotateCcw,
+  Calendar,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { DeployStatus, EnvironmentTag, DeploymentRecord } from '../lib/types';
@@ -40,6 +42,8 @@ interface AppDeployState {
   error: string | null;
   releaseRef: string;
   isIsolated: boolean;
+  lastDeployAt: number | null;
+  appVersion?: string;
 }
 
 export function DeployConsolePage() {
@@ -54,6 +58,7 @@ export function DeployConsolePage() {
 
   // Per-app rollback state: stage | message | error | url
   const [rollbackStates, setRollbackStates] = useState<Record<string, { active: boolean; stage: string; message: string; error?: string; url?: string }>>({});
+  const [sortBy, setSortBy] = useState<'name' | 'last-deploy'>('last-deploy');
 
   // Check API health on mount
   useEffect(() => {
@@ -61,6 +66,28 @@ export function DeployConsolePage() {
       .then((r) => r.ok ? setApiAvailable(true) : setApiAvailable(false))
       .catch(() => setApiAvailable(false));
   }, []);
+
+  // Fetch app versions from health scanner
+  useEffect(() => {
+    if (apiAvailable !== true || deployStates.length === 0) return;
+    
+    const fetchVersions = () => {
+      fetch(`${API_URL}/api/health`)
+        .then(res => res.json())
+        .then((healthResults: any[]) => {
+          setDeployStates(prev => prev.map(s => {
+            const health = healthResults.find(h => h.appId === s.appId);
+            return health && health.appVersion ? { ...s, appVersion: health.appVersion } : s;
+          }));
+        })
+        .catch(err => console.error('Failed to fetch app versions:', err));
+    };
+
+    fetchVersions();
+    // Refresh versions every 30s to catch updates
+    const interval = setInterval(fetchVersions, 30000);
+    return () => clearInterval(interval);
+  }, [apiAvailable, deployStates.length]);
 
   // Subscribe to Firestore deploy history for this suite (feeds expert system)
   useEffect(() => {
@@ -72,28 +99,50 @@ export function DeployConsolePage() {
     return () => unsub();
   }, [currentSuite]);
 
-  // Initialize deploy states from suite apps
+  // Initialize/Sync deploy states from suite apps
   useEffect(() => {
     if (!currentSuite) return;
-    const states = Object.entries(currentSuite.apps).map(([id, app]) => ({
-      appId: id,
-      displayName: app.displayName,
-      selected: false,
-      environment: 'production' as EnvironmentTag,
-      status: 'queued' as DeployStatus,
-      startedAt: null,
-      elapsed: 0,
-      deployMethod: app.environments.production?.deployMethod || 'firebase',
-      projectPath: app.path,
-      hostingTarget: app.environments.production?.hostingTarget || null,
-      project: app.project || 'heidless-apps-0',
-      logs: [],
-      deployUrl: null,
-      error: null,
-      releaseRef: 'main',
-      isIsolated: false,
-    }));
-    setDeployStates(states);
+
+    setDeployStates((prev) => {
+      return Object.entries(currentSuite.apps).map(([id, app]) => {
+        const existing = prev.find((s) => s.appId === id);
+        const dbStatus = (app.environments.production?.status || 'queued') as DeployStatus;
+        const dbUrl = app.environments.production?.deployUrl || null;
+
+        // If we are already tracking this app and it's in an active local state,
+        // don't let the DB status overwrite our local progress/logs unless the DB 
+        // says it's finished (live/failed).
+        if (existing && (existing.status === 'building' || existing.status === 'deploying' || existing.status === 'verifying')) {
+           if (dbStatus === 'live' || dbStatus === 'failed') {
+             return { ...existing, status: dbStatus, deployUrl: dbUrl };
+           }
+           return existing;
+        }
+
+        const lastDeploy = app.environments.production?.lastDeployAt;
+        const lastDeployMillis = lastDeploy ? (typeof lastDeploy.toMillis === 'function' ? lastDeploy.toMillis() : (lastDeploy.seconds * 1000)) : null;
+
+        return {
+          appId: id,
+          displayName: app.displayName,
+          selected: existing?.selected || false,
+          environment: existing?.environment || ('production' as EnvironmentTag),
+          status: dbStatus,
+          startedAt: existing?.startedAt || null,
+          elapsed: existing?.elapsed || 0,
+          deployMethod: app.environments.production?.deployMethod || 'firebase',
+          projectPath: app.path,
+          hostingTarget: app.environments.production?.hostingTarget || null,
+          project: app.project || 'heidless-apps-0',
+          logs: existing?.logs || [],
+          deployUrl: dbUrl,
+          error: existing?.error || null,
+          releaseRef: existing?.releaseRef || 'main',
+          isIsolated: existing?.isIsolated || false,
+          lastDeployAt: lastDeployMillis,
+        };
+      });
+    });
   }, [currentSuite]);
 
   // Elapsed time updater
@@ -133,6 +182,19 @@ export function DeployConsolePage() {
     setDeployStates((prev) =>
       prev.map((s) => (s.appId === appId ? { ...s, environment: env } : s))
     );
+  };
+
+  const deployIndividual = async (appId: string) => {
+    const app = deployStates.find(s => s.appId === appId);
+    if (!app || batchRunning) return;
+    
+    setExpandedLog(appId);
+    setBatchRunning(true);
+    try {
+      await deployApp(app);
+    } finally {
+      setBatchRunning(false);
+    }
   };
 
   // Real deploy via SSE
@@ -184,16 +246,25 @@ export function DeployConsolePage() {
       // Existing standard deploy logic...
       fetch(`${API_URL}/api/deploy`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-workspace-id': currentSuite?.id || 'stillwater-suite'
+        },
         body: JSON.stringify({
           appId: app.appId,
           projectPath: app.projectPath,
           hostingTarget: app.hostingTarget,
+          displayName: app.displayName,
           project: app.project,
           deployMethod: app.deployMethod,
         }),
       })
         .then(async (response) => {
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
+          }
+          
           const reader = response.body?.getReader();
           if (!reader) throw new Error('No response stream');
 
@@ -209,15 +280,21 @@ export function DeployConsolePage() {
             buffer = lines.pop() || '';
 
             for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
+              const trimmedLine = line.trim();
+              if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+              
               try {
-                const data = JSON.parse(line.slice(6));
+                const data = JSON.parse(trimmedLine.slice(6));
                 setDeployStates((prev) =>
                   prev.map((s) => {
                     if (s.appId !== app.appId) return s;
                     const newLogs = [...s.logs];
                     if (data.output) newLogs.push(data.output);
                     if (data.message) newLogs.push(`\n── ${data.message}`);
+
+                    if (data.stage === 'failed') {
+                      setExpandedLog(app.appId);
+                    }
 
                     return {
                       ...s,
@@ -229,38 +306,12 @@ export function DeployConsolePage() {
                     };
                   })
                 );
-              } catch {
-                // skip malformed events
+              } catch (e) {
+                console.warn('[Deploy] Failed to parse SSE event:', trimmedLine, e);
               }
             }
           }
-          // Stream ended — read final state and persist to Firestore
-          setDeployStates((prev) => {
-            const final = prev.find((s) => s.appId === app.appId);
-            if (final && currentSuite) {
-              saveDeployRecord({
-                suiteId: currentSuite.id,
-                batchId: app.appId + '-' + Date.now(),
-                appId: app.appId,
-                displayName: app.displayName,
-                environment: app.environment,
-                status: final.status,
-                startedAt: app.startedAt || Date.now(),
-                duration: final.elapsed || null,
-                deployMethod: app.deployMethod,
-                hostingTarget: app.hostingTarget,
-                project: app.project,
-                errorLogs: final.error,
-                deployUrl: final.deployUrl,
-              }).catch((e) => console.warn('[Deploy] Firestore write failed:', e.message));
-
-              if (final.status === 'live') {
-                updateAppStatus(currentSuite.id, app.appId, app.environment, 'live')
-                  .catch(e => console.warn('[Deploy] Registry status update failed:', e.message));
-              }
-            }
-            return prev;
-          });
+          // Stream ended — state is already persisted by backend
           resolve();
         })
         .catch((err) => {
@@ -424,6 +475,16 @@ export function DeployConsolePage() {
   const successCount = deployStates.filter((s) => s.selected && s.status === 'live').length;
   const failCount = deployStates.filter((s) => s.selected && s.status === 'failed').length;
 
+  const sortedStates = [...deployStates].sort((a, b) => {
+    if (sortBy === 'name') return a.displayName.localeCompare(b.displayName);
+    if (sortBy === 'last-deploy') {
+      const timeA = a.lastDeployAt || 0;
+      const timeB = b.lastDeployAt || 0;
+      return timeB - timeA;
+    }
+    return 0;
+  });
+
   return (
     <div className="page-enter space-y-6">
       {/* Header */}
@@ -446,6 +507,26 @@ export function DeployConsolePage() {
           <button onClick={toggleSelectAll} className="btn-ghost text-xs">
             {deployStates.every((s) => s.selected) ? 'Deselect All' : 'Select All'}
           </button>
+
+          {/* Sort Controls */}
+          <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/5 ml-2">
+            <button
+              onClick={() => setSortBy('name')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                sortBy === 'name' ? 'bg-primary text-white shadow-lg' : 'text-white/30 hover:text-white/60'
+              }`}
+            >
+              By Name
+            </button>
+            <button
+              onClick={() => setSortBy('last-deploy')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                sortBy === 'last-deploy' ? 'bg-primary text-white shadow-lg' : 'text-white/30 hover:text-white/60'
+              }`}
+            >
+              By Last Deployed
+            </button>
+          </div>
           <button
             onClick={startBatch}
             disabled={selectedCount === 0 || batchRunning || !apiAvailable}
@@ -473,7 +554,7 @@ export function DeployConsolePage() {
 
       {/* App Grid */}
       <div className="space-y-3">
-        {deployStates.map((app) => {
+        {sortedStates.map((app) => {
           const estimate = getEstimate(app.appId, app.deployMethod as 'firebase' | 'cloud-build', deployHistory);
           const isExpanded = expandedLog === app.appId;
 
@@ -502,6 +583,11 @@ export function DeployConsolePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-bold text-white/90">{app.displayName}</h3>
+                      {app.appVersion && (
+                        <span className="px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 text-[9px] font-mono text-primary font-bold">
+                          v{app.appVersion}
+                        </span>
+                      )}
                       <StatusBadge status={app.status} />
                       {app.hostingTarget && (
                         <a
@@ -516,9 +602,19 @@ export function DeployConsolePage() {
                         </a>
                       )}
                     </div>
-                    <p className="text-[11px] text-white/30 font-mono mt-0.5 truncate">
-                      {app.projectPath} → {app.hostingTarget || 'cloud-build'}
-                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-[11px] text-white/30 font-mono truncate">
+                        {app.projectPath} → {app.hostingTarget || 'cloud-build'}
+                      </p>
+                      {app.lastDeployAt && (
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/5 shadow-inner">
+                          <Calendar className="w-2.5 h-2.5 text-white/20" />
+                          <span className="text-[10px] text-white/40 font-medium whitespace-nowrap">
+                            Deployed {formatDistanceToNow(new Date(app.lastDeployAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Environment Selector */}
@@ -547,6 +643,17 @@ export function DeployConsolePage() {
                       <p className="text-[10px] text-white/20 uppercase tracking-wider">Elapsed</p>
                       <p className="text-xs font-mono text-primary">{formatElapsed(app.elapsed)}</p>
                     </div>
+                  )}
+
+                  {/* Individual Deploy Button */}
+                  {!batchRunning && app.status !== 'building' && app.status !== 'deploying' && (
+                    <button
+                      onClick={() => deployIndividual(app.appId)}
+                      className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all group/btn border border-primary/20"
+                      title="Deploy this app now"
+                    >
+                      <Rocket className="w-4 h-4 group-hover/btn:animate-bounce" />
+                    </button>
                   )}
 
                   {/* Active Operation Controls */}
@@ -704,7 +811,7 @@ export function DeployConsolePage() {
               {isExpanded && app.logs.length > 0 && (
                 <div
                   ref={(el) => { logRefs.current[app.appId] = el; }}
-                  className="border-t border-white/5 bg-black/40 p-4 max-h-64 overflow-y-auto font-mono text-[11px] text-white/50 leading-relaxed"
+                  className="border-t border-white/5 bg-black/40 p-4 h-[300px] overflow-y-auto overflow-x-hidden font-mono text-[11px] text-white/50 leading-relaxed whitespace-pre-wrap break-words"
                 >
                   {app.logs.map((line, i) => (
                     <div key={i} className={line.startsWith('\n──') ? 'text-primary font-bold mt-2' : ''}>
@@ -754,6 +861,7 @@ function StatusBadge({ status }: { status: string }) {
     live: 'badge-success',
     building: 'badge-warning',
     deploying: 'badge-warning',
+    verifying: 'badge-warning',
     failed: 'badge-danger',
     queued: 'badge-info',
     'not-configured': 'badge-info',
@@ -763,6 +871,7 @@ function StatusBadge({ status }: { status: string }) {
     live: <CheckCircle2 className="w-3 h-3" />,
     building: <Loader2 className="w-3 h-3 animate-spin" />,
     deploying: <Loader2 className="w-3 h-3 animate-spin" />,
+    verifying: <Loader2 className="w-3 h-3 animate-spin" />,
     failed: <AlertTriangle className="w-3 h-3" />,
     queued: <Clock className="w-3 h-3" />,
   };

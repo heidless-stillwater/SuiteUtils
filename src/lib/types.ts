@@ -31,13 +31,14 @@ export interface UserProfile {
 
 export type DeployMethod = 'firebase' | 'cloud-build';
 export type EnvironmentTag = 'production' | 'staging' | 'dev';
-export type AppStatus = 'live' | 'deploying' | 'failed' | 'not-configured';
+export type AppStatus = 'live' | 'deploying' | 'verifying' | 'failed' | 'not-configured';
 
 export interface EnvironmentConfig {
   hostingTarget: string | null;
   deployMethod: DeployMethod;
   lastDeployAt: Timestamp | null;
   status: AppStatus;
+  deployUrl?: string | null;
 }
 
 export interface AppConfig {
@@ -63,7 +64,7 @@ export interface Suite {
 // DEPLOYMENT TYPES
 // ============================================================
 
-export type DeployStatus = 'queued' | 'building' | 'deploying' | 'live' | 'failed' | 'paused' | 'stopped';
+export type DeployStatus = 'queued' | 'building' | 'deploying' | 'verifying' | 'live' | 'failed' | 'paused' | 'stopped';
 
 export interface DeploymentRecord {
   id: string;
