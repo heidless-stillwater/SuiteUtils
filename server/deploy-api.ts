@@ -24,6 +24,7 @@ import { invitationManager } from './services/InvitationManager.js';
 import { MigrationManager } from './services/MigrationManager.js';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { deploymentManager } from './services/DeploymentManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -48,12 +49,53 @@ const activeReleaseControllers = new Map<string, AbortController>();
 // Initialize Firebase Admin
 const firebaseApp = getApps().length === 0 
   ? initializeApp({ 
-      credential: applicationDefault(), 
+      credential: cert(path.join(process.cwd(), 'server', 'config', 'service-account.json')),
       projectId: 'heidless-apps-0' 
     })
   : getApps()[0];
 
 const firestore = getFirestore(firebaseApp, 'suiteutils-db-0');
+
+// GLOBAL PERSISTENCE LISTENER
+// This ensures that even if the browser is closed, the status and timestamp are saved.
+deploymentManager.on('update', (job: any) => {
+  if (job.status === 'live' || job.status === 'failed') {
+    // We need to know which workspace this job belongs to.
+    const workspaceId = job.workspaceId || 'OlgqXSyKR8Cm3gUZErE7'; 
+    const appId = job.appId;
+    const status = job.status === 'live' ? 'live' : 'failed';
+
+    console.log(`[Global Persistence] Detected ${status} for ${appId}. Updating workspace: ${workspaceId}`);
+
+    const suiteRef = firestore.collection('suites').doc(workspaceId);
+    suiteRef.set({
+      [`apps.${appId}.environments.production.status`]: status,
+      [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    }, { merge: true })
+    .then(() => console.log(`[Global Persistence] Successfully updated ${appId}`))
+    .catch(err => console.error(`[Global Persistence] Failed for ${appId}:`, err.message));
+
+    // Persist history record when finished
+    console.log(`[Persistence] Saving history record for ${appId} (${status})`);
+    firestore.collection('deployments').add({
+      suiteId: workspaceId,
+      batchId: job.id,
+      appId,
+      displayName: appId,
+      environment: 'production',
+      status,
+      startedAt: Timestamp.fromMillis(job.startedAt),
+      completedAt: Timestamp.now(),
+      duration: job.duration || 0,
+      deployMethod: 'firebase',
+      hostingTarget: job.hostingTarget || null,
+      project: job.project || 'heidless-apps-0',
+      errorLogs: job.error || null,
+      deployUrl: job.url || null
+    }).catch(err => console.error('[Persistence] History record failed:', err));
+  }
+});
 
 /**
  * Polls the deployment URL until it returns 200 OK or times out.
@@ -297,6 +339,19 @@ app.post('/api/migrate', async (req, res) => {
   }
 });
 
+app.post('/api/migration/analyze', async (req, res) => {
+  const { sourceBackupPath, targetWorkspaceId } = req.body;
+  const storageProvider = getStorageProvider();
+  const migrationManager = new MigrationManager(storageProvider);
+
+  try {
+    const mappings = await migrationManager.analyzeMigration(sourceBackupPath, targetWorkspaceId);
+    res.json(mappings);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Resolve ~ to home directory
 function resolvePath(p: string): string {
   if (p.startsWith('~/') || p.startsWith('~\\')) {
@@ -482,9 +537,30 @@ interface ReleaseRecord {
   versionBytes?: string;
 }
 
+// Get all active or recently completed deployment jobs
+app.get('/api/deploy/active', (req, res) => {
+  res.json(deploymentManager.getActiveJobs());
+});
+
+// Cancel a deployment job
+app.post('/api/deploy/cancel', (req, res) => {
+  const { appId } = req.body;
+  const activeJobs = deploymentManager.getActiveJobs();
+  const job = activeJobs.find(j => 
+    j.appId === appId && (j.status === 'building' || j.status === 'deploying' || j.status === 'verifying')
+  );
+
+  if (job && deploymentManager.stopDeploy(job.id)) {
+    res.json({ success: true, message: 'Deployment cancelled' });
+  } else {
+    res.status(404).json({ error: 'No active deployment found for this app' });
+  }
+});
+
 // Deploy endpoint — streams output via SSE
 app.post('/api/deploy', (req, res) => {
   const { appId, projectPath, hostingTarget, project, deployMethod, displayName } = req.body;
+  const workspaceId = req.headers['x-workspace-id'] as string || 'stillwater-suite';
 
   if (!appId || !projectPath) {
     res.status(400).json({ error: 'appId and projectPath are required' });
@@ -493,13 +569,14 @@ app.post('/api/deploy', (req, res) => {
 
   const resolvedPath = resolvePath(projectPath);
   const firebaseProject = project || 'heidless-apps-0';
+  const jobId = `${appId}-${Date.now()}`;
 
-  console.log(`\n[Deploy] Starting: ${appId}`);
-  console.log(`  Path: ${resolvedPath}`);
-  console.log(`  Target: ${hostingTarget || 'cloud-build'}`);
-  console.log(`  Method: ${deployMethod || 'firebase'}`);
+  console.log(`\n[Deploy] Starting: ${appId} (Job: ${jobId}) in Workspace: ${workspaceId}`);
+  
+  // Start the background process
+  deploymentManager.startDeploy(jobId, appId, resolvedPath, hostingTarget, firebaseProject, workspaceId);
 
-  // Set up SSE
+  // Set up SSE for the current request
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -507,281 +584,86 @@ app.post('/api/deploy', (req, res) => {
     'X-Accel-Buffering': 'no',
   });
 
-  const sendEvent = (data: Record<string, unknown>) => {
+  const sendEvent = (data: any) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  const startTime = Date.now();
-
-  sendEvent({
-    stage: 'building',
-    message: `Building ${appId}...`,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Step 1: npm run build
-  const buildProc = spawn('npm', ['run', 'build'], {
-    cwd: resolvedPath,
-    shell: '/bin/bash',
-    env: { ...process.env, FORCE_COLOR: '0' },
-  });
-
-  let buildOutput = '';
-  let buildError = '';
-
-  buildProc.stdout.on('data', (chunk: Buffer) => {
-    const text = chunk.toString();
-    buildOutput += text;
-    sendEvent({ stage: 'building', output: text });
-  });
-
-  buildProc.stderr.on('data', (chunk: Buffer) => {
-    const text = chunk.toString();
-    buildError += text;
-    // stderr often contains warnings, not just errors
-    sendEvent({ stage: 'building', output: text, isStderr: true });
-  });
-
-  buildProc.on('close', (buildCode) => {
-    if (buildCode !== 0) {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      
-      // Persist failure status and timestamp
-      const workspaceId = (req as any).workspaceId || 'stillwater-suite';
-      const suiteRef = firestore.collection('suites').doc(workspaceId);
-      suiteRef.set({
-        [`apps.${appId}.environments.production.status`]: 'failed',
-        [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      }, { merge: true }).catch(err => console.error(`[Deploy] Build Failure Persistence Failed:`, err.message));
-
-      // Save to deployment history
-      firestore.collection('deployments').add({
-        suiteId: workspaceId,
-        batchId: `${appId}-${startTime}`,
-        appId,
-        displayName: displayName || appId,
-        environment: 'production',
-        status: 'failed',
-        startedAt: Timestamp.fromMillis(startTime),
-        completedAt: Timestamp.now(),
-        duration: elapsed,
-        deployMethod: deployMethod || 'firebase',
-        hostingTarget: hostingTarget || null,
-        project: firebaseProject,
-        errorLogs: buildError || buildOutput || 'Build failed'
-      }).catch(err => console.error(`[Deploy] Build History Persistence Failed:`, err.message));
-
+  // Attach to manager updates
+  const onUpdate = (job: any) => {
+    if (job.id !== jobId) return;
+    
+    // Use try-catch to handle closed connections
+    try {
       sendEvent({
-        stage: 'failed',
-        message: `Build failed with exit code ${buildCode}`,
-        error: buildError || buildOutput,
-        duration: elapsed,
+        stage: job.status,
+        message: job.status === 'live' ? 'Deployment Successful' : job.status === 'failed' ? job.error : undefined,
+        output: job.logs[job.logs.length - 1], // Send the latest log line
+        duration: job.duration,
+        startedAt: job.startedAt,
+        url: job.url,
+        error: job.error
       });
-      res.end();
-      console.log(`[Deploy] ${appId} BUILD FAILED (${elapsed}s)`);
-      return;
+    } catch (err) {
+      // Client likely disconnected, but global listener will handle persistence.
     }
 
-    sendEvent({
-      stage: 'deploying',
-      message: `Build complete. Deploying ${appId}...`,
-    });
-
-    // Step 2: firebase deploy
-    if (deployMethod === 'cloud-build' || !hostingTarget) {
-      // Cloud Build apps — placeholder for now
-      sendEvent({
-        stage: 'failed',
-        message: 'Cloud Build deployment not yet implemented',
-        duration: Math.floor((Date.now() - startTime) / 1000),
-      });
+    if (job.status === 'live' || job.status === 'failed') {
+      deploymentManager.removeListener('update', onUpdate);
       res.end();
-      return;
     }
+  };
 
-    const deployArgs = [
-      'deploy',
-      '--only', `hosting:${hostingTarget}`,
-      '--project', firebaseProject,
-    ];
+  deploymentManager.on('update', onUpdate);
 
-    const localFirebase = path.join(resolvedPath, 'node_modules', '.bin', 'firebase');
-    const firebaseCmd = fs.existsSync(localFirebase) ? localFirebase : 'firebase';
-    const localBin = path.join(resolvedPath, 'node_modules', '.bin');
-    const newPath = `${localBin}${path.delimiter}${process.env.PATH}`;
-
-    const deployProc = spawn(firebaseCmd, deployArgs, {
-      cwd: resolvedPath,
-      shell: '/bin/bash',
-      env: { ...process.env, PATH: newPath, FORCE_COLOR: '0' },
-    });
-
-    let deployOutput = '';
-    let deployError = '';
-
-    deployProc.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      deployOutput += text;
-      sendEvent({ stage: 'deploying', output: text });
-    });
-
-    deployProc.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      deployError += text;
-      sendEvent({ stage: 'deploying', output: text, isStderr: true });
-    });
-
-    deployProc.on('close', async (deployCode) => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-
-      if (deployCode !== 0) {
-        const workspaceId = (req as any).workspaceId || 'stillwater-suite';
-        const suiteRef = firestore.collection('suites').doc(workspaceId);
-        
-        // Persist failure status and timestamp
-        suiteRef.set({
-          [`apps.${appId}.environments.production.status`]: 'failed',
-          [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
-          updatedAt: Timestamp.now()
-        }, { merge: true }).catch(err => console.error(`[Deploy] Deploy Failure Persistence Failed:`, err.message));
-
-        // Save to deployment history
-        firestore.collection('deployments').add({
-          suiteId: workspaceId,
-          batchId: `${appId}-${startTime}`,
-          appId,
-          displayName: displayName || appId,
-          environment: 'production',
-          status: 'failed',
-          startedAt: Timestamp.fromMillis(startTime),
-          completedAt: Timestamp.now(),
-          duration: elapsed,
-          deployMethod: deployMethod || 'firebase',
-          hostingTarget: hostingTarget || null,
-          project: firebaseProject,
-          errorLogs: deployError || deployOutput || 'Deploy failed'
-        }).catch(err => console.error(`[Deploy] Deploy History Persistence Failed:`, err.message));
-
-        sendEvent({
-          stage: 'failed',
-          message: `Deploy failed with exit code ${deployCode}`,
-          error: deployError || deployOutput,
-          duration: elapsed,
-        });
-        console.log(`[Deploy] ${appId} DEPLOY FAILED (${elapsed}s)`);
-        res.end();
-      } else {
-        // Extract hosting URL from combined output (stdout/stderr)
-        const combinedOutput = deployOutput + deployError;
-        const urlMatch = combinedOutput.match(/https?:\/\/\S+\.web\.app/);
-        const deployUrl = urlMatch?.[0] || null;
-
-        sendEvent({
-          stage: 'verifying',
-          message: `Successfully deployed to CLI. Starting readiness probe...`,
-          url: deployUrl,
-          duration: elapsed,
-        });
-
-        // Step 3: Verification (Readiness Probe)
-        let isVerified = false;
-        if (deployUrl) {
-          isVerified = await verifyDeployment(
-            deployUrl, 
-            (msg) => sendEvent({ stage: 'verifying', message: msg })
-          );
-        } else {
-          console.warn(`[Deploy] No URL found in output, skipping verification.`);
-          isVerified = true; // Assume live if we can't verify
-        }
-
-        // Final State Update - Write to Firestore directly from Backend
-        try {
-          const workspaceId = (req as any).workspaceId || 'stillwater-suite';
-          const suiteRef = firestore.collection('suites').doc(workspaceId);
-          
-          const status = isVerified ? 'live' : 'failed';
-          const updateData: any = {
-            [`apps.${appId}.environments.production.status`]: status,
-            [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
-            updatedAt: Timestamp.now()
-          };
-
-          // Use .set with merge: true to avoid "document not found" errors if workspaceId is mismatched
-          await suiteRef.set(updateData, { merge: true });
-          console.log(`[Deploy] ${appId} Persistence Success: ${status} in ${workspaceId}`);
-
-          // Also save to deployments history collection
-          try {
-            await firestore.collection('deployments').add({
-              suiteId: workspaceId,
-              batchId: `${appId}-${startTime}`,
-              appId,
-              displayName: displayName || appId,
-              environment: 'production',
-              status,
-              startedAt: Timestamp.fromMillis(startTime),
-              completedAt: Timestamp.now(),
-              duration: Math.floor((Date.now() - startTime) / 1000),
-              deployMethod: deployMethod || 'firebase',
-              hostingTarget: hostingTarget || null,
-              project: firebaseProject,
-              deployUrl: deployUrl,
-              errorLogs: isVerified ? null : 'Readiness probe timeout'
-            });
-          } catch (historyErr: any) {
-            console.error(`[Deploy] History Persistence Failed:`, historyErr.message);
-          }
-
-          sendEvent({
-            stage: isVerified ? 'live' : 'failed',
-            message: isVerified 
-              ? `Deployment fully verified and live!` 
-              : `Readiness probe timed out. App may still be propagating.`,
-            url: deployUrl,
-            duration: Math.floor((Date.now() - startTime) / 1000),
-          });
-        } catch (dbErr: any) {
-          console.error(`[Deploy] Firestore Update Failed:`, dbErr.message);
-          sendEvent({
-            stage: 'failed',
-            message: `Deployment succeeded but failed to update status record: ${dbErr.message}`,
-          });
-        }
-
-        console.log(`[Deploy] ${appId} PROCESS COMPLETE (${Math.floor((Date.now() - startTime) / 1000)}s)`);
-        res.end();
-      }
-    });
-
-    deployProc.on('error', (err) => {
-      sendEvent({
-        stage: 'failed',
-        message: `Deploy process error: ${err.message}`,
-        duration: Math.floor((Date.now() - startTime) / 1000),
-      });
-      res.end();
-    });
-  });
-
-  buildProc.on('error', (err) => {
-    sendEvent({
-      stage: 'failed',
-      message: `Build process error: ${err.message}`,
-      duration: Math.floor((Date.now() - startTime) / 1000),
-    });
-    res.end();
-  });
-
-  // Handle client disconnect — only abort if response stream is cut
+  // Handle client disconnect — DO NOT kill the process, just stop streaming to this response
   res.on('close', () => {
-    if (!res.writableEnded) {
-      buildProc.kill();
-      console.log(`[Deploy] ${appId} — client aborted`);
-    }
+    deploymentManager.removeListener('update', onUpdate);
   });
 });
+
+// SSE endpoint to re-attach to an existing job
+app.get('/api/deploy/:jobId/stream', (req, res) => {
+  const { jobId } = req.params;
+  const job = deploymentManager.getActiveJobs().find(j => j.id === jobId);
+
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found or already expired' });
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+
+  const sendEvent = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // First, send the existing logs to catch the UI up
+  job.logs.forEach(log => {
+    sendEvent({ stage: job.status, output: log });
+  });
+
+  const onUpdate = (updatedJob: any) => {
+    if (updatedJob.id !== jobId) return;
+    sendEvent({
+      stage: updatedJob.status,
+      output: updatedJob.logs[updatedJob.logs.length - 1],
+      duration: updatedJob.duration,
+      url: updatedJob.url,
+      error: updatedJob.error
+    });
+    if (updatedJob.status === 'live' || updatedJob.status === 'failed') {
+      deploymentManager.removeListener('update', onUpdate);
+      res.end();
+    }
+  };
+
+  deploymentManager.on('update', onUpdate);
+  res.on('close', () => deploymentManager.removeListener('update', onUpdate));
+});
+
 
 // ============================================================
 // GET /api/backups/run

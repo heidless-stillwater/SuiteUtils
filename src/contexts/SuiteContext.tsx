@@ -14,6 +14,7 @@ interface SuiteContextType {
   switchSuite: (suiteId: string) => void;
   createSuite: (name: string) => Promise<string>;
   updateAppStatus: (suiteId: string, appId: string, env: string, status: string) => Promise<void>;
+  activeJobCount: number;
 }
 
 const SuiteContext = createContext<SuiteContextType | undefined>(undefined);
@@ -28,6 +29,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [activeJobCount, setActiveJobCount] = useState(0);
 
   const currentSuite = suites.find((s) => s.id === currentSuiteId) || suites[0] || null;
 
@@ -100,6 +102,26 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceRole(null);
     }
   }, [currentSuite, user, setWorkspaceRole]);
+
+  // Poll for active deployments to show in sidebar
+  useEffect(() => {
+    const fetchActiveJobs = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/deploy/active`);
+        if (res.ok) {
+          const jobs = await res.json() as any[];
+          const running = jobs.filter(j => j.status === 'building' || j.status === 'deploying' || j.status === 'verifying');
+          setActiveJobCount(running.length);
+        }
+      } catch (err) {
+        // Silently fail polling
+      }
+    };
+
+    fetchActiveJobs();
+    const interval = setInterval(fetchActiveJobs, 5000); // Poll every 5s
+    return () => clearInterval(interval);
+  }, []);
 
   const seedDefaultSuite = async (uid: string) => {
     const suiteRef = doc(collection(db, 'suites'));
@@ -188,6 +210,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         switchSuite,
         createSuite,
         updateAppStatus,
+        activeJobCount,
       }}
     >
       {children}

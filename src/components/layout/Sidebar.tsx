@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSuite } from '../../contexts/SuiteContext';
 import { SuiteSwitcher } from './SuiteSwitcher';
 
 const NAV_ITEMS = [
@@ -35,6 +36,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { profile, signOut } = useAuth();
+  const { activeJobCount } = useSuite();
   const location = useLocation();
 
   return (
@@ -76,16 +78,30 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               }`}
               title={collapsed ? item.label : undefined}
             >
+              {!collapsed && (
+                <span className="flex-1 truncate">{item.label}</span>
+              )}
+              
               <item.icon
                 className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${
                   isActive ? 'text-primary' : 'text-white/30 group-hover:text-white/60'
-                }`}
+                } ${collapsed ? '' : 'order-last'}`}
               />
-              {!collapsed && (
-                <span className="truncate">{item.label}</span>
+
+              {/* Active Deployment Indicator (Small Pulse) */}
+              {item.path === '/deploy' && activeJobCount > 0 && (
+                <div className={`flex items-center gap-1.5 ${collapsed ? 'absolute -top-1 -right-1' : 'ml-2'}`}>
+                  {!collapsed && (
+                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                      {activeJobCount}
+                    </span>
+                  )}
+                  <div className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                </div>
               )}
-              {isActive && !collapsed && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(13,148,136,0.6)]" />
+
+              {isActive && !collapsed && item.path !== '/deploy' && (
+                <div className="ml-2 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(13,148,136,0.6)]" />
               )}
             </NavLink>
           );

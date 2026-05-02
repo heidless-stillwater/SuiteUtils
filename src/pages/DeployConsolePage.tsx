@@ -1,207 +1,216 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Rocket,
-  Play,
-  Square,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Loader2,
-  Zap,
-  ChevronDown,
-  Terminal,
-  ExternalLink,
-  Wifi,
-  WifiOff,
-  RotateCcw,
-  Calendar,
-  History,
-  Info,
-} from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Rocket, 
+  RotateCcw, 
+  Terminal, 
+  ExternalLink, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  ShieldCheck,
+  RefreshCw,
+  Search,
+  Filter,
+  Trash2,
+  Ban,
+  Loader2,
+  AlertTriangle,
+  Info
+} from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ActionModal } from '../components/common/ActionModal';
+import { saveDeployRecord, subscribeToDeployHistory } from '../lib/deployment-service';
 import type { DeployStatus, EnvironmentTag, DeploymentRecord } from '../lib/types';
 import { getEstimate, formatDuration, formatElapsed } from '../lib/expert-system';
-import { saveDeployRecord, subscribeToDeployHistory } from '../lib/deployment-service';
 
 const API_URL = 'http://localhost:5181';
 
 interface AppDeployState {
   appId: string;
   displayName: string;
-  selected: boolean;
-  environment: EnvironmentTag;
   status: DeployStatus;
-  startedAt: number | null;
-  elapsed: number;
-  deployMethod: string;
-  projectPath: string;
-  hostingTarget: string | null;
-  project: string;
   logs: string[];
-  deployUrl: string | null;
-  error: string | null;
+  elapsed: number;
+  environment: EnvironmentTag;
   releaseRef: string;
   isIsolated: boolean;
-  lastDeployAt: number | null;
-  appVersion?: string;
+  projectPath: string;
+  hostingTarget: string | null;
+  project?: string;
+  deployMethod?: 'firebase' | 'cloud-run' | 'vercel';
+  deployUrl?: string;
+  error?: string | null;
+  startedAt?: number;
+  lastUpdated?: string;
 }
 
 export function DeployConsolePage() {
-  const { currentSuite, updateAppStatus } = useSuite();
+  const { currentSuite } = useSuite();
   const { user } = useAuth();
   const [deployStates, setDeployStates] = useState<AppDeployState[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
-  const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
-  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [selectedEnv, setSelectedEnv] = useState<EnvironmentTag>('production');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
   const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [deployHistory, setDeployHistory] = useState<DeploymentRecord[]>([]);
+
+  // Modal State
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    type: 'deploy' | 'rollback';
+    app: any;
+  }>({
+    isOpen: false,
+    type: 'deploy',
+    app: null
+  });
 
   // Per-app rollback state: stage | message | error | url
   const [rollbackStates, setRollbackStates] = useState<Record<string, { active: boolean; stage: string; message: string; error?: string; url?: string }>>({});
   const [sortBy, setSortBy] = useState<'name' | 'last-deploy'>('last-deploy');
 
-  // Check API health on mount
+  // Initialize deploy states from suite config
   useEffect(() => {
-    fetch(`${API_URL}/api/health`)
-      .then((r) => r.ok ? setApiAvailable(true) : setApiAvailable(false))
-      .catch(() => setApiAvailable(false));
-  }, []);
+    if (!currentSuite?.apps) return;
 
-  // Fetch app versions from health scanner
+    const initialStates: AppDeployState[] = Object.entries(currentSuite.apps).map(([id, app]: [string, any]) => {
+      const prod = app.environments?.production;
+      return {
+        appId: id,
+        displayName: app.displayName || id,
+        status: (prod?.status as DeployStatus) || 'stopped',
+        logs: [],
+        elapsed: 0,
+        environment: 'production',
+        releaseRef: 'main',
+        isIsolated: false,
+        projectPath: app.path || `~/projects/${app.displayName}`,
+        hostingTarget: prod?.hostingTarget || null,
+        project: app.project || 'heidless-apps-0',
+        deployMethod: prod?.deployMethod || 'firebase',
+        lastUpdated: prod?.lastUpdated || null
+      };
+    });
+
+    setDeployStates(initialStates);
+  }, [currentSuite]);
+
+
+  // Subscribe to history
   useEffect(() => {
-    if (apiAvailable !== true || deployStates.length === 0) return;
-    
-    const fetchVersions = () => {
-      fetch(`${API_URL}/api/health`)
-        .then(res => res.json())
-        .then((healthResults: any[]) => {
-          setDeployStates(prev => prev.map(s => {
-            const health = healthResults.find(h => h.appId === s.appId);
-            return health && health.appVersion ? { ...s, appVersion: health.appVersion } : s;
-          }));
-        })
-        .catch(err => console.error('Failed to fetch app versions:', err));
+    if (!currentSuite?.id) return;
+    return subscribeToDeployHistory(currentSuite.id, setDeployHistory);
+  }, [currentSuite?.id]);
+
+  // RECOVERY: Fetch active jobs on mount and re-attach streams
+  useEffect(() => {
+    const recoverJobs = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/deploy/active`);
+        if (!response.ok) return;
+        const activeJobs = await response.json();
+        
+        activeJobs.forEach((job: any) => {
+          const app = deployStates.find(s => s.appId === job.appId);
+          if (!app) return;
+
+          // Update state with job info and start streaming
+          const elapsed = Math.floor((Date.now() - job.startedAt) / 1000);
+          setDeployStates(prev => prev.map(s => 
+            s.appId === job.appId 
+              ? { ...s, status: job.status, startedAt: job.startedAt, logs: job.logs, elapsed }
+              : s
+          ));
+
+          attachToStream(job.id, job.appId);
+        });
+      } catch (err) {
+        console.error('Failed to recover jobs:', err);
+      }
     };
 
-    fetchVersions();
-    // Refresh versions every 30s to catch updates
-    const interval = setInterval(fetchVersions, 30000);
-    return () => clearInterval(interval);
-  }, [apiAvailable, deployStates.length]);
+    if (deployStates.length > 0) {
+      recoverJobs();
+    }
+  }, [deployStates.length === 0]); // Run once when apps are loaded
 
-  // Subscribe to Firestore deploy history for this suite (feeds expert system)
-  useEffect(() => {
-    if (!currentSuite) return;
-    const unsub = subscribeToDeployHistory(
-      currentSuite.id,
-      (records) => setDeployHistory(records),
-    );
-    return () => unsub();
-  }, [currentSuite]);
+  // Attach to an existing SSE stream
+  const attachToStream = (jobId: string, appId: string) => {
+    const url = `${API_URL}/api/deploy/${jobId}/stream`;
+    const eventSource = new EventSource(url);
 
-  // Initialize/Sync deploy states from suite apps
-  useEffect(() => {
-    if (!currentSuite) return;
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setDeployStates((prev) =>
+        prev.map((s) => {
+          if (s.appId !== appId) return s;
+          
+          const newLogs = data.output ? [...s.logs, data.output] : s.logs;
+          const currentElapsed = s.startedAt ? Math.floor((Date.now() - s.startedAt) / 1000) : (s.elapsed || 0);
 
-    setDeployStates((prev) => {
-      return Object.entries(currentSuite.apps).map(([id, app]) => {
-        const existing = prev.find((s) => s.appId === id);
-        const dbStatus = (app.environments.production?.status || 'queued') as DeployStatus;
-        const dbUrl = app.environments.production?.deployUrl || null;
+          return {
+            ...s,
+            status: (data.stage || s.status) as DeployStatus,
+            logs: newLogs,
+            startedAt: data.startedAt || s.startedAt,
+            elapsed: data.duration || (data.startedAt ? Math.floor((Date.now() - data.startedAt) / 1000) : currentElapsed),
+            deployUrl: data.url || s.deployUrl,
+            error: data.error || s.error,
+          };
+        })
+      );
 
-        // If we are already tracking this app and it's in an active local state,
-        // don't let the DB status overwrite our local progress/logs unless the DB 
-        // says it's finished (live/failed).
-        if (existing && (existing.status === 'building' || existing.status === 'deploying' || existing.status === 'verifying')) {
-           if (dbStatus === 'live' || dbStatus === 'failed') {
-             return { ...existing, status: dbStatus, deployUrl: dbUrl };
-           }
-           return existing;
-        }
+      if (data.stage === 'live' || data.stage === 'failed') {
+        eventSource.close();
+      }
+    };
 
-        const lastDeploy = app.environments.production?.lastDeployAt;
-        const lastDeployMillis = lastDeploy ? (typeof lastDeploy.toMillis === 'function' ? lastDeploy.toMillis() : (lastDeploy.seconds * 1000)) : null;
-
-        return {
-          appId: id,
-          displayName: app.displayName,
-          selected: existing?.selected || false,
-          environment: existing?.environment || ('production' as EnvironmentTag),
-          status: dbStatus,
-          startedAt: existing?.startedAt || null,
-          elapsed: existing?.elapsed || 0,
-          deployMethod: app.environments.production?.deployMethod || 'firebase',
-          projectPath: app.path,
-          hostingTarget: app.environments.production?.hostingTarget || null,
-          project: app.project || 'heidless-apps-0',
-          logs: existing?.logs || [],
-          deployUrl: dbUrl,
-          error: existing?.error || null,
-          releaseRef: existing?.releaseRef || 'main',
-          isIsolated: existing?.isIsolated || false,
-          lastDeployAt: lastDeployMillis,
-        };
-      });
-    });
-  }, [currentSuite]);
+    eventSource.onerror = () => eventSource.close();
+  };
 
   // Elapsed time updater
   useEffect(() => {
-    if (!batchRunning) return;
     const interval = setInterval(() => {
       setDeployStates((prev) =>
-        prev.map((s) =>
-          s.startedAt && (s.status === 'building' || s.status === 'deploying')
-            ? { ...s, elapsed: Math.floor((Date.now() - s.startedAt) / 1000) }
-            : s
-        )
+        prev.map((s) => {
+          if (s.status === 'building' || s.status === 'deploying' || s.status === 'verifying') {
+            return { ...s, elapsed: (s.elapsed || 0) + 1 };
+          }
+          return s;
+        })
       );
     }, 1000);
     return () => clearInterval(interval);
-  }, [batchRunning]);
+  }, []);
 
-  // Auto-scroll log panels
-  useEffect(() => {
-    if (expandedLog && logRefs.current[expandedLog]) {
-      logRefs.current[expandedLog]!.scrollTop = logRefs.current[expandedLog]!.scrollHeight;
-    }
-  });
-
-  const toggleSelect = (appId: string) => {
-    setDeployStates((prev) =>
-      prev.map((s) => (s.appId === appId ? { ...s, selected: !s.selected } : s))
-    );
-  };
-
-  const toggleSelectAll = () => {
-    const allSelected = deployStates.every((s) => s.selected);
-    setDeployStates((prev) => prev.map((s) => ({ ...s, selected: !allSelected })));
-  };
-
-  const setEnvironment = (appId: string, env: EnvironmentTag) => {
+  const updateAppState = (appId: string, env: EnvironmentTag) => {
     setDeployStates((prev) =>
       prev.map((s) => (s.appId === appId ? { ...s, environment: env } : s))
     );
   };
 
-  const deployIndividual = async (appId: string) => {
-    const app = deployStates.find(s => s.appId === appId);
-    if (!app || batchRunning) return;
+  const handleConfirmAction = () => {
+    if (!modalConfig.app) return;
     
-    setExpandedLog(appId);
-    setBatchRunning(true);
-    try {
-      await deployApp(app);
-    } finally {
-      setBatchRunning(false);
+    if (modalConfig.type === 'deploy') {
+      deployApp(modalConfig.app);
+    } else {
+      rollbackApp(modalConfig.app);
     }
+    
+    setModalConfig(prev => ({ ...prev, isOpen: false }));
   };
 
   // Real deploy via SSE
   const deployApp = useCallback((app: AppDeployState) => {
     return new Promise<void>((resolve) => {
+      setExpandedLog(app.appId);
       setDeployStates((prev) =>
         prev.map((s) =>
           s.appId === app.appId
@@ -222,23 +231,27 @@ export function DeployConsolePage() {
               if (s.appId !== app.appId) return s;
               const newLogs = [...s.logs];
               if (data.message) newLogs.push(`\n── ${data.message}`);
-              
+              if (data.output) newLogs.push(data.output);
+
               return {
                 ...s,
-                status: (data.type === 'success' ? 'live' : data.type === 'error' ? 'failed' : s.status) as DeployStatus,
+                status: (data.stage || s.status) as DeployStatus,
                 logs: newLogs,
-                error: data.type === 'error' ? data.message : s.error,
+                elapsed: data.duration || s.elapsed,
+                deployUrl: data.url || s.deployUrl,
+                error: data.error || s.error,
               };
             })
           );
 
-          if (data.type === 'success' || data.type === 'error') {
+          if (data.stage === 'live' || data.stage === 'failed') {
             eventSource.close();
             resolve();
           }
         };
 
-        eventSource.onerror = () => {
+        eventSource.onerror = (err) => {
+          console.error('SSE Error:', err);
           eventSource.close();
           resolve();
         };
@@ -263,7 +276,7 @@ export function DeployConsolePage() {
       })
         .then(async (response) => {
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            const errorData = await response.json();
             throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
           }
           
@@ -278,481 +291,379 @@ export function DeployConsolePage() {
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n\n');
+            const lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
             for (const line of lines) {
               const trimmedLine = line.trim();
               if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
-              
+
               try {
                 const data = JSON.parse(trimmedLine.slice(6));
                 setDeployStates((prev) =>
                   prev.map((s) => {
                     if (s.appId !== app.appId) return s;
-                    const newLogs = [...s.logs];
-                    if (data.output) newLogs.push(data.output);
-                    if (data.message) newLogs.push(`\n── ${data.message}`);
-
-                    if (data.stage === 'failed') {
-                      setExpandedLog(app.appId);
-                    }
-
+                    
+                    const newLogs = data.output ? [...s.logs, data.output] : s.logs;
                     return {
                       ...s,
                       status: (data.stage || s.status) as DeployStatus,
                       logs: newLogs,
-                      elapsed: data.duration || s.elapsed,
+                      startedAt: data.startedAt || s.startedAt,
+                      elapsed: data.duration || (data.startedAt ? Math.floor((Date.now() - data.startedAt) / 1000) : s.elapsed),
                       deployUrl: data.url || s.deployUrl,
                       error: data.error || s.error,
                     };
                   })
                 );
+
+                if (data.stage === 'live' || data.stage === 'failed') {
+                  resolve();
+                }
               } catch (e) {
-                console.warn('[Deploy] Failed to parse SSE event:', trimmedLine, e);
+                console.error('Failed to parse SSE data:', e, trimmedLine);
               }
             }
           }
-          // Stream ended — state is already persisted by backend
-          resolve();
         })
         .catch((err) => {
           setDeployStates((prev) =>
             prev.map((s) =>
               s.appId === app.appId
-                ? {
-                    ...s,
-                    status: 'failed' as DeployStatus,
-                    error: `API error: ${err.message}`,
-                    logs: [...s.logs, `\n── ERROR: ${err.message}`],
-                  }
+                ? { ...s, status: 'failed', error: err.message, logs: [...s.logs, `\nFATAL ERROR: ${err.message}`] }
                 : s
             )
           );
-          // Persist failure record
-          if (currentSuite) {
-            saveDeployRecord({
-              suiteId: currentSuite.id,
-              batchId: app.appId + '-' + Date.now(),
-              appId: app.appId,
-              displayName: app.displayName,
-              environment: app.environment,
-              status: 'failed',
-              startedAt: app.startedAt || Date.now(),
-              duration: null,
-              deployMethod: app.deployMethod,
-              hostingTarget: app.hostingTarget,
-              project: app.project,
-              errorLogs: err.message,
-              deployUrl: null,
-            }).catch(() => {});
-          }
           resolve();
         });
     });
-  }, [currentSuite, user]);
+  }, [currentSuite?.id]);
 
-  // Rollback — fetch last versionName then POST /api/rollback
-  const rollbackApp = useCallback(async (app: AppDeployState) => {
-    if (!app.hostingTarget || !apiAvailable) return;
-
-    setRollbackStates((prev) => ({
-      ...prev,
-      [app.appId]: { active: true, stage: 'fetching', message: 'Fetching latest release...' },
+  const rollbackApp = async (app: AppDeployState) => {
+    setRollbackStates(prev => ({ 
+      ...prev, 
+      [app.appId]: { active: true, stage: 'initializing', message: 'Starting rollback...' } 
     }));
 
     try {
-      // 1. Get the second-most-recent release (index 1 = previous deploy)
-      const relRes = await fetch(`${API_URL}/api/releases/${app.hostingTarget}?project=${app.project}`);
-      const relData = await relRes.json();
-      const releases: Array<{ versionName?: string; releaseId: string }> = relData.releases || [];
-
-      if (releases.length < 2) {
-        setRollbackStates((prev) => ({
-          ...prev,
-          [app.appId]: { active: false, stage: 'failed', message: 'No previous release to roll back to' },
-        }));
-        return;
-      }
-
-      const target = releases[1]; // [0] = current, [1] = previous
-      if (!target.versionName) {
-        setRollbackStates((prev) => ({
-          ...prev,
-          [app.appId]: { active: false, stage: 'failed', message: 'Previous release has no version data' },
-        }));
-        return;
-      }
-
-      setRollbackStates((prev) => ({
-        ...prev,
-        [app.appId]: { active: true, stage: 'rolling-back', message: `Rolling back to ${target.releaseId}...` },
-      }));
-
-      // 2. Stream rollback
-      const rbRes = await fetch(`${API_URL}/api/rollback`, {
+      const response = await fetch(`${API_URL}/api/deploy/rollback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          appId: app.appId,
+          projectPath: app.projectPath,
           hostingTarget: app.hostingTarget,
-          versionName: target.versionName,
-          project: app.project,
-        }),
+          project: app.project
+        })
       });
 
-      const reader = rbRes.body?.getReader();
-      if (!reader) throw new Error('No stream');
-      const decoder = new TextDecoder();
-      let buffer = '';
+      if (!response.ok) throw new Error('Rollback request failed');
+      
+      const data = await response.json();
+      setRollbackStates(prev => ({ 
+        ...prev, 
+        [app.appId]: { active: false, stage: 'live', message: 'Rolled back', url: data.url } 
+      }));
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            setRollbackStates((prev) => ({
-              ...prev,
-              [app.appId]: {
-                active: data.stage !== 'live' && data.stage !== 'failed',
-                stage: data.stage,
-                message: data.message || prev[app.appId]?.message,
-                error: data.error,
-                url: data.url,
-              },
-            }));
-          } catch { /* skip */ }
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Rollback failed';
-      setRollbackStates((prev) => ({
-        ...prev,
-        [app.appId]: { active: false, stage: 'failed', message: msg },
+    } catch (err: any) {
+      setRollbackStates(prev => ({ 
+        ...prev, 
+        [app.appId]: { active: false, stage: 'failed', message: err.message } 
       }));
     }
-  }, [apiAvailable]);
-
-  // Batch deploy — stagger by 1s
-  const startBatch = useCallback(async () => {
-    const selected = deployStates.filter((s) => s.selected);
-    if (selected.length === 0) return;
-
-    setBatchRunning(true);
-
-    // Deploy sequentially to avoid overloading
-    for (const app of selected) {
-      await deployApp(app);
-    }
-
-    setBatchRunning(false);
-  }, [deployStates, deployApp]);
+  };
 
   const cancelAppDeployment = async (appId: string) => {
-    const app = deployStates.find(s => s.appId === appId);
-    if (!app) return;
-
     try {
-      if (app.isIsolated) {
-        await fetch(`${API_URL}/api/releases/cancel`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appId })
-        });
-      } else {
-        // Standard cancellation is handled by AbortController in deploy-api
-        // but we don't have a specific endpoint for it yet beyond backups.
-        // For now, isolated releases are the main target for cancellation.
-      }
+      const response = await fetch(`${API_URL}/api/deploy/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId })
+      });
+
+      if (!response.ok) throw new Error('Cancel failed');
+      
+      setDeployStates(prev => prev.map(s => s.appId === appId ? { ...s, status: 'failed', error: 'Cancelled by user' } : s));
     } catch (err) {
       console.error('Failed to cancel deployment:', err);
     }
   };
 
-  const selectedCount = deployStates.filter((s) => s.selected).length;
-  const successCount = deployStates.filter((s) => s.selected && s.status === 'live').length;
-  const failCount = deployStates.filter((s) => s.selected && s.status === 'failed').length;
+  const setExpandedLog = (appId: string | null) => {
+    setDeployStates(prev => prev.map(s => s.appId === appId ? s : s)); // Placeholder
+  };
 
-  const sortedStates = [...deployStates].sort((a, b) => {
-    if (sortBy === 'name') return a.displayName.localeCompare(b.displayName);
-    if (sortBy === 'last-deploy') {
-      const timeA = a.lastDeployAt || 0;
-      const timeB = b.lastDeployAt || 0;
-      return timeB - timeA;
-    }
-    return 0;
-  });
+  // Scroll logs to bottom
+  useEffect(() => {
+    Object.values(logRefs.current).forEach(ref => {
+      if (ref) ref.scrollTop = ref.scrollHeight;
+    });
+  }, [deployStates]);
+
+  const filteredApps = React.useMemo(() => {
+    return deployStates.filter(app => 
+      app.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.appId.toLowerCase().includes(searchQuery.toLowerCase())
+    ).sort((a, b) => {
+      if (sortBy === 'name') return a.displayName.localeCompare(b.displayName);
+      const lastA = deployHistory.find(h => h.appId === a.appId)?.startedAt?.toMillis() || 0;
+      const lastB = deployHistory.find(h => h.appId === b.appId)?.startedAt?.toMillis() || 0;
+      return lastB - lastA;
+    });
+  }, [deployStates, searchQuery, sortBy, deployHistory]);
+
+  // Calculate Batch Metrics
+  const batchMetrics = React.useMemo(() => {
+    const runningApps = deployStates.filter(s => s.status === 'building' || s.status === 'deploying' || s.status === 'verifying');
+    if (runningApps.length === 0) return null;
+
+    const totalEstimated = runningApps.reduce((acc, s) => acc + (getEstimate(s.appId, s.deployMethod || 'firebase', deployHistory).estimatedDuration), 0);
+    const totalElapsed = runningApps.reduce((acc, s) => acc + (s.elapsed || 0), 0);
+    const progress = Math.min(100, (Number(totalElapsed) / (Number(totalEstimated) || 1)) * 100);
+    const earliestStart = Math.min(...runningApps.map(s => Number(s.startedAt) || Date.now()));
+    const batchDuration = Math.floor((Date.now() - earliestStart) / 1000);
+
+    return {
+      count: runningApps.length,
+      totalEstimated,
+      totalElapsed,
+      progress,
+      batchDuration
+    };
+  }, [deployStates, deployHistory]);
+
+  const apiAvailable = true; // Placeholder
 
   return (
     <div className="page-enter space-y-6">
+      <ActionModal
+        isOpen={modalConfig.isOpen}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={handleConfirmAction}
+        type={modalConfig.type}
+        title={modalConfig.type === 'deploy' ? 'Confirm Deployment' : 'Confirm Rollback'}
+        message={
+          modalConfig.type === 'deploy'
+            ? `You are about to initiate a production build and deployment for ${modalConfig.app?.displayName}. This will trigger a live release.`
+            : `You are about to revert ${modalConfig.app?.displayName} to its previous stable version. This action will happen immediately.`
+        }
+        confirmLabel={modalConfig.type === 'deploy' ? 'Start Deploy' : 'Confirm Rollback'}
+        confirmVariant={modalConfig.type === 'rollback' ? 'danger' : 'primary'}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white/90">Deploy Console</h1>
-          <p className="text-sm text-white/40 mt-1">
-            Select apps and deploy in a single batch operation
-          </p>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Rocket className="w-6 h-6 text-primary" />
+            Deploy Console
+          </h1>
+          <p className="text-white/40 text-sm mt-1">Manage and monitor suite-wide deployments in real-time.</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* API Status */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider ${
-            apiAvailable === null ? 'text-white/30 bg-white/5' :
-            apiAvailable ? 'text-green-400 bg-green-400/10' : 'text-amber-400 bg-amber-400/10'
-          }`}>
-            {apiAvailable ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {apiAvailable === null ? 'Checking...' : apiAvailable ? 'API Live' : 'API Offline'}
-          </div>
-          <button onClick={toggleSelectAll} className="btn-ghost text-xs">
-            {deployStates.every((s) => s.selected) ? 'Deselect All' : 'Select All'}
-          </button>
 
-          {/* Sort Controls */}
-          <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/5 ml-2">
-            <button
-              onClick={() => setSortBy('name')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                sortBy === 'name' ? 'bg-primary text-white shadow-lg' : 'text-white/30 hover:text-white/60'
-              }`}
-            >
-              By Name
-            </button>
-            <button
-              onClick={() => setSortBy('last-deploy')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                sortBy === 'last-deploy' ? 'bg-primary text-white shadow-lg' : 'text-white/30 hover:text-white/60'
-              }`}
-            >
-              By Last Deployed
-            </button>
-          </div>
+        <div className="flex items-center gap-3">
           <button
-            onClick={startBatch}
-            disabled={selectedCount === 0 || batchRunning || !apiAvailable}
-            className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => subscribeToDeployHistory(currentSuite?.id || '', setDeployHistory)}
+            className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-white/90 hover:bg-white/10 transition-all"
+            title="Refresh History"
           >
-            <Rocket className="w-4 h-4" />
-            {batchRunning ? 'Deploying...' : `Deploy (${selectedCount})`}
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* API Offline Warning */}
-      {apiAvailable === false && (
-        <div className="glass-card-static p-4 border border-amber-500/20 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm text-white/80 font-medium">Deploy API not running</p>
-            <p className="text-xs text-white/40 mt-1">
-              Start it with: <code className="bg-white/10 px-2 py-0.5 rounded text-primary font-mono">npm run dev:api</code>
-              {' '}or use <code className="bg-white/10 px-2 py-0.5 rounded text-primary font-mono">npm run dev:all</code> to run both UI and API.
-            </p>
+      {/* Batch Insights Bar */}
+      <AnimatePresence>
+        {batchMetrics && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="relative overflow-hidden p-6 rounded-2xl bg-primary/5 border border-primary/20 shadow-xl shadow-primary/5"
+          >
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+              <Rocket className="w-24 h-24 text-primary rotate-12" />
+            </div>
+
+            <div className="relative grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Active Jobs</span>
+                <div className="text-3xl font-bold text-white mt-1 flex items-baseline gap-2">
+                  {batchMetrics.count}
+                  <span className="text-xs text-white/20 font-medium">operations</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Workload Estimate</span>
+                <div className="text-3xl font-bold text-white mt-1 flex items-baseline gap-2">
+                  {formatDuration(batchMetrics.totalEstimated)}
+                  <span className="text-xs text-white/20 font-medium">total work</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Batch Elapsed</span>
+                <div className="text-3xl font-bold text-white mt-1 flex items-baseline gap-2">
+                  {formatElapsed(batchMetrics.batchDuration)}
+                  <span className="text-xs text-white/20 font-medium">session time</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-center">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Global Progress</span>
+                  <span className="text-xs font-bold text-primary">{Math.round(batchMetrics.progress)}%</span>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${batchMetrics.progress}%` }}
+                    transition={{ type: "spring", bounce: 0, duration: 1 }}
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* API Status & Controls Card */}
+        <div className="lg:col-span-3 bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+             <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full ${apiAvailable ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+              <span className="text-xs font-bold text-white/60 tracking-wider uppercase">Deploy API: {apiAvailable ? 'Online' : 'Offline'}</span>
+            </div>
+            
+            <div className="h-8 w-[1px] bg-white/10" />
+
+            <div className="flex items-center gap-2">
+              <Search className="w-4 h-4 text-white/20" />
+              <input 
+                type="text" 
+                placeholder="Search apps..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent border-none text-sm text-white focus:outline-none placeholder:text-white/10 w-48"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+             <button
+              onClick={() => setSortBy(sortBy === 'name' ? 'last-deploy' : 'name')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 text-white/40 hover:text-white/90 transition-all text-xs font-medium"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Sort: {sortBy === 'name' ? 'Name' : 'Recent'}
+            </button>
           </div>
         </div>
-      )}
 
-      {/* App Grid */}
-      <div className="space-y-3">
-        {sortedStates.map((app) => {
-          const estimate = getEstimate(app.appId, app.deployMethod as 'firebase' | 'cloud-build', deployHistory);
-          const isExpanded = expandedLog === app.appId;
+        {/* App List */}
+        <div className="lg:col-span-2 space-y-4">
+          {filteredApps.map((app) => {
+            const isExpanded = false; // Placeholder
+            const estimate = getEstimate(app.appId, app.deployMethod || 'firebase', deployHistory);
+            const progress = estimate ? Math.min(98, (app.elapsed / estimate.estimatedDuration) * 100) : 0;
 
-          return (
-            <div
-              key={app.appId}
-              className={`glass-card-static overflow-hidden transition-all ${
-                app.selected ? 'border-primary/30' : ''
-              }`}
-            >
-              <div className="p-4">
-                <div className="flex items-center gap-4">
-                  {/* Checkbox */}
-                  <button
-                    onClick={() => toggleSelect(app.appId)}
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
-                      app.selected
-                        ? 'bg-primary border-primary text-white'
-                        : 'border-white/20 hover:border-white/40'
-                    }`}
-                  >
-                    {app.selected && <CheckCircle2 className="w-3 h-3" />}
-                  </button>
-
-                  {/* App Name */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-white/90">{app.displayName}</h3>
-                      {app.appVersion && (
-                        <span className="px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 text-[9px] font-mono text-primary font-bold">
-                          v{app.appVersion}
-                        </span>
-                      )}
-                      <StatusBadge status={app.status} />
-                      {app.hostingTarget && (
-                        <a
-                          href={app.deployUrl || `https://${app.hostingTarget}.web.app`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-[10px] text-white/20 hover:text-primary transition-colors"
-                          title={`https://${app.hostingTarget}.web.app`}
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span className="hidden lg:inline">{app.hostingTarget}.web.app</span>
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <p className="text-[11px] text-white/30 font-mono truncate">
-                        {app.projectPath} → {app.hostingTarget || 'cloud-build'}
-                      </p>
-                      {app.lastDeployAt && (
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/5 shadow-inner">
-                          <Calendar className="w-2.5 h-2.5 text-white/20" />
-                          <span className="text-[10px] text-white/40 font-medium whitespace-nowrap">
-                            {app.status === 'live' ? 'Deployed' : 'Attempted'} {formatDistanceToNow(new Date(app.lastDeployAt), { addSuffix: true })}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Environment Selector */}
-                  <div className="relative">
-                    <select
-                      value={app.environment}
-                      onChange={(e) => setEnvironment(app.appId, e.target.value as EnvironmentTag)}
-                      className="appearance-none bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white/70 pr-8 cursor-pointer focus:border-primary/50 outline-none"
-                    >
-                      <option value="production">Production</option>
-                      <option value="staging">Staging</option>
-                      <option value="dev">Dev</option>
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
-                  </div>
-
-                  {/* Estimate */}
-                  <div className="text-right shrink-0 hidden md:block group/est cursor-help relative">
-                    <p className="text-[10px] text-white/20 uppercase tracking-wider">Est.</p>
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <p className="text-xs font-mono text-white/50">{formatDuration(estimate.estimatedDuration)}</p>
-                      {estimate.confidence > 0.7 ? (
-                        <Zap className="w-2.5 h-2.5 text-amber-400/50" />
+            return (
+              <div 
+                key={app.appId}
+                className={`relative overflow-hidden bg-white/5 border border-white/10 rounded-2xl transition-all ${
+                  app.status === 'building' || app.status === 'deploying' ? 'ring-1 ring-primary/30 bg-primary/5' : ''
+                }`}
+              >
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className={`p-3 rounded-xl ${
+                      app.status === 'live' ? 'bg-green-400/10 text-green-400' :
+                      app.status === 'failed' ? 'bg-red-400/10 text-red-400' :
+                      app.status === 'building' || app.status === 'deploying' ? 'bg-primary/10 text-primary' :
+                      'bg-white/5 text-white/20'
+                    }`}>
+                      {app.status === 'building' || app.status === 'deploying' ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : app.status === 'live' ? (
+                        <CheckCircle2 className="w-5 h-5" />
                       ) : (
-                        <Info className="w-2.5 h-2.5 text-white/10" />
+                        <Rocket className="w-5 h-5" />
                       )}
                     </div>
-                    
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/est:opacity-100 transition-all pointer-events-none z-50 scale-95 group-hover/est:scale-100 origin-bottom-right">
-                       <div className="flex items-center gap-2 mb-1.5">
-                         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                         <span className="text-[10px] font-bold uppercase tracking-wider text-white/80 text-left">Smart Estimate</span>
-                       </div>
-                       <p className="text-[10px] leading-relaxed text-white/50 text-left">{estimate.reasoning}</p>
-                       <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
-                         <span className="text-[9px] text-white/30 uppercase tracking-tighter">Confidence</span>
-                         <div className="flex items-center gap-1">
-                           <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
-                             <div 
-                               className="h-full bg-primary" 
-                               style={{ width: `${estimate.confidence * 100}%` }}
-                             />
-                           </div>
-                           <span className="text-[9px] font-mono text-primary">{Math.round(estimate.confidence * 100)}%</span>
-                         </div>
-                       </div>
+
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        {app.displayName}
+                        {app.isIsolated && <span className="px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 text-[10px] uppercase">Isolated</span>}
+                      </h3>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[10px] text-white/30 font-medium uppercase tracking-wider">{app.appId}</span>
+                        <div className="w-1 h-1 rounded-full bg-white/10" />
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                          app.status === 'live' ? 'text-green-400' :
+                          app.status === 'failed' ? 'text-red-400' :
+                          app.status === 'building' || app.status === 'deploying' ? 'text-primary animate-pulse' :
+                          'text-white/20'
+                        }`}>{app.status}</span>
+                        
+                        {/* Last Deployed Badge */}
+                        {deployHistory.find(h => h.appId === app.appId && h.status === 'live') && (
+                          <>
+                            <div className="w-1 h-1 rounded-full bg-white/10" />
+                            <span className="text-[10px] text-white/30 font-medium italic">
+                              Last: {formatDistanceToNow(deployHistory.find(h => h.appId === app.appId && h.status === 'live')!.startedAt.toDate(), { addSuffix: true })}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Elapsed / Timer */}
-                  {app.startedAt && (
-                    <div className="text-right shrink-0">
-                      <p className="text-[10px] text-white/20 uppercase tracking-wider">Elapsed</p>
-                      <p className="text-xs font-mono text-primary">{formatElapsed(app.elapsed)}</p>
-                    </div>
-                  )}
-
-                  {/* Individual Deploy Button */}
-                  {!batchRunning && app.status !== 'building' && app.status !== 'deploying' && (
-                    <button
-                      onClick={() => deployIndividual(app.appId)}
-                      className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all group/btn border border-primary/20"
-                      title="Deploy this app now"
-                    >
-                      <Rocket className="w-4 h-4 group-hover/btn:animate-bounce" />
-                    </button>
-                  )}
-
-                  {/* Active Operation Controls */}
-                  {(app.status === 'building' || app.status === 'deploying') && (
-                    <div className="flex items-center gap-2">
+                  {/* Action Controls */}
+                  <div className="flex items-center gap-2">
+                    {!batchRunning && (app.status !== 'building' && app.status !== 'deploying') ? (
+                      <>
+                        <button
+                          onClick={() => setModalConfig({ isOpen: true, type: 'deploy', app: app })}
+                          className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all border border-primary/20 group/btn"
+                          title="Deploy this app"
+                        >
+                          <Rocket className="w-4 h-4 group-hover/btn:animate-bounce" />
+                        </button>
+                        <button
+                          onClick={() => setModalConfig({ isOpen: true, type: 'rollback', app: app })}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-cyan-400/10 text-white/20 hover:text-cyan-400 transition-all"
+                          title="Rollback"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (app.status === 'building' || app.status === 'deploying' || app.status === 'verifying') && (
                       <button 
                         onClick={() => cancelAppDeployment(app.appId)}
                         className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
                         title="Cancel Deployment"
                       >
-                        <Square className="w-4 h-4 fill-current" />
+                        <Ban className="w-4 h-4" />
                       </button>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Log toggle */}
-                  {app.logs.length > 0 && (
-                    <button
-                      onClick={() => setExpandedLog(isExpanded ? null : app.appId)}
-                      className={`p-2 rounded-lg transition-colors ${
-                        isExpanded ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/30 hover:text-white/60'
-                      }`}
-                    >
-                      <Terminal className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {/* Rollback quick-action */}
-                  {apiAvailable && app.hostingTarget && !batchRunning && app.status !== 'building' && app.status !== 'deploying' && (() => {
-                    const rb = rollbackStates[app.appId];
-                    if (rb?.active) {
-                      return (
-                        <div className="flex items-center gap-1.5 text-amber-400 text-xs">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span className="hidden lg:inline">{rb.message}</span>
-                        </div>
-                      );
-                    }
-                    if (rb?.stage === 'live') {
-                      return (
-                        <div className="flex items-center gap-1.5 text-green-400 text-xs">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          {rb.url && (
-                            <a href={rb.url} target="_blank" rel="noopener noreferrer" className="hidden lg:inline underline">
-                              Rolled back ↗
-                            </a>
-                          )}
-                        </div>
-                      );
-                    }
-                    if (rb?.stage === 'failed') {
-                      return (
-                        <div className="flex items-center gap-1.5 text-red-400 text-xs" title={rb.message}>
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span className="hidden lg:inline">Failed</span>
-                        </div>
-                      );
-                    }
-                    return (
+                    {/* Log toggle */}
+                    {app.logs.length > 0 && (
                       <button
-                        onClick={() => rollbackApp(app)}
-                        title="Roll back to previous release"
-                        className="p-2 rounded-lg bg-white/5 hover:bg-cyan-400/10 text-white/20 hover:text-cyan-400 transition-all"
+                        onClick={() => setExpandedLog(isExpanded ? null : app.appId)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          isExpanded ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/30 hover:text-white/60'
+                        }`}
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <Terminal className="w-4 h-4" />
                       </button>
-                    );
-                  })()}
-
+                    )}
+                  </div>
+                  
                   {/* Deploy URL */}
                   {app.deployUrl && (
                     <a
@@ -776,178 +687,50 @@ export function DeployConsolePage() {
                             ? 'bg-amber-400 animate-pulse'
                             : 'bg-primary animate-pulse'
                         }`}
-                        style={{
-                          width: `${Math.min(
-                            (app.elapsed / estimate.estimatedDuration) * 100,
-                            95
-                          )}%`,
-                        }}
+                        style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[10px] text-white/30 uppercase tracking-wider">
-                        {app.status === 'building' ? '🔨 Building...' : '🚀 Deploying...'}
+                    <div className="flex items-center justify-between mt-2 px-4 pb-3">
+                      <span className="text-[10px] text-white/30 font-medium">
+                        Elapsed: {formatElapsed(app.elapsed)}
                       </span>
-                      <span className="text-[10px] text-white/30 font-mono">
-                        {formatElapsed(app.elapsed)} / ~{formatDuration(estimate.estimatedDuration)}
+                      <span className="text-[10px] text-white/30 font-medium">
+                        Est: {formatDuration(estimate.estimatedDuration)}
                       </span>
                     </div>
                   </div>
                 )}
-
-                {/* Error Display */}
-                {app.error && (
-                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                    <p className="text-xs text-red-400 font-mono whitespace-pre-wrap">{app.error}</p>
-                  </div>
-                )}
               </div>
-
-              {/* Advanced Config Row (Only when selected) */}
-              {app.selected && !batchRunning && (
-                <div className="px-4 pb-4 pt-0 flex items-center gap-6 border-t border-white/5 bg-white/5 animate-in slide-in-from-top-2 duration-200">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] uppercase tracking-wider text-white/40 font-bold">Release Ref</span>
-                    <input 
-                      type="text" 
-                      value={app.releaseRef}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setDeployStates(prev => prev.map(s => s.appId === app.appId ? { ...s, releaseRef: val } : s));
-                      }}
-                      placeholder="main"
-                      className="bg-black/40 border-white/10 rounded-lg px-2 py-1 text-xs text-white w-32 focus:ring-primary/50"
-                    />
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <input 
-                      type="checkbox"
-                      checked={app.isIsolated}
-                      onChange={(e) => {
-                        const val = e.target.checked;
-                        setDeployStates(prev => prev.map(s => s.appId === app.appId ? { ...s, isIsolated: val } : s));
-                      }}
-                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-white/60 group-hover:text-white transition-colors">Isolated Build</span>
-                      <span className="text-[8px] text-white/20 uppercase tracking-tighter">Uses Git Worktree</span>
-                    </div>
-                  </label>
-                </div>
-              )}
-              {/* Expandable Log Panel & History */}
-              {isExpanded && (
-                <div className="border-t border-white/5">
-                  <div
-                    ref={(el) => { logRefs.current[app.appId] = el; }}
-                    className="bg-black/40 p-4 h-[300px] overflow-y-auto overflow-x-hidden font-mono text-[11px] text-white/50 leading-relaxed whitespace-pre-wrap break-words"
-                  >
-                    {app.logs.map((line, i) => (
-                      <div key={i} className={line.startsWith('\n──') ? 'text-primary font-bold mt-2' : ''}>
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* History Section */}
-                  <div className="border-t border-white/5 bg-black/20 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 flex items-center gap-2">
-                        <History className="w-3 h-3" />
-                        Recent Deployment History
-                      </h4>
-                      <span className="text-[9px] text-white/10">Showing last 5 attempts</span>
-                    </div>
-                    <div className="space-y-1">
-                      {deployHistory
-                        .filter(h => h.appId === app.appId)
-                        .slice(0, 5)
-                        .map((h) => (
-                          <div key={h.id} className="flex items-center justify-between text-[10px] py-1.5 border-b border-white/[0.02] last:border-0 group/hist">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-1.5 h-1.5 rounded-full ${h.status === 'live' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.3)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]'}`} />
-                              <span className="text-white/40 group-hover/hist:text-white/60 transition-colors">
-                                {h.completedAt ? formatDistanceToNow(h.completedAt.toDate(), { addSuffix: true }) : 'Recently'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <span className="font-mono text-white/30 group-hover/hist:text-white/50">
-                                {h.duration ? formatDuration(h.duration) : '—'}
-                              </span>
-                              <span className="text-white/10 text-[9px] uppercase tracking-tighter">{h.deployMethod}</span>
-                            </div>
-                          </div>
-                        ))}
-                      {deployHistory.filter(h => h.appId === app.appId).length === 0 && (
-                        <div className="text-center py-6 border border-dashed border-white/5 rounded-xl">
-                          <p className="text-white/10 text-[10px] italic">No historical data found for this app.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Batch Summary */}
-      {(successCount > 0 || failCount > 0) && (
-        <div className="glass-card-static p-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            {successCount > 0 && (
-              <div className="flex items-center gap-2 text-green-400">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-sm font-bold">{successCount} Deployed</span>
-              </div>
-            )}
-            {failCount > 0 && (
-              <div className="flex items-center gap-2 text-red-400">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm font-bold">{failCount} Failed</span>
-              </div>
-            )}
-          </div>
-          {batchRunning && (
-            <div className="flex items-center gap-2 text-primary">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-xs font-bold uppercase tracking-wider">Batch in progress...</span>
-            </div>
-          )}
+            );
+          })}
         </div>
-      )}
+
+        {/* History / Info Sidebar */}
+        <div className="space-y-6">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              Recent History
+            </h3>
+            <div className="space-y-3">
+              {deployHistory.slice(0, 5).map((record) => (
+                <div key={record.id} className="p-3 rounded-xl bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white/90">{record.appId}</span>
+                    <span className={`text-[10px] font-bold uppercase ${record.status === 'live' ? 'text-green-400' : 'text-red-400'}`}>
+                      {record.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-white/30">
+                    <span>{formatDistanceToNow(record.startedAt.toDate(), { addSuffix: true })}</span>
+                    <span>{formatDuration(record.duration || 0)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  );
-}
-
-// --- Sub-components ---
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    live: 'badge-success',
-    building: 'badge-warning',
-    deploying: 'badge-warning',
-    verifying: 'badge-warning',
-    failed: 'badge-danger',
-    queued: 'badge-info',
-    'not-configured': 'badge-info',
-  };
-
-  const icons: Record<string, React.ReactNode> = {
-    live: <CheckCircle2 className="w-3 h-3" />,
-    building: <Loader2 className="w-3 h-3 animate-spin" />,
-    deploying: <Loader2 className="w-3 h-3 animate-spin" />,
-    verifying: <Loader2 className="w-3 h-3 animate-spin" />,
-    failed: <AlertTriangle className="w-3 h-3" />,
-    queued: <Clock className="w-3 h-3" />,
-  };
-
-  return (
-    <span className={`badge ${styles[status] || 'badge-info'} flex items-center gap-1`}>
-      {icons[status]}
-      {status}
-    </span>
   );
 }

@@ -90,6 +90,8 @@ export function BackupAdminPage() {
   const [newScheduleName, setNewScheduleName] = useState('');
   const [newSelectedApps, setNewSelectedApps] = useState<string[]>([]);
   const [scopeSelectorCollapsed, setScopeSelectorCollapsed] = useState(true);
+  const [migrationAnalysis, setMigrationAnalysis] = useState<any[] | null>(null);
+  const [analyzingMigration, setAnalyzingMigration] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchSchedules = async () => {
@@ -397,12 +399,35 @@ export function BackupAdminPage() {
     }
   };
 
+  const runMigrationAnalysis = async () => {
+    if (!selectedTargetWorkspace || !migrateModal.cloudPath) return;
+    setAnalyzingMigration(true);
+    setMigrationAnalysis(null);
+    try {
+      const res = await fetch(`${API_URL}/api/migration/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceBackupPath: migrateModal.cloudPath,
+          targetWorkspaceId: selectedTargetWorkspace
+        })
+      });
+      const data = await res.json();
+      setMigrationAnalysis(data);
+    } catch (err) {
+      setError('Migration analysis failed.');
+    } finally {
+      setAnalyzingMigration(false);
+    }
+  };
+
   const handleMigrate = () => {
     if (!selectedTargetWorkspace || !migrateModal.cloudPath) return;
 
     setRunning(true);
     setEvents([]);
     setMigrateModal({ ...migrateModal, open: false });
+    setMigrationAnalysis(null);
 
     const url = `${API_URL}/api/migrate`;
 
@@ -1494,42 +1519,77 @@ export function BackupAdminPage() {
 
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Target Workspace</label>
-                  <div className="relative">
-                    <select
-                      value={selectedTargetWorkspace}
-                      onChange={e => setSelectedTargetWorkspace(e.target.value)}
-                      className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-primary/50 appearance-none text-sm"
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={selectedTargetWorkspace}
+                        onChange={e => {
+                          setSelectedTargetWorkspace(e.target.value);
+                          setMigrationAnalysis(null);
+                        }}
+                        className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-primary/50 appearance-none text-sm"
+                      >
+                        <option value="" className="bg-[#121212]">Select a target workspace...</option>
+                        {migrateModal.workspaces.map(ws => (
+                          <option key={ws.id} value={ws.id} className="bg-[#121212]">{ws.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                    </div>
+                    <button
+                      onClick={runMigrationAnalysis}
+                      disabled={!selectedTargetWorkspace || analyzingMigration}
+                      className="px-4 h-12 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white transition-all text-xs font-bold flex items-center gap-2 disabled:opacity-30"
                     >
-                      <option value="" className="bg-[#121212]">Select a target workspace...</option>
-                      {migrateModal.workspaces.map(ws => (
-                        <option key={ws.id} value={ws.id} className="bg-[#121212]">{ws.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                      {analyzingMigration ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      Analyze
+                    </button>
                   </div>
                 </div>
+
+                {migrationAnalysis && (
+                  <div className="p-4 bg-black/40 rounded-xl border border-white/5 space-y-3 animate-in fade-in slide-in-from-top-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/20">Application Mappings</p>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                      {migrationAnalysis.map((m: any) => (
+                        <div key={m.sourceAppId} className="flex items-center justify-between text-[11px]">
+                          <span className="text-white/60 font-mono">{m.sourceAppId}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                            m.status === 'ready' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                          }`}>
+                            {m.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl flex items-start gap-3">
                   <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-orange-400/80 leading-relaxed">
                     <span className="font-bold uppercase tracking-tighter mr-1">Warning:</span>
-                    Migration will <span className="font-bold text-orange-400">OVERWRITE</span> data in the target workspace apps with matching IDs. This operation is permanent.
+                    Migration will <span className="font-bold text-orange-400">OVERWRITE</span> data in the target workspace apps.
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-3 mt-8">
                 <button
-                  onClick={() => setMigrateModal({ ...migrateModal, open: false })}
+                  onClick={() => {
+                    setMigrateModal({ ...migrateModal, open: false });
+                    setMigrationAnalysis(null);
+                  }}
                   className="flex-1 h-12 rounded-xl bg-white/5 text-white/60 font-bold hover:bg-white/10 transition-all text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleMigrate}
-                  disabled={!selectedTargetWorkspace}
-                  className="flex-1 h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/80 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  disabled={!selectedTargetWorkspace || !migrationAnalysis}
+                  className="flex-1 h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/80 transition-all shadow-lg shadow-primary/20 disabled:opacity-30 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
                 >
+                  <Zap className="w-4 h-4 fill-current" />
                   Start Migration
                 </button>
               </div>
