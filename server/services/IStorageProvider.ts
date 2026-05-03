@@ -10,8 +10,9 @@ export interface StorageMetadata {
 }
 
 export interface IStorageProvider {
-  upload(file: Buffer | string, destination: string, mimeType?: string, signal?: AbortSignal): Promise<string>;
+  upload(file: Buffer | string | NodeJS.ReadableStream, destination: string, mimeType?: string, signal?: AbortSignal): Promise<string>;
   download(path: string, signal?: AbortSignal): Promise<Buffer>;
+  downloadStream(path: string, signal?: AbortSignal): Promise<NodeJS.ReadableStream>;
   list(directory: string): Promise<StorageMetadata[]>;
   getQuota(): Promise<{ used: number; total: number }>;
   delete(path: string): Promise<void>;

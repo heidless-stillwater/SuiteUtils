@@ -57,11 +57,30 @@ const firebaseApp = getApps().length === 0
 const firestore = getFirestore(firebaseApp, 'suiteutils-db-0');
 
 // GLOBAL PERSISTENCE LISTENER
-// This ensures that even if the browser is closed, the status and timestamp are saved.
-deploymentManager.on('update', (job: any) => {
+const terminalStateLocked = new Set<string>();
+
+deploymentManager.on('update', async (job: any) => {
+  // Handle server-side verification
+  if (job.status === 'verifying' && job.url) {
+    const success = await verifyDeployment(job.url, (msg) => {
+      job.logs.push(msg);
+      deploymentManager.emit('update', job);
+    });
+
+    if (success) {
+      deploymentManager.finishJob(job.id);
+    } else {
+      deploymentManager.failJob(job.id, 'Verification failed: App did not become healthy within timeout.');
+    }
+    return;
+  }
+
   if (job.status === 'live' || job.status === 'failed') {
+    if (terminalStateLocked.has(job.id)) return;
+    terminalStateLocked.add(job.id);
+
     // We need to know which workspace this job belongs to.
-    const workspaceId = job.workspaceId || 'OlgqXSyKR8Cm3gUZErE7'; 
+    const workspaceId = job.workspaceId || 'stillwater-suite'; 
     const appId = job.appId;
     const status = job.status === 'live' ? 'live' : 'failed';
 
@@ -144,7 +163,16 @@ setInterval(async () => {
   }
 }, 60000);
 
-app.get('/api/health/ping', (req, res) => {
+app.get('/api/health/ping', async (req, res) => {
+  const { url } = req.query;
+  if (url) {
+    try {
+      const response = await fetch(url as string, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      return res.json({ status: response.ok ? 'UP' : 'DOWN', code: response.status });
+    } catch (err: any) {
+      return res.json({ status: 'DOWN', error: err.message });
+    }
+  }
   res.json({ status: 'UP' });
 });
 

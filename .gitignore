@@ -2,6 +2,7 @@
 BACKUPS/
 worktrees/
 server/config/service-account.json
+server/config/service-account-target.json
 
 # Logs
 logs

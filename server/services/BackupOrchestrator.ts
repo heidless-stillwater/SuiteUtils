@@ -22,10 +22,17 @@ export interface BackupOptions {
 }
 
 export type BackupProgressEvent = {
-  step: 'db' | 'storage' | 'zip' | 'cloud' | 'complete' | 'error';
+  step: 'db' | 'storage' | 'zip' | 'cloud' | 'complete' | 'error' | 'info';
   message: string;
   appId?: string;
   percent?: number;
+  metrics?: {
+    totalSize: number;
+    transferredSize: number;
+    elapsed: number;
+    eta: number;
+    speed: number;
+  };
 };
 
 export class BackupOrchestrator {
@@ -145,10 +152,40 @@ export class BackupOrchestrator {
       const cloudDest = `AppSuite/backups/${scope}/releases/v${version}/${releaseId}/${zipName}`;
       
       try {
-        const zipBuffer = await fs.readFile(zipPath);
+        const stats = await fs.stat(zipPath);
+        const totalSize = stats.size;
+        let uploadedSize = 0;
+        const syncStartTime = Date.now();
+        
+        const zipStream = fs.createReadStream(zipPath);
+        
+        // Simple progress tracking through data events
+        zipStream.on('data', (chunk) => {
+          uploadedSize += chunk.length;
+          const elapsed = (Date.now() - syncStartTime) / 1000; // seconds
+          const speed = uploadedSize / elapsed; // bytes/sec
+          const remaining = totalSize - uploadedSize;
+          const eta = speed > 0 ? Math.round(remaining / speed) : 0;
+          
+          const percent = 90 + Math.floor((uploadedSize / totalSize) * 9);
+          onProgress?.({ 
+            step: 'cloud', 
+            message: `☁️ Syncing to Cloud Storage (${(uploadedSize / 1024 / 1024).toFixed(1)}MB / ${(totalSize / 1024 / 1024).toFixed(1)}MB)...`, 
+            percent,
+            metrics: {
+              totalSize,
+              transferredSize: uploadedSize,
+              elapsed,
+              eta,
+              speed
+            }
+          });
+        });
+
         if (this.currentSignal?.aborted) throw new Error('Backup cancelled');
-        await this.storageProvider.upload(zipBuffer, cloudDest, 'application/zip', this.currentSignal || undefined);
-        // Upload checksum too
+        await this.storageProvider.upload(zipStream, cloudDest, 'application/zip', this.currentSignal || undefined);
+        
+        // Upload checksum
         if (this.currentSignal?.aborted) throw new Error('Backup cancelled');
         await this.storageProvider.upload(Buffer.from(checksum), `${cloudDest}.sha256`, 'text/plain', this.currentSignal || undefined);
       } catch (syncErr: any) {

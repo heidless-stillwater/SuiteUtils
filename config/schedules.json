@@ -25,5 +25,15 @@
     "id": "bei3i",
     "status": "paused",
     "lastRun": "2026-04-30T19:50:05.399Z"
+  },
+  {
+    "cronExpression": "*/1 * * * *",
+    "scope": "backup_plantune",
+    "appIds": [
+      "plantune"
+    ],
+    "includeStorage": true,
+    "id": "a5u1ul",
+    "status": "paused"
   }
 ]

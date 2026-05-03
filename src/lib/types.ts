@@ -47,6 +47,12 @@ export interface AppConfig {
   database: string;
   project: string;
   environments: Record<EnvironmentTag, EnvironmentConfig>;
+  health?: {
+    status: 'healthy' | 'unhealthy' | 'degraded' | 'Unknown';
+    lastChecked: string;
+    responseTime: number;
+    appVersion: string;
+  };
 }
 
 export interface Suite {

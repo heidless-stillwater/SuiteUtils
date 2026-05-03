@@ -14,12 +14,23 @@ export interface RollbackOptions {
   appIds: string[];
   includeStorage?: boolean;
   workspaceId?: string;
-  onProgress?: (data: { message: string; type: 'info' | 'error' | 'success'; percent?: number }) => void;
+  onProgress?: (event: { 
+    message: string; 
+    type: 'info' | 'error' | 'success'; 
+    percent?: number;
+    metrics?: {
+      totalSize: number;
+      transferredSize: number;
+      elapsed: number;
+      eta: number;
+      speed: number;
+    };
+  }) => void;
 }
 
 export class RollbackManager {
   private firebaseApp: App;
-  private storageProvider: IStorageProvider;
+  public storageProvider: IStorageProvider;
   private projectId: string;
   private localRestoreRoot: string;
 
@@ -28,12 +39,13 @@ export class RollbackManager {
     this.projectId = projectId;
     this.localRestoreRoot = path.join(process.cwd(), 'BACKUPS/temp_restore');
     
-    this.firebaseApp = getApps().length === 0 
-      ? initializeApp({ 
-          credential: applicationDefault(), 
-          projectId: this.projectId 
-        })
-      : getApps()[0];
+    const appName = `restore-${this.projectId}`;
+    const existingApp = getApps().find(a => a.name === appName);
+
+    this.firebaseApp = existingApp || initializeApp({ 
+      credential: applicationDefault(), 
+      projectId: this.projectId 
+    }, appName);
   }
 
   private async calculateChecksum(filePath: string): Promise<string> {
@@ -54,11 +66,53 @@ export class RollbackManager {
     try {
       await fs.ensureDir(restoreDir);
 
-      // 1. Download and Verify Backup
-      onProgress?.({ message: `📥 Fetching backup from GCS...`, type: 'info', percent: 5 });
-      const zipBuffer = await this.storageProvider.download(cloudPath);
+      // 1. Download from cloud
+      onProgress?.({ message: '☁️ Downloading backup from cloud (Streaming)...', type: 'info', percent: 5 });
+    
       const zipPath = path.join(restoreDir, 'backup.zip');
-      await fs.writeFile(zipPath, zipBuffer);
+      const writeStream = fs.createWriteStream(zipPath);
+      const readStream = await this.storageProvider.downloadStream(cloudPath);
+      
+      const syncStartTime = Date.now();
+      let downloadedSize = 0;
+      
+      // Get total size for metrics if possible (we assume it was passed in metadata or we'd have to fetch it)
+      // For now, we'll try to get it from the readStream if it's a GCS stream or just fetch it once
+      const file = (this.storageProvider as any).bucket?.file(cloudPath.startsWith('/') ? cloudPath.slice(1) : cloudPath);
+      let totalSize = 0;
+      if (file) {
+        const [metadata] = await file.getMetadata();
+        totalSize = parseInt(metadata.size);
+      }
+
+      await new Promise((resolve, reject) => {
+        readStream.on('data', (chunk) => {
+          downloadedSize += chunk.length;
+          if (totalSize > 0) {
+            const elapsed = (Date.now() - syncStartTime) / 1000;
+            const speed = downloadedSize / elapsed;
+            const remaining = totalSize - downloadedSize;
+            const eta = speed > 0 ? Math.round(remaining / speed) : 0;
+            
+            onProgress?.({
+              message: `☁️ Downloading backup (${(downloadedSize / 1024 / 1024).toFixed(1)}MB / ${(totalSize / 1024 / 1024).toFixed(1)}MB)...`,
+              type: 'info',
+              percent: 5 + Math.floor((downloadedSize / totalSize) * 10),
+              metrics: {
+                totalSize,
+                transferredSize: downloadedSize,
+                elapsed,
+                eta,
+                speed
+              }
+            });
+          }
+        });
+
+        readStream.pipe(writeStream)
+          .on('finish', () => resolve(undefined))
+          .on('error', reject);
+      });
 
       onProgress?.({ message: `🛡️ Verifying SHA-256 integrity checksum...`, type: 'info', percent: 15 });
       try {

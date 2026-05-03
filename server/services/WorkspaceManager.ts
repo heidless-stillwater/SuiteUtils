@@ -16,6 +16,7 @@ export interface Workspace {
   ownerEmail?: string;
   apps: AppConfig[];
   createdAt: string;
+  gcpProjectId?: string;
 }
 
 export class WorkspaceManager {

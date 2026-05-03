@@ -20,6 +20,14 @@ class DeploymentManager extends EventEmitter {
     private processes = new Map<string, ChildProcess>();
 
     startDeploy(jobId: string, appId: string, projectPath: string, hostingTarget: string | null, firebaseProject: string, workspaceId: string) {
+        // Check for existing active job for this appId to prevent race conditions
+        const existingJob = Array.from(this.activeJobs.values()).find(
+            j => j.appId === appId && (j.status === 'building' || j.status === 'deploying' || j.status === 'verifying')
+        );
+        if (existingJob) {
+            throw new Error(`Deployment already in progress for ${appId} (Job: ${existingJob.id})`);
+        }
+
         const job: DeploymentJob = {
             id: jobId,
             appId,
@@ -98,7 +106,14 @@ class DeploymentManager extends EventEmitter {
             if (code !== 0) {
                 this.failJob(jobId, `Deploy failed with exit code ${code}`);
             } else {
-                this.finishJob(jobId);
+                // Transition to verifying stage
+                const job = this.activeJobs.get(jobId);
+                if (job) {
+                    job.status = 'verifying';
+                    job.logs.push(`\n── Deploy complete. Entering verification phase...`);
+                    this.emit('update', job);
+                    this.processes.delete(jobId);
+                }
             }
         });
     }
@@ -106,6 +121,7 @@ class DeploymentManager extends EventEmitter {
     private appendLog(jobId: string, text: string, isError = false) {
         const job = this.activeJobs.get(jobId);
         if (job) {
+            if (job.status === 'live' || job.status === 'failed') return;
             job.logs.push(text);
             
             // Extract hosting URL if found in logs
@@ -119,7 +135,7 @@ class DeploymentManager extends EventEmitter {
         }
     }
 
-    private failJob(jobId: string, error: string) {
+    public failJob(jobId: string, error: string) {
         const job = this.activeJobs.get(jobId);
         if (job) {
             if (job.status === 'live' || job.status === 'failed') return;
@@ -135,7 +151,7 @@ class DeploymentManager extends EventEmitter {
         }
     }
 
-    private finishJob(jobId: string) {
+    public finishJob(jobId: string) {
         const job = this.activeJobs.get(jobId);
         if (job) {
             if (job.status === 'live' || job.status === 'failed') return;

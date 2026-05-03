@@ -53,7 +53,7 @@
         "name": "SuiteUtils",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suiteutils-v0"
       }
     ]
   },
@@ -111,7 +111,7 @@
         "name": "SuiteUtils",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suiteutils-v0"
       }
     ]
   },
@@ -168,7 +168,7 @@
         "name": "SuiteUtils",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suiteutils-v0"
       }
     ]
   },
@@ -225,7 +225,7 @@
         "name": "SuiteUtils",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suiteutils-v0"
       }
     ]
   },
@@ -282,7 +282,7 @@
         "name": "SuiteUtils",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suiteutils-v0"
       }
     ]
   },
@@ -339,7 +339,65 @@
         "name": "SuiteUtils",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suiteutils-v0"
+      }
+    ]
+  },
+  {
+    "id": "new-gcp-server",
+    "name": "Target: New GCP Server",
+    "description": "Migration Target for Production Cluster",
+    "gcpProjectId": "heidless-apps-2",
+    "createdAt": "2026-05-02T17:48:00.000Z",
+    "apps": [
+      {
+        "id": "ag-video-system",
+        "name": "Video System",
+        "dbId": "autovideo-db-0",
+        "projectPath": "~/projects/ag-video-system",
+        "hostingTarget": "videosystem-v0"
+      },
+      {
+        "id": "prompttool",
+        "name": "PromptTool",
+        "dbId": "prompttool-db-0",
+        "projectPath": "~/projects/PromptTool",
+        "hostingTarget": "prompttool-v0"
+      },
+      {
+        "id": "promptresources",
+        "name": "PromptResources",
+        "dbId": "promptresources-db-0",
+        "projectPath": "~/projects/PromptResources",
+        "hostingTarget": "promptresources-v0"
+      },
+      {
+        "id": "promptmasterspa",
+        "name": "PromptMaster v1",
+        "dbId": "promptmaster-spa-db-0",
+        "projectPath": "~/projects/PromptMasterSPA",
+        "hostingTarget": "promptmaster-v0"
+      },
+      {
+        "id": "promptaccreditation",
+        "name": "PromptAccreditation",
+        "dbId": "promptaccreditation-db-0",
+        "projectPath": "~/projects/PromptAccreditation",
+        "hostingTarget": "promptaccreditation-v0"
+      },
+      {
+        "id": "plantune",
+        "name": "PlanTune",
+        "dbId": "plantune-db-0",
+        "projectPath": "~/projects/PlanTune",
+        "hostingTarget": "plantune-v0"
+      },
+      {
+        "id": "suiteutils",
+        "name": "SuiteUtils",
+        "dbId": "suiteutils-db-0",
+        "projectPath": "~/projects/SuiteUtils",
+        "hostingTarget": "suiteutils-v0"
       }
     ]
   }

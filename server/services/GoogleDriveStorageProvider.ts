@@ -101,6 +101,15 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
     return Buffer.from(res.data as ArrayBuffer);
   }
 
+  async downloadStream(path: string): Promise<NodeJS.ReadableStream> {
+    const id = await this.resolvePathToId(path);
+    const res = await this.drive.files.get(
+      { fileId: id, alt: 'media', supportsAllDrives: true },
+      { responseType: 'stream' }
+    );
+    return res.data as NodeJS.ReadableStream;
+  }
+
   async list(directory: string): Promise<StorageMetadata[]> {
     const parentId = await this.resolvePathToId(directory);
     const res = await this.drive.files.list({

@@ -49,6 +49,13 @@ interface BackupEvent {
   message: string;
   appId?: string;
   percent?: number;
+  metrics?: {
+    totalSize: number;
+    transferredSize: number;
+    elapsed: number;
+    eta: number;
+    speed: number;
+  };
 }
 
 export function BackupAdminPage() {
@@ -878,11 +885,44 @@ export function BackupAdminPage() {
                         <p className="text-[10px] text-white/30 uppercase tracking-wider">Current Task</p>
                         <p className="text-xs text-primary font-medium">{events[events.length - 1].message}</p>
                         {events[events.length - 1].percent !== undefined && (
-                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mt-2">
-                            <div
-                              className="h-full bg-primary transition-all duration-500"
-                              style={{ width: `${events[events.length - 1].percent}%` }}
-                            />
+                          <div className="space-y-3 mt-4">
+                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary transition-all duration-500"
+                                style={{ width: `${events[events.length - 1].percent}%` }}
+                              />
+                            </div>
+                            
+                            {events[events.length - 1].metrics && (
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl bg-white/5 border border-white/5">
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Transfer Rate</p>
+                                  <p className="text-xs font-mono text-primary font-bold">
+                                    {(events[events.length - 1].metrics!.speed / 1024 / 1024).toFixed(2)} MB/s
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Transferred</p>
+                                  <p className="text-xs font-mono text-white/80">
+                                    {(events[events.length - 1].metrics!.transferredSize / 1024 / 1024 / 1024).toFixed(2)} / {(events[events.length - 1].metrics!.totalSize / 1024 / 1024 / 1024).toFixed(2)} GB
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Elapsed Time</p>
+                                  <p className="text-xs font-mono text-white/80">
+                                    {Math.floor(events[events.length - 1].metrics!.elapsed / 60)}m {Math.floor(events[events.length - 1].metrics!.elapsed % 60)}s
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Estimated Completion</p>
+                                  <p className="text-xs font-mono text-orange-400 font-bold">
+                                    {events[events.length - 1].metrics!.eta > 60 
+                                      ? `${Math.floor(events[events.length - 1].metrics!.eta / 60)}m ${events[events.length - 1].metrics!.eta % 60}s`
+                                      : `${events[events.length - 1].metrics!.eta}s`}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1552,13 +1592,22 @@ export function BackupAdminPage() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-white/20">Application Mappings</p>
                     <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                       {migrationAnalysis.map((m: any) => (
-                        <div key={m.sourceAppId} className="flex items-center justify-between text-[11px]">
-                          <span className="text-white/60 font-mono">{m.sourceAppId}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                            m.status === 'ready' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                          }`}>
-                            {m.status}
-                          </span>
+                        <div key={m.sourceAppId} className="p-2 rounded-lg bg-white/5 border border-white/5 space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-white/60 font-mono">{m.sourceAppId}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                              m.status === 'ready' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                            }`}>
+                              {m.status}
+                            </span>
+                          </div>
+                          {m.drift && (
+                            <div className="grid grid-cols-3 gap-2 text-[9px] font-bold uppercase tracking-tighter text-white/20">
+                              <span className={m.drift.documents > 0 ? 'text-amber-400/60' : ''}>Docs: +{m.drift.documents}</span>
+                              <span className={m.drift.users > 0 ? 'text-amber-400/60' : ''}>Users: +{m.drift.users}</span>
+                              <span className={m.drift.assets > 0 ? 'text-amber-400/60' : ''}>Assets: +{m.drift.assets}</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -16,15 +16,43 @@ export class GCSStorageProvider implements IStorageProvider {
     return this.storage.bucket(this.bucketName);
   }
 
-  async upload(file: Buffer | string, destination: string, mimeType?: string, signal?: AbortSignal): Promise<string> {
+  async upload(file: Buffer | string | NodeJS.ReadableStream, destination: string, mimeType?: string, signal?: AbortSignal): Promise<string> {
     // Remove leading slash if present
     const cleanPath = destination.startsWith('/') ? destination.slice(1) : destination;
     
     const gcsFile = this.bucket.file(cleanPath);
-    await gcsFile.save(file, {
-      contentType: mimeType,
-      resumable: false, // Better for small backups
-    });
+    
+    if (file instanceof Buffer || typeof file === 'string') {
+      await gcsFile.save(file, {
+        contentType: mimeType,
+        resumable: true, // Enabled for large files
+      });
+    } else {
+      // Handle streaming upload
+      await new Promise((resolve, reject) => {
+        const writeStream = gcsFile.createWriteStream({
+          contentType: mimeType,
+          resumable: true,
+        });
+
+        const onAbort = () => {
+          writeStream.destroy();
+          reject(new Error('Upload cancelled'));
+        };
+
+        signal?.addEventListener('abort', onAbort);
+
+        (file as NodeJS.ReadableStream).pipe(writeStream)
+          .on('finish', () => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve(true);
+          })
+          .on('error', (err: any) => {
+            signal?.removeEventListener('abort', onAbort);
+            reject(err);
+          });
+      });
+    }
     
     if (signal?.aborted) throw new Error('Backup cancelled');
     
@@ -36,6 +64,19 @@ export class GCSStorageProvider implements IStorageProvider {
     if (signal?.aborted) throw new Error('Operation cancelled');
     const [content] = await this.bucket.file(cleanPath).download();
     return content;
+  }
+
+  async downloadStream(path: string, signal?: AbortSignal): Promise<NodeJS.ReadableStream> {
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    if (signal?.aborted) throw new Error('Operation cancelled');
+    
+    const readStream = this.bucket.file(cleanPath).createReadStream();
+    
+    if (signal) {
+      signal.addEventListener('abort', () => readStream.destroy());
+    }
+    
+    return readStream;
   }
 
   async list(directory: string): Promise<StorageMetadata[]> {
