@@ -14,6 +14,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../lib/api-config';
 
 interface Invitation {
   id: string;
@@ -54,7 +55,7 @@ const InvitationPage: React.FC = () => {
     try {
       // In a real app, we'd have a specific "get invitation by code" endpoint
       // For now, we list all for the workspace and find the one with the ID
-      const res = await fetch(`http://localhost:5181/api/workspaces/${workspaceId}/invitations`);
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/invitations`);
       const data = await res.json();
       const found = data.find((i: Invitation) => i.id === invitationCode);
       if (!found) throw new Error('Invitation code invalid or expired');
@@ -68,7 +69,7 @@ const InvitationPage: React.FC = () => {
 
   const fetchInvitations = async () => {
     try {
-      const res = await fetch(`http://localhost:5181/api/workspaces/${workspaceId}/invitations`);
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/invitations`);
       const data = await res.json();
       setInvitations(data);
     } catch (err) {
@@ -80,7 +81,7 @@ const InvitationPage: React.FC = () => {
     if (!targetInvitation) return;
     setAccepting(true);
     try {
-      const res = await fetch(`http://localhost:5181/api/invitations/${targetInvitation.id}/accept`, {
+      const res = await fetch(`${API_URL}/api/invitations/${targetInvitation.id}/accept`, {
         method: 'POST'
       });
       if (!res.ok) throw new Error('Failed to accept invitation');
@@ -101,7 +102,7 @@ const InvitationPage: React.FC = () => {
     setSuccess(null);
 
     try {
-      const res = await fetch(`http://localhost:5181/api/workspaces/${workspaceId}/invitations`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/invitations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, role, invitedBy: user?.email || 'admin' })
@@ -123,7 +124,7 @@ const InvitationPage: React.FC = () => {
     if (!confirm('Are you sure you want to revoke this invitation?')) return;
 
     try {
-      const res = await fetch(`http://localhost:5181/api/workspaces/${workspaceId}/invitations/${invId}`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/invitations/${invId}`, {
         method: 'DELETE'
       });
       if (!res.ok) throw new Error('Failed to revoke invitation');

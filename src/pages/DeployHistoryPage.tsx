@@ -19,8 +19,8 @@ import { useSuite } from '../contexts/SuiteContext';
 import { subscribeToDeployHistory } from '../lib/deployment-service';
 import { formatDuration } from '../lib/expert-system';
 import type { DeploymentRecord } from '../lib/types';
-
-const API_URL = 'http://localhost:5181';
+import { API_URL } from '../lib/api-config';
+import { parseDate } from '../lib/utils';
 
 interface Release {
   releaseId: string;
@@ -82,7 +82,7 @@ export function DeployHistoryPage() {
             name: r.id,
             versionName: r.firebaseVersionId || undefined,
             createTime: r.startedAt
-              ? new Date((r.startedAt as unknown as { seconds: number }).seconds * 1000).toISOString()
+              ? parseDate(r.startedAt).toISOString()
               : undefined,
             status: r.status,
             type: r.status === 'live' ? 'DEPLOY' : r.status.toUpperCase(),
@@ -125,7 +125,7 @@ export function DeployHistoryPage() {
           const target = app.environments.production.hostingTarget!;
           try {
             const res = await fetch(
-              `${API_URL}/api/releases/${target}?project=${app.project || 'heidless-apps-0'}`
+              `${API_URL}/api/releases/${target}?project=${app.project || 'heidless-apps-2'}`
             );
             if (!res.ok) return;
             const data = await res.json();

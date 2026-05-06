@@ -60,7 +60,7 @@ export function DashboardPage() {
           <p className="text-sm text-white/80 mb-2">The suites collection could not be loaded:</p>
           <pre className="text-xs text-red-300 bg-black/30 p-4 rounded-xl overflow-auto">{dbError}</pre>
           <p className="text-xs text-white/40 mt-4">
-            Check that the Firestore database "suiteutils-db-0" exists in project heidless-apps-0
+            Check that the Firestore database "suiteutils-db-0" exists in project heidless-apps-2
             and that security rules allow authenticated reads.
           </p>
         </div>

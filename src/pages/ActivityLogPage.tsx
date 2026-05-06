@@ -16,8 +16,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-
-const API_URL = 'http://localhost:5181';
+import { API_URL } from '../lib/api-config';
 
 interface AuditEvent {
   id: string;

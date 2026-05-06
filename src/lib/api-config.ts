@@ -5,7 +5,7 @@ export const getApiUrl = () => {
     return window.location.origin;
   }
   // Local development
-  return 'http://localhost:5181';
+  return 'http://localhost:5185';
 };
 
 export const API_URL = getApiUrl();

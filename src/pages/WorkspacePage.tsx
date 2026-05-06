@@ -16,8 +16,8 @@ import {
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:5181';
+import { API_URL } from '../lib/api-config';
+import { parseDate } from '../lib/utils';
 
 interface AppConfig {
   id: string;
@@ -294,7 +294,7 @@ export function WorkspacePage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold text-white/80">{inv.email}</p>
-                      <p className="text-[10px] text-white/20 uppercase font-black tracking-widest mt-0.5">{inv.role} • Invited on {new Date(inv.createdAt).toLocaleDateString()}</p>
+                      <p className="text-[10px] text-white/20 uppercase font-black tracking-widest mt-0.5">{inv.role} • Invited on {parseDate(inv.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
                   <button 

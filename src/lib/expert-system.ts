@@ -1,4 +1,5 @@
 import type { DeployEstimate, DeploymentRecord } from './types';
+import { parseDate } from './utils';
 
 // ============================================================
 // EXPERT SYSTEM — Learning Deploy Estimator
@@ -42,7 +43,7 @@ export function getEstimate(
 
   // Phase 2: Weighted rolling average (recent deploys weighted 2x)
   const sorted = [...appHistory].sort(
-    (a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0)
+    (a, b) => parseDate(b.startedAt).getTime() - parseDate(a.startedAt).getTime()
   );
 
   let totalWeight = 0;

@@ -29,8 +29,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
-
-const API_URL = 'http://localhost:5181';
+import { API_URL } from '../../lib/api-config';
 
 const JsonNode = ({ label, value, depth = 0, zipPath, forceExpand = false }: { label: string; value: any, depth?: number, zipPath?: string | null, forceExpand?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(depth < 1 || forceExpand);

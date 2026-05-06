@@ -60,7 +60,12 @@ export class OperationMonitor extends EventEmitter {
     this.emit(`update:${id}`, updated);
   }
 
-  enqueue(id: string, start: () => Promise<void>, metadata?: any) {
+  registerController(id: string, controller: AbortController) {
+    this.controllers.set(id, controller);
+  }
+
+  enqueue(id: string, start: () => Promise<void>, metadata?: any, controller?: AbortController) {
+    if (controller) this.controllers.set(id, controller);
     this.updateOperation(id, { status: 'queued', message: 'Waiting for conflicting operation...', metadata });
     this.queue.push({ id, start });
   }

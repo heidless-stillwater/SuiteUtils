@@ -2,9 +2,11 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { doc, setDoc, onSnapshot, Timestamp, collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import { useWorkspace } from './WorkspaceContext';
 import type { Suite, AppConfig, EnvironmentConfig } from '../lib/types';
 import { STILLWATER_APPS } from '../lib/types';
 import { API_URL } from '../lib/api-config';
+import { sanitize } from '../lib/utils';
 
 interface SuiteContextType {
   currentSuite: Suite | null;
@@ -19,19 +21,15 @@ interface SuiteContextType {
 
 const SuiteContext = createContext<SuiteContextType | undefined>(undefined);
 
-const SUITE_STORAGE_KEY = 'suiteutils-active-suite';
-
 export function SuiteProvider({ children }: { children: React.ReactNode }) {
   const { user, setWorkspaceRole } = useAuth();
+  const { activeWorkspaceId } = useWorkspace();
   const [suites, setSuites] = useState<Suite[]>([]);
-  const [currentSuiteId, setCurrentSuiteId] = useState<string | null>(
-    () => localStorage.getItem(SUITE_STORAGE_KEY)
-  );
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
   const [activeJobCount, setActiveJobCount] = useState(0);
 
-  const currentSuite = suites.find((s) => s.id === currentSuiteId) || suites[0] || null;
+  const currentSuite = suites.find((s) => s.id === activeWorkspaceId) || suites[0] || null;
 
   // Load all suites for the current user
   useEffect(() => {
@@ -44,29 +42,34 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
     const unsub = onSnapshot(
       collection(db, 'suites'),
       (snap) => {
+        console.log(`[SuiteContext] Received snapshot with ${snap.size} suites`);
         const loaded: Suite[] = [];
         snap.forEach((docSnap) => {
           const data = docSnap.data() as Omit<Suite, 'id'>;
+          console.log(`[SuiteContext] Loading suite: ${data.name} (Owner: ${data.ownerId})`);
           if (data.ownerId === user.uid) {
             // Self-healing: if suiteutils was seeded as not-configured, fix it locally and in DB
             if (data.apps?.suiteutils?.environments?.production?.status === 'not-configured') {
               data.apps.suiteutils.environments.production.status = 'live';
               setDoc(docSnap.ref, { 'apps.suiteutils': data.apps.suiteutils }, { merge: true }).catch(() => {});
             }
-            loaded.push({ ...data, id: docSnap.id } as Suite);
+            loaded.push(sanitize({ ...data, id: docSnap.id } as Suite));
           }
         });
+        
+        console.log(`[SuiteContext] Found ${loaded.length} suites for user ${user.uid}`);
         setSuites(loaded);
 
         // Auto-seed "Stillwater" suite if none exist
         if (loaded.length === 0) {
+          console.log('[SuiteContext] No suites found, seeding default Stillwater suite...');
           seedDefaultSuite(user.uid);
         }
 
         setLoading(false);
       },
       (error) => {
-        console.warn('[Suite] Firestore listener error:', error.message);
+        console.error('[SuiteContext] Firestore listener error:', error);
         setDbError(error.message);
         setLoading(false);
       }
@@ -75,11 +78,9 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [user]);
 
-  // Persist suite selection
+  // Update role in AuthContext (Prioritize SaaS Invitation over Firestore Ownership)
   useEffect(() => {
     if (currentSuite) {
-      localStorage.setItem(SUITE_STORAGE_KEY, currentSuite.id);
-      
       // Update role in AuthContext (Prioritize SaaS Invitation over Firestore Ownership)
       if (user) {
         fetch(`${API_URL}/api/workspaces/${currentSuite.id}/my-role?email=${user.email}`)
@@ -165,12 +166,16 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
       updatedAt: Timestamp.now(),
     };
 
-    await setDoc(suiteRef, suite);
-    setCurrentSuiteId(suiteRef.id);
+    try {
+      await setDoc(suiteRef, suite);
+      console.log('[SuiteContext] Default suite seeded successfully:', suiteRef.id);
+    } catch (err) {
+      console.error('[SuiteContext] Failed to seed default suite:', err);
+    }
   };
 
   const switchSuite = useCallback((suiteId: string) => {
-    setCurrentSuiteId(suiteId);
+    // Legacy - WorkspaceContext now handles switching via setActiveWorkspaceId
   }, []);
 
   const createSuite = useCallback(async (name: string): Promise<string> => {

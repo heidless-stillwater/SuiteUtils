@@ -5,6 +5,24 @@ import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { SuiteProvider } from './contexts/SuiteContext';
+import { WorkspaceProvider } from './contexts/WorkspaceContext';
+
+// GLOBAL API INTERCEPTOR: Inject active workspace ID into all suite-utils API calls
+const originalFetch = window.fetch;
+window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
+  const workspaceId = localStorage.getItem('activeWorkspaceId') || 'stillwater-suite';
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (url.includes(':5185/api') || url.includes(':5181/api')) {
+    const headers = new Headers(init?.headers || {});
+    if (!headers.has('x-workspace-id')) {
+      headers.set('x-workspace-id', workspaceId);
+    }
+    return originalFetch(input, { ...init, headers });
+  }
+  
+  return originalFetch(input, init);
+};
 
 // Error Boundary to prevent white-screen crashes
 class ErrorBoundary extends React.Component<
@@ -81,9 +99,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
-          <SuiteProvider>
-            <App />
-          </SuiteProvider>
+          <WorkspaceProvider>
+            <SuiteProvider>
+              <App />
+            </SuiteProvider>
+          </WorkspaceProvider>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

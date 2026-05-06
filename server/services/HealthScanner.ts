@@ -44,7 +44,9 @@ export class HealthScanner {
         'plantune': 3004
       };
 
-      if (app.hostingTarget) {
+      if (app.deployUrl) {
+        url = app.deployUrl;
+      } else if (app.hostingTarget) {
         url = `https://${app.hostingTarget}.web.app/`;
       } else {
         const port = portMap[appId] || 3000;

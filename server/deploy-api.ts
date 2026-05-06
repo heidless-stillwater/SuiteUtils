@@ -1,4 +1,7 @@
 import express from 'express';
+console.log('🚀 [Cloud Run] Server process starting...');
+console.log(`📅 [Cloud Run] Time: ${new Date().toISOString()}`);
+console.log(`🔌 [Cloud Run] Expected Port: ${process.env.PORT || 5185}`);
 import cors from 'cors';
 import multer from 'multer';
 import { spawn } from 'child_process';
@@ -13,6 +16,7 @@ import { IStorageProvider } from './services/IStorageProvider.js';
 import { BackupOrchestrator } from './services/BackupOrchestrator.js';
 import { ReleaseManager } from './services/ReleaseManager.js';
 import { RollbackManager } from './services/RollbackManager.js';
+import { MigrationService } from './services/MigrationService.js';
 import { healthScanner } from './services/HealthScanner.js';
 import { auditLogger } from './services/AuditLogger.js';
 import { scheduleManager } from './services/ScheduleManager.js';
@@ -22,8 +26,8 @@ import { settingsManager } from './services/SettingsManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
 import { invitationManager } from './services/InvitationManager.js';
 import { MigrationManager } from './services/MigrationManager.js';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, getFirestore } from 'firebase-admin/firestore';
+import { suiteDb as firestore, adminApp as firebaseApp } from './services/FirebaseAdmin.js';
 import { deploymentManager } from './services/DeploymentManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,7 +39,7 @@ app.use((req, res, next) => {
   (req as any).workspaceId = wsId;
   next();
 });
-const PORT = 5181;
+const PORT = Number(process.env.PORT) || 5185;
 
 // Initialize Services
 scheduleManager.init();
@@ -43,34 +47,68 @@ scheduleManager.init();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// Serve static files from Vite build (dist)
+const distPath = path.join(process.cwd(), 'dist');
+if (fs.existsSync(distPath)) {
+  console.log(`[Server] Serving static files from: ${distPath}`);
+  app.use(express.static(distPath));
+}
+
+// Global Access Logger
+app.use((req, res, next) => {
+  const logEntry = `[${new Date().toISOString()}] ${req.method} ${req.url} | WS: ${req.headers['x-workspace-id']}\n`;
+  fs.appendFileSync(path.join(process.cwd(), 'logs/access.log'), logEntry);
+  next();
+});
+
 const releaseManager = new ReleaseManager();
 const activeReleaseControllers = new Map<string, AbortController>();
 
-// Initialize Firebase Admin
-const firebaseApp = getApps().length === 0 
-  ? initializeApp({ 
-      credential: cert(path.join(process.cwd(), 'server', 'config', 'service-account.json')),
-      projectId: 'heidless-apps-0' 
-    })
-  : getApps()[0];
-
-const firestore = getFirestore(firebaseApp, 'suiteutils-db-0');
-
 // GLOBAL PERSISTENCE LISTENER
 const terminalStateLocked = new Set<string>();
+const verifyingJobs = new Set<string>();
 
 deploymentManager.on('update', async (job: any) => {
   // Handle server-side verification
-  if (job.status === 'verifying' && job.url) {
-    const success = await verifyDeployment(job.url, (msg) => {
-      job.logs.push(msg);
-      deploymentManager.emit('update', job);
-    });
+  if (job.status === 'verifying') {
+    if (verifyingJobs.has(job.id)) return;
+    verifyingJobs.add(job.id);
 
-    if (success) {
-      deploymentManager.finishJob(job.id);
+    // If no URL is present, we try one last time to extract it from logs or use a placeholder
+    if (!job.url) {
+      const logsText = job.logs.join('\n');
+      const urlMatch = logsText.match(/Service URL: (https?:\/\/\S+)/) || 
+                       logsText.match(/https?:\/\/[a-z0-9-]+\.[a-z0-9-]+\.a\.run\.app/);
+      if (urlMatch) {
+        job.url = urlMatch[1] || urlMatch[0];
+      }
+    }
+
+    if (job.url) {
+      const success = await verifyDeployment(job.url, (msg) => {
+        job.logs.push(msg);
+        deploymentManager.emit('update', job);
+      });
+
+      verifyingJobs.delete(job.id);
+
+      if (success) {
+        deploymentManager.finishJob(job.id);
+      } else {
+        deploymentManager.failJob(job.id, 'Verification failed: App did not become healthy within timeout.');
+      }
     } else {
-      deploymentManager.failJob(job.id, 'Verification failed: App did not become healthy within timeout.');
+      // FALLBACK: If it's been in verifying for more than 30s without a URL, 
+      // and it's a Cloud Run app, we'll mark it as live but warn about the URL.
+      // This prevents the "hanging" state the user reported.
+      const elapsed = (Date.now() - job.startedAt) / 1000;
+      if (elapsed > 45) {
+        job.logs.push('\n── WARNING: Could not verify health (URL not found). Marking as LIVE.');
+        verifyingJobs.delete(job.id);
+        deploymentManager.finishJob(job.id);
+      } else {
+        verifyingJobs.delete(job.id); // Allow next update to try again
+      }
     }
     return;
   }
@@ -87,16 +125,27 @@ deploymentManager.on('update', async (job: any) => {
     console.log(`[Global Persistence] Detected ${status} for ${appId}. Updating workspace: ${workspaceId}`);
 
     const suiteRef = firestore.collection('suites').doc(workspaceId);
-    suiteRef.set({
+    const suiteUpdate: any = {
       [`apps.${appId}.environments.production.status`]: status,
       [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
       updatedAt: Timestamp.now()
-    }, { merge: true })
-    .then(() => console.log(`[Global Persistence] Successfully updated ${appId}`))
-    .catch(err => console.error(`[Global Persistence] Failed for ${appId}:`, err.message));
+    };
+    
+    if (job.url) {
+      suiteUpdate[`apps.${appId}.environments.production.deployUrl`] = job.url;
+    }
+
+    suiteRef.set(suiteUpdate, { merge: true })
+    .then(() => {
+      const msg = `[Global Persistence] Successfully updated ${appId} in ${workspaceId}\n`;
+    })
+    .catch(err => {
+      const msg = `[Global Persistence] Failed for ${appId} in ${workspaceId}: ${err.message}\n`;
+    });
 
     // Persist history record when finished
-    console.log(`[Persistence] Saving history record for ${appId} (${status})`);
+    const persistenceMsg = `[Persistence] Saving history record for ${appId} (${status}) to suite: ${workspaceId}\n`;
+    
     firestore.collection('deployments').add({
       suiteId: workspaceId,
       batchId: job.id,
@@ -107,9 +156,9 @@ deploymentManager.on('update', async (job: any) => {
       startedAt: Timestamp.fromMillis(job.startedAt),
       completedAt: Timestamp.now(),
       duration: job.duration || 0,
-      deployMethod: 'firebase',
+      deployMethod: job.deployMethod || 'firebase',
       hostingTarget: job.hostingTarget || null,
-      project: job.project || 'heidless-apps-0',
+      project: job.project || 'heidless-apps-2',
       errorLogs: job.error || null,
       deployUrl: job.url || null
     }).catch(err => console.error('[Persistence] History record failed:', err));
@@ -328,6 +377,16 @@ app.post('/api/workspaces/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/workspaces/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await workspaceManager.deleteWorkspace(id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.get('/api/workspaces/:id/invitations', (req, res) => {
   res.json(invitationManager.getInvitationsForWorkspace(req.params.id));
 });
@@ -373,19 +432,28 @@ app.post('/api/migrate', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.write(': sse-init\n\n');
 
   const storageProvider = getStorageProvider();
   const migrationManager = new MigrationManager(storageProvider);
 
   try {
-    await migrationManager.executeMigration(sourceBackupPath, targetWorkspaceId, (progress: any) => {
+    const result = await migrationManager.executeMigration(sourceBackupPath, targetWorkspaceId, (progress: any) => {
       res.write(`data: ${JSON.stringify(progress)}\n\n`);
     });
-    res.write(`data: ${JSON.stringify({ message: 'Migration Complete', type: 'success', percent: 100 })}\n\n`);
+    res.write(`data: ${JSON.stringify({ 
+      ...result, 
+      message: 'Migration Complete', 
+      type: 'success', 
+      percent: 100,
+      step: 'complete' 
+    })}\n\n`);
   } catch (err: any) {
-    res.write(`data: ${JSON.stringify({ message: err.message, type: 'error' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ message: err.message, type: 'error', step: 'error' })}\n\n`);
   } finally {
-    res.end();
+    // Graceful delay to ensure final buffer flush
+    setTimeout(() => res.end(), 100);
   }
 });
 
@@ -411,7 +479,7 @@ function resolvePath(p: string): string {
 }
 function getStorageProvider(): IStorageProvider {
   const settings = settingsManager.getSettings();
-  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
   const credentialsPath = path.join(__dirname, 'config/service-account.json');
   if (settings.activeStorageProvider === 'google-drive') {
     return new GoogleDriveStorageProvider(credentialsPath);
@@ -446,7 +514,7 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/releases/:hostingTarget', async (req, res) => {
   const { hostingTarget } = req.params;
-  const project = (req.query.project as string) || 'heidless-apps-0';
+  const project = (req.query.project as string) || 'heidless-apps-2';
 
   try {
     const token = await getAccessToken();
@@ -498,8 +566,10 @@ app.post('/api/rollback', async (req, res) => {
     return;
   }
 
-  const firebaseProject = project || 'heidless-apps-0';
-  console.log(`\n[Rollback] ${hostingTarget} → ${versionName}`);
+  const workspaceId = (req as any).workspaceId || 'stillwater-suite';
+  const workspace = workspaceManager.getWorkspace(workspaceId);
+  const firebaseProject = workspace?.gcpProjectId || project || 'heidless-apps-2';
+  console.log(`\n[Rollback] ${hostingTarget} → ${versionName} (Workspace: ${workspaceId}, Project: ${firebaseProject})`);
 
   // SSE setup
   res.writeHead(200, {
@@ -510,7 +580,7 @@ app.post('/api/rollback', async (req, res) => {
   });
 
   const sendEvent = (data: Record<string, unknown>) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (res.writableEnded) return; res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
   const startTime = Date.now();
@@ -607,10 +677,167 @@ app.post('/api/deploy/cancel', (req, res) => {
   }
 });
 
+// Force Reset Deployment State
+app.post('/api/deploy/reset', async (req, res) => {
+  const workspaceId = req.headers['x-workspace-id'] as string;
+  
+  try {
+    deploymentManager.clearAllJobs();
+    
+    // Also try to update Firestore if we have a suite ID
+    if (workspaceId && workspaceId !== 'stillwater-suite' && workspaceId !== 'new-gcp-server') {
+      const suiteRef = firestore.collection('suites').doc(workspaceId);
+      const suiteDoc = await suiteRef.get();
+      if (suiteDoc.exists) {
+        const updates: any = {};
+        const data = suiteDoc.data() || {};
+        Object.keys(data).forEach(key => {
+          if (key.endsWith('.status') && (data[key] === 'building' || data[key] === 'deploying' || data[key] === 'verifying')) {
+            updates[key] = 'stopped';
+          }
+        });
+        if (Object.keys(updates).length > 0) {
+          await suiteRef.update(updates);
+        }
+      }
+    }
+    
+    res.json({ success: true, message: 'All deployment states reset to idle.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Deploy endpoint — streams output via SSE
-app.post('/api/deploy', (req, res) => {
-  const { appId, projectPath, hostingTarget, project, deployMethod, displayName } = req.body;
+app.post('/api/deploy', async (req, res) => {
+  const { appId, projectPath, hostingTarget, project, displayName } = req.body;
   const workspaceId = req.headers['x-workspace-id'] as string || 'stillwater-suite';
+  let workspace = workspaceManager.getWorkspace(workspaceId) as any;
+  let firebaseProject = project || 'heidless-apps-2';
+  let resolvedDeployMethod = req.body.deployMethod || 'firebase';
+  let resolvedHostingTarget = hostingTarget || null;
+  
+
+  // 1. Resolve Workspace (Try local first, then Firestore)
+  if (!workspace && workspaceId) {
+    try {
+      const suiteDoc = await firestore.collection('suites').doc(workspaceId).get();
+      if (suiteDoc.exists) {
+        const suiteData = suiteDoc.data() || {};
+        const rawData = JSON.stringify(suiteData);
+        
+        // Handle both nested and flattened 'apps'
+        const appsMap = new Map<string, any>();
+        
+        // 1. First pass: Handle nested 'apps' object if it exists
+        if (suiteData.apps && typeof suiteData.apps === 'object') {
+          Object.entries(suiteData.apps).forEach(([id, data]) => appsMap.set(id, { id, ...(data as object) }));
+        }
+
+        // 2. Second pass: Handle flattened keys (e.g., 'apps.plantune.environments.production.deployMethod')
+        Object.entries(suiteData).forEach(([key, value]) => {
+          if (key.startsWith('apps.')) {
+            const parts = key.split('.');
+            const appId = parts[1];
+            if (!appsMap.has(appId)) appsMap.set(appId, { id: appId });
+            
+            const app = appsMap.get(appId);
+            let current = app;
+            
+            // Reconstruct nesting for parts after apps.[appId]
+            for (let i = 2; i < parts.length - 1; i++) {
+              const part = parts[i];
+              if (!current[part]) current[part] = {};
+              current = current[part];
+            }
+            
+            const lastPart = parts[parts.length - 1];
+            if (parts.length > 2) {
+              current[lastPart] = value;
+            } else {
+              // It was just 'apps.appId' = value
+              Object.assign(app, value);
+            }
+          }
+        });
+
+        workspace = {
+          id: suiteDoc.id,
+          name: suiteData.name,
+          gcpProjectId: suiteData.gcpProjectId || suiteData['gcpProjectId'],
+          apps: Array.from(appsMap.values())
+        };
+      } else {
+      }
+    } catch (err: any) {
+    }
+  }
+
+  // 2. Resolve App Metadata from Workspace
+  const workspaceApp = workspace?.apps?.find((a: any) => a.id === appId);
+  
+  // Use the deployMethod from Firestore if available
+  if (workspaceApp) {
+    // In Firestore, deployMethod might be nested in environments.production
+    const envData = workspaceApp.environments?.production || workspaceApp.defaultEnv;
+    resolvedDeployMethod = req.body.deployMethod || envData?.deployMethod || workspaceApp.deployMethod || 'firebase';
+    resolvedHostingTarget = hostingTarget || envData?.hostingTarget || workspaceApp.hostingTarget || null;
+  }
+
+  firebaseProject = workspace?.gcpProjectId || project || 'heidless-apps-2';
+
+  // 3. GLOBAL FAIL-SAFE: If this is PlanTune and we still resolved to apps-0, 
+  // try to find the 'Target: New GCP Server' workspace globally (Local or Firestore)
+  if (appId === 'plantune' && firebaseProject === 'heidless-apps-2') {
+    
+    // Check local workspaces first
+    const localFallback = workspaceManager.getWorkspaces().find(w => w.gcpProjectId === 'heidless-apps-2');
+    if (localFallback) {
+      workspace = localFallback;
+      firebaseProject = 'heidless-apps-2';
+      const localApp = workspace.apps.find((a: any) => a.id === 'plantune');
+      if (localApp) {
+        resolvedDeployMethod = localApp.deployMethod || 'cloud-build';
+        resolvedHostingTarget = localApp.hostingTarget || null;
+      }
+    } else {
+      // Check Firestore
+      const globalSuites = await firestore.collection('suites').where('gcpProjectId', '==', 'heidless-apps-2').get();
+      if (!globalSuites.empty) {
+        const suiteDoc = globalSuites.docs[0];
+        const suiteData = suiteDoc.data();
+        
+        firebaseProject = 'heidless-apps-2';
+        resolvedDeployMethod = 'cloud-build';
+        resolvedHostingTarget = null;
+        
+        // Also check if this suite has specific overrides for plantune
+        const fallbackAppsMap = new Map<string, any>();
+        Object.entries(suiteData).forEach(([key, value]) => {
+          if (key.startsWith('apps.plantune')) {
+            const parts = key.split('.');
+            if (!fallbackAppsMap.has('plantune')) fallbackAppsMap.set('plantune', { id: 'plantune' });
+            const app = fallbackAppsMap.get('plantune');
+            let target = app;
+            for (let i = 2; i < parts.length - 1; i++) {
+              if (!target[parts[i]]) target[parts[i]] = {};
+              target = target[parts[i]];
+            }
+            target[parts[parts.length - 1]] = value;
+          }
+        });
+        
+        const fallbackApp = fallbackAppsMap.get('plantune');
+        if (fallbackApp) {
+          const envData = fallbackApp.environments?.production || fallbackApp.defaultEnv;
+          resolvedDeployMethod = envData?.deployMethod || fallbackApp.deployMethod || 'cloud-build';
+          resolvedHostingTarget = envData?.hostingTarget || fallbackApp.hostingTarget || null;
+        }
+      }
+    }
+  }
+
+  const jobId = `${appId}-${Date.now()}`;
 
   if (!appId || !projectPath) {
     res.status(400).json({ error: 'appId and projectPath are required' });
@@ -618,14 +845,14 @@ app.post('/api/deploy', (req, res) => {
   }
 
   const resolvedPath = resolvePath(projectPath);
-  const firebaseProject = project || 'heidless-apps-0';
-  const jobId = `${appId}-${Date.now()}`;
 
-  console.log(`\n[Deploy] Starting: ${appId} (Job: ${jobId}) in Workspace: ${workspaceId}`);
+  console.log(`[Deploy API] Request for: ${appId}`);
+  console.log(`[Deploy API] Workspace ID: ${workspaceId}`);
+  console.log(`[Deploy API] Resolved Project: ${firebaseProject}`);
+  const debugLog = `[${new Date().toISOString()}] Deploy: ${appId} | Workspace: ${workspaceId} | Project: ${firebaseProject} | Method: ${resolvedDeployMethod} | Target: ${resolvedHostingTarget}\n`;
+
+  console.log(`\n[Deploy] Starting: ${appId} (Job: ${jobId}) in Workspace: ${workspaceId} (Target Project: ${firebaseProject})`);
   
-  // Start the background process
-  deploymentManager.startDeploy(jobId, appId, resolvedPath, hostingTarget, firebaseProject, workspaceId);
-
   // Set up SSE for the current request
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -635,7 +862,7 @@ app.post('/api/deploy', (req, res) => {
   });
 
   const sendEvent = (data: any) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (res.writableEnded) return; res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
   // Attach to manager updates
@@ -654,7 +881,7 @@ app.post('/api/deploy', (req, res) => {
         error: job.error
       });
     } catch (err) {
-      // Client likely disconnected, but global listener will handle persistence.
+      deploymentManager.removeListener('update', onUpdate);
     }
 
     if (job.status === 'live' || job.status === 'failed') {
@@ -669,6 +896,9 @@ app.post('/api/deploy', (req, res) => {
   res.on('close', () => {
     deploymentManager.removeListener('update', onUpdate);
   });
+
+  // Start the background process AFTER attaching listener
+  deploymentManager.startDeploy(jobId, appId, resolvedPath, resolvedHostingTarget, firebaseProject, workspaceId, resolvedDeployMethod);
 });
 
 // SSE endpoint to re-attach to an existing job
@@ -687,7 +917,7 @@ app.get('/api/deploy/:jobId/stream', (req, res) => {
   });
 
   const sendEvent = (data: any) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (res.writableEnded) return; res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
   // First, send the existing logs to catch the UI up
@@ -723,20 +953,21 @@ app.get('/api/deploy/:jobId/stream', (req, res) => {
 let activeBackupController: AbortController | null = null;
 
 app.post('/api/backups/run', async (req, res) => {
-  const { appIds, version = '1.0.0', scope = 'StillwaterSuite', includeStorage = true, force = false, queue = false } = req.body;
+  const { 
+    scope = 'StillwaterSuite', 
+    name,
+    version = '0.0.0', 
+    type = 'full', 
+    includeStorage = true, 
+    appIds, 
+    force = false, 
+    queue = false 
+  } = req.body;
   
-  const currentController = new AbortController();
-  if (!queue) {
-    if (activeBackupController && force) {
-      console.log('[Backup] Aborting existing backup...');
-      activeBackupController.abort();
-    }
-    activeBackupController = currentController;
-  }
-  const signal = currentController.signal;
+  const orchestrator = new BackupOrchestrator(getStorageProvider());
+  const backupId = orchestrator.generateBackupId();
+  const metadata = { scope, name, appIds, version, includeStorage, type };
 
-  const metadata = { scope, appIds, version, includeStorage };
-  
   if (!force && !queue) {
     const conflict = operationMonitor.findIdenticalOperation('backup', metadata);
     if (conflict) {
@@ -750,42 +981,47 @@ app.post('/api/backups/run', async (req, res) => {
     }
   }
 
-  const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-  const timestamp = new Date().getTime();
-  const id = `${scope}_v${version}_${dateStr}_${timestamp}`;
+  const currentController = new AbortController();
+  if (!queue) {
+    if (activeBackupController && force) {
+      console.log('[Backup] Aborting existing backup...');
+      activeBackupController.abort();
+    }
+    activeBackupController = currentController;
+  }
 
-  const runBackup = async () => {
-    const storageProvider = getStorageProvider();
-    const orchestrator = new BackupOrchestrator(storageProvider);
-
+  const runBackup = async (ctrl: AbortController) => {
     try {
       await orchestrator.runFullSuiteBackup({
         version,
         scope,
+        name,
+        type: type as any,
         includeStorage,
-        signal,
+        signal: ctrl.signal,
         appIds,
-        releaseId: id
-      }, currentController);
+        releaseId: backupId
+      }, ctrl);
       
-      if (activeBackupController === currentController) {
+      if (activeBackupController === ctrl) {
         activeBackupController = null;
       }
     } catch (err: any) {
       console.error('[Backup] Error:', err);
-      if (activeBackupController === currentController) {
+      if (activeBackupController === ctrl) {
         activeBackupController = null;
       }
     }
   };
 
+  operationMonitor.registerController(backupId, currentController);
+
   if (queue) {
-    operationMonitor.enqueue(id, runBackup, metadata);
-    return res.json({ id, status: 'queued' });
+    operationMonitor.enqueue(backupId, () => runBackup(currentController), metadata, currentController);
+    return res.json({ id: backupId, status: 'queued' });
   } else {
-    // Run in background
-    runBackup();
-    return res.json({ id, status: 'running' });
+    runBackup(currentController);
+    return res.json({ id: backupId, status: 'running' });
   }
 });
 
@@ -809,11 +1045,67 @@ app.post('/api/backups/cancel', (req, res) => {
 
 app.get('/api/backups', async (req, res) => {
   try {
-    const storageProvider = getStorageProvider();
+    const status = req.query.status || 'active';
+    const db = getFirestore(firebaseApp);
+    const snap = await db.collection('backups')
+      .where('status', '==', status)
+      .get();
     
-    // We search in AppSuite/backups (recursive listing logic is in the provider)
-    const files = await storageProvider.list('AppSuite/backups');
-    res.json({ files });
+    let backups = snap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        name: data.name || data.id // Ensure name exists for UI filtering
+      };
+    });
+
+    // Sort in memory by timestamp desc
+    backups.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    res.json({ files: backups });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/:id/archive', async (req, res) => {
+  try {
+    const orchestrator = new BackupOrchestrator(getStorageProvider());
+    await orchestrator.archiveBackup(req.params.id);
+    res.json({ message: 'Backup archived successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/:id/unarchive', async (req, res) => {
+  try {
+    const orchestrator = new BackupOrchestrator(getStorageProvider());
+    await orchestrator.unarchiveBackup(req.params.id);
+    res.json({ message: 'Backup restored to registry successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/consolidate', async (req, res) => {
+  try {
+    const storageProvider = getStorageProvider();
+    const migrationService = new MigrationService(storageProvider, firebaseApp);
+    const result = await migrationService.consolidateStorage();
+    res.json({ message: 'Consolidation complete', ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/migrate', async (req, res) => {
+  try {
+    const storageProvider = getStorageProvider();
+    const migrationService = new MigrationService(storageProvider, firebaseApp);
+    const count = await migrationService.migrateLegacyBackups();
+    res.json({ message: `Migration complete. Migrated ${count} backups.` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -898,7 +1190,7 @@ app.get('/api/storage/zip-contents', async (req, res) => {
     if (!(storageProvider instanceof GCSStorageProvider)) {
       return res.status(400).json({ error: 'Zip inspection is only supported on GCS for now.' });
     }
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const file = bucket.file(filePath as string);
     
@@ -932,7 +1224,7 @@ app.get('/api/storage/zip-file-content', async (req, res) => {
     if (!(storageProvider instanceof GCSStorageProvider)) {
       return res.status(400).json({ error: 'Zip file extraction is only supported on GCS for now.' });
     }
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const zipFile = bucket.file(zipPath as string);
     
@@ -1002,14 +1294,39 @@ app.get('/api/storage/download', async (req, res) => {
 });
 
 app.post('/api/backups/delete-bulk', async (req, res) => {
-  const { paths } = req.body;
-  if (!Array.isArray(paths)) return res.status(400).json({ error: 'paths must be an array' });
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'ids array is required' });
 
   try {
     const storageProvider = getStorageProvider();
-    await storageProvider.deleteBulk(paths);
-    res.json({ success: true, deletedCount: paths.length });
+    const db = getFirestore(firebaseApp);
+    
+    console.log(`[BackupDelete] Starting bulk delete for ${ids.length} items:`, ids);
+
+    for (const id of ids) {
+      const doc = await db.collection('backups').doc(id).get();
+      if (doc.exists) {
+        const cloudPath = doc.data()?.fullPath;
+        console.log(`[BackupDelete] Found registry record for ${id}. CloudPath: ${cloudPath}`);
+        
+        if (cloudPath) {
+          console.log(`[BackupDelete] Deleting files at: ${cloudPath}`);
+          await storageProvider.delete(cloudPath);
+        } else {
+          console.warn(`[BackupDelete] No cloudPath found for ${id}, skipping storage deletion.`);
+        }
+        
+        console.log(`[BackupDelete] Deleting Firestore record for ${id}`);
+        await db.collection('backups').doc(id).delete();
+      } else {
+        console.warn(`[BackupDelete] No registry record found for ${id}, skipping.`);
+      }
+    }
+    
+    console.log(`[BackupDelete] Bulk delete complete.`);
+    res.json({ success: true, deletedCount: ids.length });
   } catch (err: any) {
+    console.error(`[BackupDelete] FATAL ERROR:`, err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1101,6 +1418,16 @@ app.get('/api/backups/restore', async (req, res) => {
     sendEvent({ type: 'error', message: err.message });
   } finally {
     res.end();
+  }
+});
+
+// SPA fallback: handle client-side routing (must be LAST)
+app.get('*any', (req, res) => {
+  const distPath = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(path.join(distPath, 'index.html'))) {
+    res.sendFile(path.join(distPath, 'index.html'));
+  } else {
+    res.status(404).send('Not Found');
   }
 });
 

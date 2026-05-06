@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2, HardDrive, Database, Cloud } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2, HardDrive, Database, Cloud, Trash2, Layout, Globe, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:5181';
+import { useWorkspace } from '../contexts/WorkspaceContext';
+import { API_URL } from '../lib/api-config';
 
 export function SettingsPage() {
   const { profile, user, signOut, isSu, effectiveRole, switchRole } = useAuth();
+  const { activeWorkspaceId, setActiveWorkspaceId, availableWorkspaces, refreshWorkspaces } = useWorkspace();
   const [slackWebhook, setSlackWebhook] = useState('');
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [strictMode, setStrictMode] = useState(false);
   const [activeStorageProvider, setActiveStorageProvider] = useState<'gcs' | 'google-drive'>('google-drive');
   const [saving, setSaving] = useState(false);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     // Fetch notifications
@@ -108,6 +111,62 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      <div className="glass-card-static p-6 space-y-6">
+        <div className="flex items-center gap-3 text-primary">
+          <Globe className="w-5 h-5" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-white/90">Operational Context</h3>
+        </div>
+
+        <p className="text-[11px] text-white/30 leading-relaxed">
+          Switch between target GCP projects to manage different suite environments. 
+          Selecting a workspace will refresh the dashboard to reflect its specific data and infrastructure.
+        </p>
+
+        <div className="grid grid-cols-1 gap-3">
+          {availableWorkspaces.map((ws) => (
+            <button
+              key={ws.id}
+              onClick={() => setActiveWorkspaceId(ws.id)}
+              className={`flex items-center justify-between p-4 rounded-2xl border transition-all group ${
+                activeWorkspaceId === ws.id
+                  ? 'bg-primary/10 border-primary/50'
+                  : 'bg-white/5 border-white/10 hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-lg transition-colors ${
+                  activeWorkspaceId === ws.id ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/20'
+                }`}>
+                  <Layout className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-sm font-bold text-white/90">{ws.name}</h4>
+                  <p className="text-[10px] text-white/40 font-mono">{ws.gcpProjectId || 'default-project'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {activeWorkspaceId === ws.id ? (
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="text-[10px] font-black uppercase tracking-widest italic">Active</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                ) : ws.id !== 'stillwater-suite' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setWorkspaceToDelete({ id: ws.id, name: ws.name });
+                    }}
+                    className="p-2 rounded-lg hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="glass-card-static p-6 space-y-6 border-orange-500/10">
         <div className="flex items-center gap-3">
@@ -237,6 +296,50 @@ export function SettingsPage() {
       <button onClick={signOut} className="btn-danger w-full">
         <LogOut className="w-4 h-4" />Sign Out
       </button>
+
+      {/* Delete Confirmation Modal */}
+      {workspaceToDelete && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-[#050505] max-w-md w-full p-8 border border-red-500/30 space-y-6 rounded-[2.5rem] shadow-2xl">
+            <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto border border-red-500/20">
+              <Trash2 className="w-8 h-8 text-red-400" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-bold text-white uppercase tracking-tight">Delete Workspace</h3>
+              <p className="text-sm text-white/60 leading-relaxed">
+                Are you sure you want to delete <span className="text-white font-bold">"{workspaceToDelete.name}"</span>? 
+                This will remove all associated metadata for this environment.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setWorkspaceToDelete(null)}
+                className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white/60 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_URL}/api/workspaces/${workspaceToDelete.id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error('Delete failed');
+                    await refreshWorkspaces();
+                    setWorkspaceToDelete(null);
+                  } catch (err: any) {
+                    alert(err.message);
+                  }
+                }}
+                className="px-4 py-3 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-500/20"
+              >
+                Delete Forever
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

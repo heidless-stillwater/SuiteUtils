@@ -175,4 +175,31 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
     }
     return url;
   }
+
+  async move(src: string, dest: string): Promise<void> {
+    const srcId = await this.resolvePathToId(src);
+    const destParts = dest.split('/');
+    const destName = destParts.pop()!;
+    const destDirPath = destParts.join('/');
+    const destParentId = await this.resolvePathToId(destDirPath, true);
+
+    // Get current parents to remove them
+    const file = await this.drive.files.get({
+      fileId: srcId,
+      fields: 'parents',
+      supportsAllDrives: true
+    });
+    const previousParents = (file.data.parents || []).join(',');
+
+    await this.drive.files.update({
+      fileId: srcId,
+      addParents: destParentId,
+      removeParents: previousParents,
+      requestBody: {
+        name: destName
+      },
+      fields: 'id, parents',
+      supportsAllDrives: true
+    });
+  }
 }

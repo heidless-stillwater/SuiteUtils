@@ -150,7 +150,13 @@ export class ScheduleManager {
     }
 
     const job = cron.schedule(s.cronExpression, async () => {
-      const metadata = { scope: s.scope, appIds: s.appIds, version: 'auto-sched', includeStorage: s.includeStorage };
+      const metadata = { 
+        scope: s.scope, 
+        name: s.name, 
+        appIds: s.appIds, 
+        version: 'auto-sched', 
+        includeStorage: s.includeStorage 
+      };
       
       // Check for conflicts before running
       const conflict = operationMonitor.findIdenticalOperation('backup', metadata);
@@ -172,6 +178,7 @@ export class ScheduleManager {
       try {
         await this.orchestrator.runFullSuiteBackup({
           scope: s.scope,
+          name: s.name,
           includeStorage: s.includeStorage,
           appIds: s.appIds,
           version: 'auto-sched',

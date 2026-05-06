@@ -10,6 +10,7 @@ import { doc, getDoc, setDoc, Timestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import type { UserProfile, UserRole } from '../lib/types';
 import { ADMIN_EMAILS } from '../lib/types';
+import { sanitize } from '../lib/utils';
 
 interface AuthContextType {
   user: User | null;
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser) {
         try {
           const userProfile = await createOrUpdateProfile(firebaseUser);
-          setProfile(userProfile);
+          setProfile(sanitize(userProfile));
         } catch (err) {
           console.error('[Auth] Profile sync error:', err);
           setError('Failed to sync profile');
@@ -107,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
       if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
+        setProfile(sanitize(snap.data() as UserProfile));
       }
     });
     return () => unsub();
@@ -131,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshProfile = useCallback(async () => {
     if (!user) return;
     const snap = await getDoc(doc(db, 'users', user.uid));
-    if (snap.exists()) setProfile(snap.data() as UserProfile);
+    if (snap.exists()) setProfile(sanitize(snap.data() as UserProfile));
   }, [user]);
 
   const switchRole = useCallback(async (role: UserRole) => {

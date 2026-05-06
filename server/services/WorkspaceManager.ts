@@ -7,6 +7,8 @@ export interface AppConfig {
   dbId: string;
   projectPath: string;
   hostingTarget?: string;
+  deployMethod?: string;
+  deployUrl?: string;
 }
 
 export interface Workspace {
@@ -71,13 +73,14 @@ export class WorkspaceManager {
     this.load(); // Always reload to ensure sync with manual file edits
     let ws = this.workspaces.get(id);
     
-    // Self-healing: If unknown ID, provision with default Stillwater apps
-    if (!ws) {
-      console.log(`[WorkspaceManager] Auto-provisioning unknown workspace: ${id}`);
+    // Self-healing: ONLY auto-provision if 'stillwater-suite' is missing. 
+    // Otherwise, we get duplicate entries for every unique x-workspace-id header ever used.
+    if (!ws && id === 'stillwater-suite') {
+      console.log(`[WorkspaceManager] Provisioning missing primary workspace: ${id}`);
       ws = {
         id,
         name: 'Stillwater Suite',
-        description: 'Auto-provisioned Production Hub',
+        description: 'Primary Production Hub',
         createdAt: new Date().toISOString(),
         apps: [
           { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'videosystem-v0' },
@@ -113,6 +116,14 @@ export class WorkspaceManager {
     this.workspaces.set(id, updated);
     await this.save();
     return updated;
+  }
+
+  async deleteWorkspace(id: string) {
+    if (id === 'stillwater-suite') throw new Error('Cannot delete primary workspace');
+    if (!this.workspaces.has(id)) throw new Error(`Workspace ${id} not found`);
+    this.workspaces.delete(id);
+    await this.save();
+    return true;
   }
 }
 

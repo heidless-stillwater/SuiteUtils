@@ -19,4 +19,5 @@ export interface IStorageProvider {
   deleteBulk(paths: string[]): Promise<void>;
   createFolder(name: string, parentId?: string): Promise<string>;
   getDownloadUrl(path: string): Promise<string>;
+  move(src: string, dest: string): Promise<void>;
 }

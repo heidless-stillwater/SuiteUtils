@@ -1,27 +1,42 @@
-# backups
-BACKUPS/
-worktrees/
-server/config/service-account.json
-server/config/service-account-target.json
-
-# Logs
-logs
-*.log
+# Build and Output
+node_modules/
+dist/
+dist-ssr/
+build/
+.next/
+out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Environment and Secrets
+.env
+.env.*
+!.env.example
 *.local
+*.deploy
+*.yaml
+*.json
+!package.json
+!tsconfig.json
+!firebase.json
+!.firebaserc
+service-account*.json
 
-# Editor directories and files
-.vscode/*
+# Local persistence and targets
+.gcloud-target/
+scratch/
+BACKUPS/
+worktrees/
+logs/
+*.log
+
+# Editor and OS
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*

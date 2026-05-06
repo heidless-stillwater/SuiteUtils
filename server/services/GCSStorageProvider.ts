@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage';
+import * as path from 'path';
 import { IStorageProvider, StorageMetadata } from './IStorageProvider.js';
 
 export class GCSStorageProvider implements IStorageProvider {
@@ -175,5 +176,40 @@ export class GCSStorageProvider implements IStorageProvider {
       expires: Date.now() + 15 * 60 * 1000, // 15 minutes
     });
     return url;
+  }
+
+  async move(src: string, dest: string): Promise<void> {
+    const cleanSrc = src.startsWith('/') ? src.slice(1) : src;
+    const cleanDest = dest.startsWith('/') ? dest.slice(1) : dest;
+
+    const srcFile = this.bucket.file(cleanSrc);
+    const [exists] = await srcFile.exists();
+
+    if (exists) {
+      // It's a single file move
+      const destFile = this.bucket.file(cleanDest.endsWith('/') ? `${cleanDest}${path.basename(cleanSrc)}` : cleanDest);
+      await srcFile.copy(destFile);
+      await srcFile.delete();
+      console.log(`[GCS] Moved file: ${cleanSrc} -> ${destFile.name}`);
+    } else {
+      // It's a folder/prefix move
+      const srcPrefix = cleanSrc.endsWith('/') ? cleanSrc : `${cleanSrc}/`;
+      const [files] = await this.bucket.getFiles({ prefix: srcPrefix });
+
+      if (files.length === 0) {
+        console.warn(`[GCS] Move source not found: ${srcPrefix}`);
+        return;
+      }
+
+      await Promise.all(files.map(async (file) => {
+        const relativePath = file.name.substring(srcPrefix.length);
+        const targetPath = cleanDest.endsWith('/') ? `${cleanDest}${relativePath}` : `${cleanDest}/${relativePath}`;
+        const targetFile = this.bucket.file(targetPath);
+        
+        await file.copy(targetFile);
+        await file.delete();
+      }));
+      console.log(`[GCS] Moved folder: ${srcPrefix} -> ${cleanDest}`);
+    }
   }
 }

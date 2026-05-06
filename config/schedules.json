@@ -1,39 +1,124 @@
 [
   {
+    "name": "suiteutils backup 1",
     "cronExpression": "*/1 * * * *",
-    "scope": "backup_promptaccreditation-prompttool-promptresources_and_3_more",
-    "appIds": [
-      "promptaccreditation",
-      "prompttool",
-      "promptresources",
-      "plantune",
-      "suiteutils",
-      "promptmasterspa"
-    ],
-    "includeStorage": false,
-    "id": "excy1f",
-    "status": "paused",
-    "lastRun": "2026-04-30T14:50:08.069Z"
-  },
-  {
-    "cronExpression": "*/1 * * * *",
-    "scope": "backup_suiteutils",
+    "scope": "CustomSelection",
     "appIds": [
       "suiteutils"
     ],
     "includeStorage": false,
-    "id": "bei3i",
+    "id": "28wchk",
     "status": "paused",
-    "lastRun": "2026-04-30T19:50:05.399Z"
+    "lastRun": "2026-05-03T09:32:20.776Z"
   },
   {
+    "name": "plantune backup 1",
     "cronExpression": "*/1 * * * *",
-    "scope": "backup_plantune",
+    "scope": "CustomSelection",
     "appIds": [
       "plantune"
     ],
-    "includeStorage": true,
-    "id": "a5u1ul",
+    "includeStorage": false,
+    "id": "wurhl",
+    "status": "paused",
+    "lastRun": "2026-05-03T13:30:02.745Z"
+  },
+  {
+    "name": "res & accredit",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "promptaccreditation",
+      "promptresources"
+    ],
+    "includeStorage": false,
+    "id": "i8pzjk",
+    "status": "paused",
+    "lastRun": "2026-05-03T13:40:40.369Z"
+  },
+  {
+    "name": "ag-video-db 0",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "ag-video-system"
+    ],
+    "includeStorage": false,
+    "id": "8kmiyc",
     "status": "paused"
+  },
+  {
+    "name": "PromptAccreditation 0",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "promptaccreditation"
+    ],
+    "includeStorage": false,
+    "id": "57qd9k",
+    "status": "paused"
+  },
+  {
+    "name": "PromptMasterSPA 0",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "promptmasterspa"
+    ],
+    "includeStorage": false,
+    "id": "ackrza",
+    "status": "paused"
+  },
+  {
+    "name": "PlanTune 0",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "promptresources"
+    ],
+    "includeStorage": false,
+    "id": "3yjrpr",
+    "status": "paused",
+    "lastRun": "2026-05-03T14:02:53.745Z"
+  },
+  {
+    "name": "PromptResoures",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "promptresources"
+    ],
+    "includeStorage": false,
+    "id": "76k27h",
+    "status": "paused"
+  },
+  {
+    "name": "PromptTool 0",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "prompttool"
+    ],
+    "includeStorage": false,
+    "id": "021d5o",
+    "status": "paused"
+  },
+  {
+    "name": "full_test_NO_STORAGE",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "suiteutils",
+      "plantune",
+      "promptresources",
+      "promptaccreditation",
+      "prompttool",
+      "promptmasterspa",
+      "ag-video-system"
+    ],
+    "includeStorage": false,
+    "id": "99r9c",
+    "status": "paused",
+    "lastRun": "2026-05-03T14:19:28.171Z"
   }
 ]
