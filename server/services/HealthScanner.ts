@@ -30,9 +30,10 @@ export class HealthScanner {
     let url = '';
 
     if (appId.toLowerCase() === 'suiteutils') {
+      const port = process.env.PORT || 5185;
       url = isProd 
         ? 'https://suite-utils.web.app/api/health/ping'
-        : 'http://localhost:5181/api/health/ping';
+        : `http://localhost:${port}/api/health/ping`;
     } else {
       // Current Real Port Map (Dev)
       const portMap: Record<string, number> = {
@@ -44,13 +45,14 @@ export class HealthScanner {
         'plantune': 3004
       };
 
-      if (app.deployUrl) {
+      if (!isProd && portMap[appId]) {
+        url = `http://localhost:${portMap[appId]}/`;
+      } else if (app.deployUrl) {
         url = app.deployUrl;
       } else if (app.hostingTarget) {
         url = `https://${app.hostingTarget}.web.app/`;
       } else {
-        const port = portMap[appId] || 3000;
-        url = `http://localhost:${port}/`;
+        url = `http://localhost:${portMap[appId] || 3000}/`;
       }
     }
 

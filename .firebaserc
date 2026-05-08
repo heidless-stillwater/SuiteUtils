@@ -1,12 +1,12 @@
 {
   "projects": {
-    "default": "heidless-apps-0"
+    "default": "heidless-apps-2"
   },
   "targets": {
-    "heidless-apps-0": {
+    "heidless-apps-2": {
       "hosting": {
-        "suiteutils-v0": [
-          "suiteutils-v0"
+        "suite-utils": [
+          "suite-utils"
         ]
       }
     }

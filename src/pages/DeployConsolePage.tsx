@@ -880,7 +880,7 @@ export function DeployConsolePage() {
                           </div>
                         )}
                         <div className="w-1 h-1 rounded-full bg-white/10" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                        <span className={`text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
                           app.status === 'live' ? 'text-green-400' :
                           app.status === 'failed' ? 'text-red-400' :
                           app.status === 'building' || app.status === 'deploying' ? 'text-primary animate-pulse' :
@@ -889,7 +889,7 @@ export function DeployConsolePage() {
                         
                         {/* Health Status */}
                         <div className="w-1 h-1 rounded-full bg-white/10" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                        <span className={`text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
                           currentSuite?.apps?.[app.appId]?.health?.status === 'healthy' ? 'text-green-400' :
                           currentSuite?.apps?.[app.appId]?.health?.status === 'degraded' ? 'text-amber-400' :
                           'text-red-400'

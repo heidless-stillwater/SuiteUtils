@@ -1,4 +1,4 @@
-import { initializeApp, applicationDefault, getApps, App } from 'firebase-admin/app';
+import { App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import fs from 'fs-extra';
@@ -9,6 +9,7 @@ import { APPS_REGISTRY, AppRecord } from './AppRegistry.js';
 import { auditLogger } from './AuditLogger.js';
 import { operationMonitor } from './OperationMonitor.js';
 import { notificationManager } from './NotificationManager.js';
+import { adminApp } from './FirebaseAdmin.js';
 import crypto from 'crypto';
 
 export interface BackupOptions {
@@ -79,17 +80,11 @@ export class BackupOrchestrator {
     'media'
   ];
 
-  constructor(storageProvider: IStorageProvider, projectId: string = 'heidless-apps-0') {
+  constructor(storageProvider: IStorageProvider, projectId: string = 'heidless-apps-2') {
     this.storageProvider = storageProvider;
     this.projectId = projectId;
     this.localBackupRoot = path.join(process.cwd(), 'BACKUPS');
-    
-    this.firebaseApp = getApps().length === 0 
-      ? initializeApp({ 
-          credential: applicationDefault(), 
-          projectId: this.projectId 
-        })
-      : getApps()[0];
+    this.firebaseApp = adminApp;
   }
 
   private async calculateChecksum(filePath: string): Promise<string> {

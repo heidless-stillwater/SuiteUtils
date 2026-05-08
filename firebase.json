@@ -6,7 +6,7 @@
   },
 
   "hosting": {
-    "site": "suiteutils-v0",
+    "site": "suite-utils",
     "public": "dist",
     "headers": [
       {

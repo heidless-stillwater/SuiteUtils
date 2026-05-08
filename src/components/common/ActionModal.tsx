@@ -31,22 +31,26 @@ export function ActionModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-x-hidden overflow-y-auto outline-none focus:outline-none">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+    >
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm"
         />
 
-        {/* Modal Container */}
+        {/* Modal Card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-auto my-6 mx-auto max-w-md z-[101]"
+          className="relative z-[101] w-full max-w-md"
         >
           {/* Modal Content */}
           <div className="relative flex flex-col w-full bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl outline-none focus:outline-none overflow-hidden">
@@ -87,6 +91,7 @@ export function ActionModal({
                 <button
                   onClick={onConfirm}
                   disabled={isLoading}
+                  autoFocus
                   className={`relative px-6 py-2 text-sm font-bold text-white rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2 ${
                     confirmVariant === 'danger' 
                       ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' 

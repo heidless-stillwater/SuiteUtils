@@ -50,12 +50,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         borderRight: '1px solid rgba(148, 163, 184, 0.08)',
       }}
     >
-      {/* Header / Suite Switcher */}
+      {/* Header Section */}
       <div className="p-4 border-b border-white/5">
         {collapsed ? (
           <div className="flex justify-center">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_0_20px_rgba(13,148,136,0.3)]">
+              <Zap className="w-6 h-6 text-white" />
             </div>
           </div>
         ) : (

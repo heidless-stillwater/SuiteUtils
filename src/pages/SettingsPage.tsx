@@ -125,10 +125,10 @@ export function SettingsPage() {
 
         <div className="grid grid-cols-1 gap-3">
           {availableWorkspaces.map((ws) => (
-            <button
+            <div
               key={ws.id}
               onClick={() => setActiveWorkspaceId(ws.id)}
-              className={`flex items-center justify-between p-4 rounded-2xl border transition-all group ${
+              className={`flex items-center justify-between p-4 rounded-2xl border transition-all group cursor-pointer ${
                 activeWorkspaceId === ws.id
                   ? 'bg-primary/10 border-primary/50'
                   : 'bg-white/5 border-white/10 hover:bg-white/10'
@@ -163,7 +163,7 @@ export function SettingsPage() {
                   </button>
                 )}
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </div>

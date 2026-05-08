@@ -48,11 +48,42 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
           const data = docSnap.data() as Omit<Suite, 'id'>;
           console.log(`[SuiteContext] Loading suite: ${data.name} (Owner: ${data.ownerId})`);
           if (data.ownerId === user.uid) {
-            // Self-healing: if suiteutils was seeded as not-configured, fix it locally and in DB
-            if (data.apps?.suiteutils?.environments?.production?.status === 'not-configured') {
-              data.apps.suiteutils.environments.production.status = 'live';
-              setDoc(docSnap.ref, { 'apps.suiteutils': data.apps.suiteutils }, { merge: true }).catch(() => {});
+            // Self-healing: Migrate legacy infrastructure to heidless-apps-2
+            let needsSync = false;
+            if (data.apps) {
+              Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                const app = data.apps[appId];
+                if (app) {
+                  // Fix status for suiteutils if needed
+                  if (appId === 'suiteutils' && app.environments.production.status === 'not-configured') {
+                    app.environments.production.status = 'live';
+                    needsSync = true;
+                  }
+                  // Migrate hosting targets
+                  const currentHosting = app.environments.production.hostingTarget;
+                  const targetHosting = config.defaultEnv.hostingTarget;
+                  if (currentHosting !== targetHosting && targetHosting !== null) {
+                    // Only migrate if we have a known target that is different
+                    // Exception: don't overwrite if user manually changed it to something else (unlikely here)
+                    if (currentHosting?.endsWith('-v0') || currentHosting === 'promptmaster-v0' || !currentHosting) {
+                      app.environments.production.hostingTarget = targetHosting;
+                      needsSync = true;
+                    }
+                  }
+                  // Ensure project is set
+                  if (!app.project || app.project === 'heidless-apps-0') {
+                    app.project = 'heidless-apps-2';
+                    needsSync = true;
+                  }
+                }
+              });
             }
+
+            if (needsSync) {
+              console.log(`[SuiteContext] Syncing migrated config for suite: ${data.name}`);
+              setDoc(docSnap.ref, { apps: data.apps }, { merge: true }).catch(() => {});
+            }
+
             loaded.push(sanitize({ ...data, id: docSnap.id } as Suite));
           }
         });
@@ -125,7 +156,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const seedDefaultSuite = async (uid: string) => {
-    const suiteRef = doc(collection(db, 'suites'));
+    const suiteRef = doc(db, 'suites', 'stillwater-suite');
     const apps: Record<string, AppConfig> = {};
 
     Object.entries(STILLWATER_APPS).forEach(([key, config]) => {

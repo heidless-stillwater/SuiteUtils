@@ -43,7 +43,7 @@ export function SuiteSwitcher() {
           <Layers className="w-5 h-5 text-white" />
         </div>
         <div className="flex-1 text-left min-w-0">
-          <p className="text-sm font-bold text-white/90 truncate">
+          <p className="text-[13px] font-black text-white uppercase tracking-[0.15em] italic truncate leading-none mb-1">
             {currentSuite?.name || 'Select Suite'}
           </p>
           <p className="text-[10px] text-white/30 font-medium">

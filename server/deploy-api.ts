@@ -1,7 +1,19 @@
 import express from 'express';
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { suiteDb as firestore, adminApp as firebaseApp } from './services/FirebaseAdmin.js';
+import { Timestamp, getFirestore } from 'firebase-admin/firestore';
+import { MigrationManager } from './services/MigrationManager.js';
+
 console.log('🚀 [Cloud Run] Server process starting...');
 console.log(`📅 [Cloud Run] Time: ${new Date().toISOString()}`);
 console.log(`🔌 [Cloud Run] Expected Port: ${process.env.PORT || 5185}`);
+console.log(`🔑 [Auth] GOOGLE_APPLICATION_CREDENTIALS: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`);
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  const saPath = path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  console.log(`📂 [Auth] SA File exists: ${fs.existsSync(saPath)} (${saPath})`);
+}
 import cors from 'cors';
 import multer from 'multer';
 import { spawn } from 'child_process';
@@ -25,10 +37,9 @@ import { notificationManager } from './services/NotificationManager.js';
 import { settingsManager } from './services/SettingsManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
 import { invitationManager } from './services/InvitationManager.js';
-import { MigrationManager } from './services/MigrationManager.js';
-import { Timestamp, getFirestore } from 'firebase-admin/firestore';
-import { suiteDb as firestore, adminApp as firebaseApp } from './services/FirebaseAdmin.js';
 import { deploymentManager } from './services/DeploymentManager.js';
+
+console.log('🔥 [Firebase Admin] Initialized with Project:', firebaseApp.options.projectId);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -364,7 +375,7 @@ app.get('/api/workspaces', (req, res) => {
 
 app.get('/api/workspaces/current', (req, res) => {
   const ws = workspaceManager.getWorkspace((req as any).workspaceId);
-  res.json(ws);
+  res.json(ws || { id: (req as any).workspaceId, apps: [] });
 });
 
 app.post('/api/workspaces/:id', async (req, res) => {
@@ -518,7 +529,7 @@ app.get('/api/releases/:hostingTarget', async (req, res) => {
 
   try {
     const token = await getAccessToken();
-    const url = `https://firebasehosting.googleapis.com/v1beta1/sites/${hostingTarget}/releases?pageSize=10`;
+    const url = `https://firebasehosting.googleapis.com/v1beta1/projects/${project}/sites/${hostingTarget}/releases?pageSize=10`;
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -593,7 +604,7 @@ app.post('/api/rollback', async (req, res) => {
     sendEvent({ stage: 'rolling-back', message: `Cloning version to live...` });
 
     // POST a new release pointing to the old version — instant, no rebuild
-    const url = `https://firebasehosting.googleapis.com/v1beta1/sites/${hostingTarget}/releases?versionName=${encodeURIComponent(versionName)}`;
+    const url = `https://firebasehosting.googleapis.com/v1beta1/projects/${firebaseProject}/sites/${hostingTarget}/releases?versionName=${encodeURIComponent(versionName)}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -1429,6 +1440,15 @@ app.get('*any', (req, res) => {
   } else {
     res.status(404).send('Not Found');
   }
+});
+
+// Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Global Error Handler]:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

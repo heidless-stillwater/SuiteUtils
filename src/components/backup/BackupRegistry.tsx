@@ -53,6 +53,7 @@ interface BackupRegistryProps {
   sortMenuRef: React.RefObject<HTMLDivElement | null>;
   scopeSelectorCollapsed: boolean;
   setScopeSelectorCollapsed: (v: boolean) => void;
+  handleDownload: (path: string) => void;
 }
 
 const BackupRegistry: React.FC<BackupRegistryProps> = ({
@@ -86,7 +87,8 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
   running,
   sortMenuRef,
   scopeSelectorCollapsed,
-  setScopeSelectorCollapsed
+  setScopeSelectorCollapsed,
+  handleDownload
 }) => {
 
   const formatSize = (bytes?: string | number) => {
@@ -355,8 +357,12 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                           <Zap className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (backup.fullPath) handleDownload(backup.fullPath);
+                          }}
                           className="p-2 rounded-lg bg-white/5 hover:bg-primary/20 text-white/40 hover:text-primary transition-colors"
+                          title="Download Snapshot"
                         >
                           <Download className="w-4 h-4" />
                         </button>

@@ -52,11 +52,16 @@ class DeploymentManager extends EventEmitter {
             fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Project Path: ${projectPath} | Resolved: ${resolvePath(projectPath)}\n`);
 
             try {
+                if (!fs.existsSync(resolvePath(projectPath))) {
+                    throw new Error(`Project path does not exist: ${projectPath}`);
+                }
+
                 const buildProc = spawn('npm', ['run', 'build'], {
                     cwd: resolvePath(projectPath),
-                    shell: true,
+                    shell: '/bin/bash',
                     env: { 
                       ...process.env, 
+                      PATH: process.env.PATH, // Explicitly inherit PATH
                       FORCE_COLOR: '0',
                       CPUS: '1',
                       NODE_OPTIONS: '--max-old-space-size=4096'
@@ -230,7 +235,8 @@ class DeploymentManager extends EventEmitter {
         const deployArgs = ['deploy', '--only', `hosting:${hostingTarget || appId}`, '--project', firebaseProject, '--force'];
         const deployProc = spawn('firebase', deployArgs, {
             cwd: resolvePath(projectPath),
-            shell: '/bin/bash'
+            shell: '/bin/bash',
+            env: { ...process.env, PATH: process.env.PATH }
         });
 
         this.processes.set(jobId, deployProc);

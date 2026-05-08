@@ -29,7 +29,7 @@ export class ScheduleManager {
     fs.ensureDirSync(path.dirname(this.configPath));
     
     // Initialize Orchestrator using environment variables
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-0.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
     const credentialsPath = path.join(process.cwd(), 'server/config/service-account.json');
     
     const storage = new GCSStorageProvider(bucketName, credentialsPath);

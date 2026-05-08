@@ -205,6 +205,20 @@ export function BackupAdminPage() {
     }
   };
 
+  const handleDownload = async (cloudPath: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/storage/download?path=${encodeURIComponent(cloudPath)}`);
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, '_blank');
+      } else {
+        throw new Error(data.error || 'Failed to get download URL');
+      }
+    } catch (err: any) {
+      setError(`Download failed: ${err.message}`);
+    }
+  };
+
   const cancelOperation = async (id: string) => {
     try {
       await fetch(`${API_URL}/api/operations/${id}/cancel`, { method: 'POST' });
@@ -937,6 +951,7 @@ export function BackupAdminPage() {
           sortMenuRef={sortMenuRef}
           scopeSelectorCollapsed={scopeSelectorCollapsed}
           setScopeSelectorCollapsed={setScopeSelectorCollapsed}
+          handleDownload={handleDownload}
         />
 
 
