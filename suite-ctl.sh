@@ -13,11 +13,10 @@ TMUX_SESSION="stillwater"
 
 ensure_session() {
     if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        echo "🏗️ Forging Stillwater Hive..."
+        echo "🏗️ Forging Stillwater Hive (Non-Tmux Mode)..."
+        # Only create the DASHBOARD window. Background apps don't need windows.
         tmux new-session -d -s "$TMUX_SESSION" -n DASHBOARD
-        for i in {1..8}; do
-            tmux new-window -t "$TMUX_SESSION:$i"
-        done
+        
         # Start the Dashboard in Window 0
         tmux send-keys -t "$TMUX_SESSION:0" "cd /home/heidless/projects/SuiteUtils && ./suite-dashboard.sh" Enter
         sleep 1

@@ -12,6 +12,7 @@ import { BackupAdminPage } from './pages/BackupAdminPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
 import { DBAdminPage } from './pages/DBAdminPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PersonaPage } from './pages/PersonaPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { PricingPage } from './pages/PricingPage';
 import InvitationPage from './pages/InvitationPage';
@@ -44,6 +45,7 @@ function App() {
         <main className="p-8 pb-24">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/persona" element={<PersonaPage />} />
             <Route path="/deploy" element={<DeployConsolePage />} />
             <Route path="/history" element={<DeployHistoryPage />} />
             <Route path="/workspace" element={<WorkspacePage />} />

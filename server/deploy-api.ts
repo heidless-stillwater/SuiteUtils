@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { suiteDb as firestore, adminApp as firebaseApp } from './services/FirebaseAdmin.js';
+import { suiteDb as firestore, adminApp as firebaseApp, personaDb } from './services/FirebaseAdmin.js';
 import { Timestamp, getFirestore } from 'firebase-admin/firestore';
 import { MigrationManager } from './services/MigrationManager.js';
 
@@ -67,6 +67,34 @@ app.get('/api/verify-code', (req, res) => {
     timestamp: new Date().toISOString(),
     jobs: deploymentManager.getActiveJobs().length
   });
+});
+
+// PERSONA ARCHETYPE MANAGEMENT
+app.get('/api/persona/archetypes', async (req, res) => {
+  try {
+    const snapshot = await personaDb.collection('config').get();
+    const archetypes = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    res.json(archetypes);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/persona/archetypes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const update = req.body;
+    await personaDb.collection('config').doc(id).set({
+      ...update,
+      lastSyncAt: new Date().toISOString()
+    }, { merge: true });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Serve static files from Vite build (dist)
@@ -539,10 +567,6 @@ async function getAccessToken(): Promise<string> {
   return tokenResponse.token;
 }
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // ============================================================
 // GET /api/releases/:hostingTarget
@@ -979,6 +1003,66 @@ app.get('/api/deploy/:jobId/stream', (req, res) => {
 
   deploymentManager.on('update', onUpdate);
   res.on('close', () => deploymentManager.removeListener('update', onUpdate));
+});
+
+
+// ============================================================
+// Local Suite Orchestration (Non-Tmux)
+// ============================================================
+
+app.post('/api/suite/bulk-toggle', async (req, res) => {
+  const { appIds, enabled } = req.body;
+  if (!Array.isArray(appIds)) {
+    return res.status(400).json({ error: 'appIds must be an array' });
+  }
+
+  try {
+    await deploymentManager.bulkToggleLocalApps(appIds, enabled);
+    res.json({ success: true, message: `Bulk ${enabled ? 'enable' : 'disable'} sequence initiated.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/suite/start/:appId', async (req, res) => {
+  const { appId } = req.params;
+  const workspaceId = (req as any).workspaceId || 'stillwater-suite';
+  try {
+    await deploymentManager.startLocalApp(appId, workspaceId);
+    res.json({ success: true, message: `${appId} start sequence initiated.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/suite/stop/:appId', async (req, res) => {
+  const { appId } = req.params;
+  try {
+    await deploymentManager.stopLocalApp(appId);
+    res.json({ success: true, message: `${appId} stop sequence initiated.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/suite/restart/:appId', async (req, res) => {
+  const { appId } = req.params;
+  try {
+    await deploymentManager.restartLocalApp(appId);
+    res.json({ success: true, message: `${appId} restart sequence initiated.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/suite/logs/:appId', (req, res) => {
+  const { appId } = req.params;
+  try {
+    const logs = deploymentManager.getLocalLogs(appId);
+    res.json({ logs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 

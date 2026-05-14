@@ -1,21 +1,25 @@
 #!/bin/bash
-APP_NAME="Master"
+APP_NAME="PromptMaster"
 APP_DIR="/home/heidless/projects/PromptMasterSPA"
 TMUX_SESSION="stillwater"
-TMUX_PANE="6"
 PORT=5173
+LOG_FILE="/home/heidless/projects/SuiteUtils/master.log"
 
 case "$1" in
     start)
-        echo "Starting ${APP_NAME} on Port ${PORT}..."
-        tmux send-keys -t $TMUX_SESSION:$TMUX_PANE C-c Enter
-        tmux send-keys -t $TMUX_SESSION:$TMUX_PANE "cd $APP_DIR && npm run dev -- --port ${PORT}" Enter
-        echo "✅ ${APP_NAME} boot signal sent to tmux."
+        echo "🚀 Starting ${APP_NAME} on Port ${PORT}..."
+        if fuser ${PORT}/tcp >/dev/null 2>&1; then
+            echo "⚠️ ${APP_NAME} is already running on port ${PORT}."
+            exit 1
+        fi
+        cd $APP_DIR
+        nohup env PORT=${PORT} npm run dev -- --port ${PORT} > $LOG_FILE 2>&1 &
+        echo "✅ ${APP_NAME} background process initialized."
         ;;
     stop)
-        echo "Stopping ${APP_NAME}..."
-        tmux send-keys -t $TMUX_SESSION:$TMUX_PANE C-c Enter
-        echo "✅ ${APP_NAME} stop signal sent."
+        echo "🛑 Stopping ${APP_NAME}..."
+        fuser -k ${PORT}/tcp > /dev/null 2>&1
+        echo "✅ ${APP_NAME} processes terminated."
         ;;
     restart)
         $0 stop
@@ -29,8 +33,8 @@ case "$1" in
         else
             echo "❌ ${APP_NAME} is DOWN"
         fi
-        echo "--- Terminal Output ---"
-        tmux capture-pane -pt $TMUX_SESSION:$TMUX_PANE | tail -n 10
+        echo "--- Terminal Log (Last 10 Lines) ---"
+        tail -n 10 $LOG_FILE 2>/dev/null || echo "[No log file found]"
         ;;
     *)
         echo "Usage: $0 {start|stop|restart|status}"

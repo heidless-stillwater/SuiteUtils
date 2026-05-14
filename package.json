@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "dev:api": "tsx watch server/deploy-api.ts",
     "dev:all": "concurrently -n ui,api -c cyan,green \"npm run dev\" \"npm run dev:api\"",
     "build": "tsc -b && vite build",

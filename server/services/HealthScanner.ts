@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs-extra';
 import { suiteDb as firestore } from './FirebaseAdmin.js';
+import { execSync } from 'child_process';
 
 export interface HealthStatus {
   appId: string;
@@ -43,10 +44,9 @@ export class HealthScanner {
     const app = appRegistry.getApp(appId, workspaceId);
     if (!app && !firestoreUrl) return { appId, status: 'UNKNOWN', lastChecked: new Date().toISOString() };
 
-    // Determine the health URL
+    // Determine the health URL - Prioritize Local Port in Dev
     const isProd = process.env.NODE_ENV === 'production';
-    let url = firestoreUrl; 
-
+    
     // Current Real Port Map (Dev)
     const portMap: Record<string, number> = {
       'ag-video-system': 3000,
@@ -55,27 +55,31 @@ export class HealthScanner {
       'promptmasterspa': 5173,
       'promptaccreditation': 3003,
       'plantune': 3004,
-      'persona': 3005
+      'persona': 3005,
+      'suiteutils': 5185
     };
 
-    const port = portMap[appId] || 3000;
+    const port = portMap[appId.toLowerCase()];
+    let url = '';
 
-    if (!url) {
-      if (appId.toLowerCase() === 'suiteutils') {
-        const utilsPort = process.env.PORT || 5185;
-        url = isProd 
-          ? 'https://suite-utils.web.app/api/health/ping'
-          : `http://localhost:${utilsPort}/api/health/ping`;
-      } else {
-        if (!isProd && portMap[appId]) {
-          url = `http://localhost:${port}/`;
+    if (!isProd && port) {
+      // Force local probing in dev if we have a port mapped
+      url = `http://localhost:${port}/`;
+    } else {
+      // Use Firestore URL or other fallbacks in prod or if no local port
+      url = firestoreUrl;
+      if (!url) {
+        if (appId.toLowerCase() === 'suiteutils') {
+          url = isProd 
+            ? 'https://suite-utils.web.app/api/health/ping'
+            : `http://localhost:${port || 5185}/api/health/ping`;
         } else if (app?.deployUrl) {
           url = app.deployUrl;
         } else if (app?.hostingTarget && !app?.deployMethod?.includes('cloud')) {
           url = `https://${app.hostingTarget}.web.app/`;
         } else if (appId === 'persona') {
           url = 'https://persona-789026577646.us-central1.run.app/';
-        } else {
+        } else if (port) {
           url = `http://localhost:${port}/`;
         }
       }
@@ -83,11 +87,26 @@ export class HealthScanner {
 
     // PID Discovery (Local only)
     let pid: number | undefined;
-    if (!isProd) {
+    if (!isProd && port) {
       try {
-        const { execSync } = require('child_process');
-        const pidResult = execSync(`fuser ${port}/tcp 2>/dev/null | awk '{print $1}'`, { encoding: 'utf8' }).trim();
-        if (pidResult) pid = parseInt(pidResult);
+        // Primary probe: ss (Socket Statistics) - highly reliable on Linux
+        const ssResult = execSync(`ss -lntp "sport = :${port}" 2>/dev/null`, { encoding: 'utf8' }).trim();
+        
+        if (ssResult) {
+          // Parse: users:(("next-server (v1",pid=914884,fd=26))
+          const pidMatch = ssResult.match(/pid=(\d+)/);
+          if (pidMatch) {
+            pid = parseInt(pidMatch[1]);
+          }
+        }
+
+        // Fallback to fuser if ss fails to show users (permissions issue)
+        if (!pid) {
+          const fuserResult = execSync(`fuser ${port}/tcp 2>/dev/null | awk '{print $1}'`, { encoding: 'utf8' }).trim();
+          if (fuserResult) {
+            pid = parseInt(fuserResult.split('\n')[0].trim());
+          }
+        }
       } catch (e) {
         // Silently fail PID discovery
       }
@@ -147,7 +166,7 @@ export class HealthScanner {
     }
 
 
-    if (finalOk) {
+    if (finalOk || pid) {
       const status: HealthStatus = {
         appId,
         status: 'UP',
@@ -155,7 +174,8 @@ export class HealthScanner {
         responseTime: Date.now() - start,
         appVersion,
         pid,
-        port
+        port,
+        error: !finalOk ? 'Process active, but HTTP probe failed (Compiling/Initializing?)' : undefined
       };
       this.statusMap.set(appId, status);
       return status;
@@ -165,7 +185,7 @@ export class HealthScanner {
         status: lastRes ? 'DEGRADED' : 'DOWN',
         lastChecked: new Date().toISOString(),
         responseTime: Date.now() - start,
-        error: lastRes ? `HTTP ${lastRes.status}` : 'No response from known endpoints',
+        error: lastRes ? `HTTP ${lastRes.status}` : 'No response and no PID found',
         appVersion,
         pid,
         port

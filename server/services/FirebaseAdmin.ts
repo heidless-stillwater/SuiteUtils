@@ -63,6 +63,11 @@ export const suiteDb = getFirestore(adminApp, process.env.FIREBASE_DATABASE_ID |
 export const registryDb = getFirestore(adminApp, 'prompttool-db-0');
 
 /**
+ * Persona Database Accessor (for Archetype & Principle management)
+ */
+export const personaDb = getFirestore(adminApp, 'persona-db-0');
+
+/**
  * Auth Accessor
  */
 export const adminAuth = getAuth(adminApp);

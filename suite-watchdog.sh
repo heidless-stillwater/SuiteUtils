@@ -1,67 +1,44 @@
 #!/bin/bash
-# Stillwater Suite - Persistent Observability Watchdog v3
-# Updates tmux window names with status indicators (🟢/⚪)
+# Stillwater Suite - Persistent Observability & Resurrection Watchdog v4
+# Purpose: Ensures background processes stay alive and notifies dashboard.
 
-TMUX_SESSION="stillwater"
 PID_FILE="/tmp/suite-watchdog.pid"
+DASHBOARD_PID_FILE="/tmp/suite-dashboard.pid"
+CONFIG_FILE="/home/heidless/projects/SuiteUtils/suite.config.json"
+LOG_FILE="/home/heidless/projects/SuiteUtils/watchdog.log"
 
-# Kill existing watchdog if it exists
+# Kill existing watchdog
 if [ -f "$PID_FILE" ]; then
-    OLD_PID=$(cat "$PID_FILE")
-    kill "$OLD_PID" 2>/dev/null
-    rm "$PID_FILE"
+    kill $(cat "$PID_FILE") 2>/dev/null
 fi
-
 echo $$ > "$PID_FILE"
 
-CONFIG_FILE="/home/heidless/projects/SuiteUtils/suite.config.json"
-
-echo "🛰️ Watchdog v3 active for session [$TMUX_SESSION]"
+echo "[$(date)] 🛰️ Watchdog v4 (Resurrector) Active." >> "$LOG_FILE"
 
 while true; do
-    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        # Parse the config for ALL apps to ensure we handle the whole grid
-        # Format: id|name|port|enabled
-        MAP=$(grep -oP '"id": \K\d+|"name": "\K[^"]+|"port": \K\d+|"enabled": \K\w+' "$CONFIG_FILE" | xargs -n 4 echo | sed 's/ /|/g')
-        
-        while IFS='|' read -r id name port enabled; do
-            # Check if port is active (Check both IPv4 and IPv6 registries)
-            HEX_PORT=$(printf ":%04X" $port)
-            if grep -q "$HEX_PORT" /proc/net/tcp || grep -q "$HEX_PORT" /proc/net/tcp6; then
-                status="🟢"
-            else
-                # PRIORITY 2: INTENT (CONFIG)
-                if [ "$enabled" == "true" ]; then
-                    status="⚪"
-                else
-                    status="💤"
-                fi
+    STATE_CHANGED=false
+    # Parse modules from JSON (since jq is missing, we use a robust grep/sed hack)
+    # We look for blocks between { and }, then extract name, script, port, enabled
+    MODULE_DATA=$(grep -E "\"name\":|\"script\":|\"port\":|\"enabled\":" "$CONFIG_FILE" | sed 's/\"//g; s/,//g; s/: /:/g')
+    
+    # We iterate through the modules (assuming consistent ordering in the JSON)
+    # This extracts name, script, port, and enabled status
+    echo "$MODULE_DATA" | awk -F: '{print $2}' | xargs -n 4 | while read -r name script port enabled; do
+        if [ "$enabled" == "true" ]; then
+            # Robust check: look for :PORT followed by space or end of line
+            if ! ss -lnt | grep -qE ":$port(\s|$)" ; then
+                echo "[$(date)] ⚠️ $name (Port $port) OFFLINE. Attempting resurrection..." >> "$LOG_FILE"
+                /home/heidless/projects/SuiteUtils/$script start >> "$LOG_FILE" 2>&1
+                STATE_CHANGED=true
             fi
-            
-            # Rename the window ONLY if state has changed to prevent terminal flashing
-            window_idx=$id
-            supporting=$(grep "\"id\": $id" "$CONFIG_FILE" | grep -oP '"supportingPorts": \[\K[^\]]+' | tr -d ' ')
-            
-            if [ -n "$supporting" ]; then
-                new_name="[$status] $id:$name:$port+${supporting//,/+}"
-            else
-                new_name="[$status] $id:$name:$port"
-            fi
-            
-            current_name=$(tmux display-message -p -t "$TMUX_SESSION:$window_idx" "#W" 2>/dev/null)
-            
-            if [ "$new_name" != "$current_name" ]; then
-                tmux rename-window -t "$TMUX_SESSION:$window_idx" "$new_name" 2>/dev/null
-            fi
+        fi
+    done
 
-
-        done <<< "$MAP"
-
-        
-        # Set a persistent status bar message
-        tmux set-option -t "$TMUX_SESSION" status-left-length 50
-        tmux set-option -t "$TMUX_SESSION" status-left "#[fg=green,bold]Stillwater Hive: #[fg=yellow,bold]Config Synced "
+    # Notify Dashboard if any state changed
+    if [ "$STATE_CHANGED" == "true" ] && [ -f "$DASHBOARD_PID_FILE" ]; then
+        DASH_PID=$(cat "$DASHBOARD_PID_FILE")
+        kill -SIGUSR1 "$DASH_PID" 2>/dev/null
     fi
-    sleep 3
-done
 
+    sleep 10
+done

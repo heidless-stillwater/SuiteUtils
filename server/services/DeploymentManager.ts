@@ -20,8 +20,10 @@ export interface DeploymentJob {
     url?: string;
     envVars?: Record<string, string>;
 }
+import { suiteConfigManager } from './SuiteConfigManager.js';
+import { workspaceManager } from './WorkspaceManager.js';
 
-class DeploymentManager extends EventEmitter {
+export class DeploymentManager extends EventEmitter {
     private activeJobs = new Map<string, DeploymentJob>();
     private processes = new Map<string, ChildProcess>();
 
@@ -416,6 +418,111 @@ class DeploymentManager extends EventEmitter {
             return true;
         }
         return false;
+    }
+
+    private readonly APP_SCRIPT_MAP: Record<string, string> = {
+        'ag-video-system': 'video',
+        'prompttool': 'prompttool',
+        'promptresources': 'resources',
+        'promptmasterspa': 'master',
+        'promptaccreditation': 'accreditation',
+        'plantune': 'plantune',
+        'suiteutils': 'utils',
+        'persona': 'persona'
+    };
+
+    public async startLocalApp(appId: string, workspaceId: string = 'stillwater-suite'): Promise<void> {
+        const ws = workspaceManager.getWorkspace(workspaceId);
+        const app = ws?.apps.find(a => a.id === appId);
+        if (!app) throw new Error(`App ${appId} not found in workspace ${workspaceId}`);
+
+        const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
+        const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
+        
+        if (!fs.existsSync(scriptPath)) {
+            throw new Error(`Control script not found for ${appId} (Expected: ${scriptPath})`);
+        }
+
+        // Enable in config so Watchdog monitors it
+        suiteConfigManager.setModuleEnabled(scriptPrefix, true);
+
+        return new Promise((resolve, reject) => {
+            const proc = spawn('/bin/bash', [scriptPath, 'start']);
+            proc.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Failed to start ${appId} (Exit Code: ${code})`));
+            });
+        });
+    }
+
+    public async stopLocalApp(appId: string): Promise<void> {
+        const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
+        const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
+        
+        // Disable in config so Watchdog ignores it
+        suiteConfigManager.setModuleEnabled(scriptPrefix, false);
+
+        return new Promise((resolve, reject) => {
+            const proc = spawn('/bin/bash', [scriptPath, 'stop']);
+            proc.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Failed to stop ${appId} (Exit Code: ${code})`));
+            });
+        });
+    }
+
+    public async restartLocalApp(appId: string): Promise<void> {
+        const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
+        const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
+        return new Promise((resolve, reject) => {
+            const proc = spawn('/bin/bash', [scriptPath, 'restart']);
+            proc.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Failed to restart ${appId} (Exit Code: ${code})`));
+            });
+        });
+    }
+
+    public async bulkToggleLocalApps(appIds: string[], enabled: boolean): Promise<void> {
+        const scriptPrefixes = appIds.map(id => this.APP_SCRIPT_MAP[id] || id);
+        
+        // 1. Update config first (so Watchdog knows what to do)
+        suiteConfigManager.setModulesEnabled(scriptPrefixes, enabled);
+
+        // 2. Perform process actions
+        const action = enabled ? 'start' : 'stop';
+        const results = await Promise.allSettled(
+            appIds.map(appId => {
+                const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
+                const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
+                return new Promise<void>((resolve, reject) => {
+                    const proc = spawn('/bin/bash', [scriptPath, action]);
+                    proc.on('close', (code) => {
+                        if (code === 0) resolve();
+                        else reject(new Error(`Failed to ${action} ${appId}`));
+                    });
+                });
+            })
+        );
+
+        const failed = results.filter(r => r.status === 'rejected');
+        if (failed.length > 0) {
+            console.error(`[DeploymentManager] Bulk ${action} partially failed:`, failed);
+        }
+    }
+
+    public getLocalLogs(appId: string, lines: number = 50): string {
+        const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
+        const logFile = path.join(process.cwd(), `${scriptPrefix}.log`);
+        if (!fs.existsSync(logFile)) return '[No log file found]';
+        
+        try {
+            const content = fs.readFileSync(logFile, 'utf8');
+            const linesArr = content.split('\n');
+            return linesArr.slice(-lines).join('\n');
+        } catch (err) {
+            return `[Error reading logs: ${err}]`;
+        }
     }
 
     public getActiveJobs(): DeploymentJob[] {
