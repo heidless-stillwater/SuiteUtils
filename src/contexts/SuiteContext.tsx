@@ -52,6 +52,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
             let needsSync = false;
             if (data.apps) {
               Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                // 1. Migrate/fix existing apps
                 const app = data.apps[appId];
                 if (app) {
                   // Fix status for suiteutils if needed
@@ -59,16 +60,16 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                     app.environments.production.status = 'live';
                     needsSync = true;
                   }
-                  // Migrate hosting targets
+                  // Migrate hosting targets and deploy methods
                   const currentHosting = app.environments.production.hostingTarget;
                   const targetHosting = config.defaultEnv.hostingTarget;
-                  if (currentHosting !== targetHosting && targetHosting !== null) {
-                    // Only migrate if we have a known target that is different
-                    // Exception: don't overwrite if user manually changed it to something else (unlikely here)
-                    if (currentHosting?.endsWith('-v0') || currentHosting === 'promptmaster-v0' || !currentHosting) {
-                      app.environments.production.hostingTarget = targetHosting;
-                      needsSync = true;
-                    }
+                  const currentMethod = app.environments.production.deployMethod;
+                  const targetMethod = config.defaultEnv.deployMethod;
+
+                  if (currentHosting !== targetHosting || currentMethod !== targetMethod) {
+                    app.environments.production.hostingTarget = targetHosting;
+                    app.environments.production.deployMethod = targetMethod;
+                    needsSync = true;
                   }
                   // Ensure project is set
                   if (!app.project || app.project === 'heidless-apps-0') {
@@ -77,10 +78,29 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                   }
                 }
               });
+
+              // 2. Add missing apps from registry
+              Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                if (!data.apps[appId]) {
+                  console.log(`[SuiteContext] Found missing app in registry: ${appId}. Adding...`);
+                  data.apps[appId] = {
+                    displayName: config.displayName,
+                    path: config.path,
+                    database: config.database,
+                    project: config.project,
+                    environments: {
+                      production: { ...config.defaultEnv, lastDeployAt: null },
+                      staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
+                      dev: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
+                    },
+                  };
+                  needsSync = true;
+                }
+              });
             }
 
             if (needsSync) {
-              console.log(`[SuiteContext] Syncing migrated config for suite: ${data.name}`);
+              console.log(`[SuiteContext] Syncing updated config for suite: ${data.name}`);
               setDoc(docSnap.ref, { apps: data.apps }, { merge: true }).catch(() => {});
             }
 

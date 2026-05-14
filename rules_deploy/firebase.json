@@ -1,0 +1,12 @@
+{
+  "firestore": [
+    { "database": "persona-db-0", "rules": "firestore.rules" },
+    { "database": "prompttool-db-0", "rules": "firestore.rules" },
+    { "database": "promptresources-db-0", "rules": "firestore.rules" },
+    { "database": "promptmaster-spa-db-0", "rules": "firestore.rules" },
+    { "database": "promptaccreditation-db-0", "rules": "firestore.rules" },
+    { "database": "plantune-db-0", "rules": "firestore.rules" },
+    { "database": "suiteutils-db-0", "rules": "firestore.rules" },
+    { "database": "autovideo-db-0", "rules": "firestore.rules" }
+  ]
+}

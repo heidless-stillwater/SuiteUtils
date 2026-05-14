@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { path: '/history', icon: History, label: 'Deploy History' },
   { path: '/workspace', icon: Layers, label: 'Workspace' },
   { path: '/backups', icon: Database, label: 'Backups' },
+  { path: '/db-admin', icon: Zap, label: 'DB Admin' },
   { path: '/activity', icon: ClipboardList, label: 'Activity Log' },
   { path: '/themes', icon: Palette, label: 'Theme Studio' },
   { path: '/settings', icon: Settings, label: 'Settings' },

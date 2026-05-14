@@ -23,6 +23,8 @@ interface HealthResult {
   latency: number;
   lastChecked: string;
   appVersion?: string;
+  pid?: number;
+  port?: number;
 }
 
 export function DashboardPage() {
@@ -169,6 +171,11 @@ export function DashboardPage() {
                       }`}>
                         {health?.status || 'UNKNOWN'}
                       </span>
+                      {health && (
+                        <span className="text-[9px] font-mono text-white/30">
+                          {health.pid ? `PID: ${health.pid} | ` : ''}Port: {health.port}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <StatusBadge status={status} />

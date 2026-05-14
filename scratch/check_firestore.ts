@@ -1,22 +1,23 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import path from 'path';
 
-const firebaseApp = getApps().length === 0 
-  ? initializeApp({ 
-      credential: cert(path.join(process.cwd(), 'server', 'config', 'service-account.json')),
-      projectId: 'heidless-apps-0' 
-    })
-  : getApps()[0];
+import { suiteDb as firestore } from '../server/services/FirebaseAdmin.js';
 
-const firestore = getFirestore(firebaseApp, 'suiteutils-db-0');
-
-async function checkSuites() {
-  const snap = await firestore.collection('suites').get();
-  snap.forEach(doc => {
-    console.log('ID:', doc.id);
-    console.log('Data:', JSON.stringify(doc.data(), null, 2));
-  });
+async function checkPersona() {
+  const doc = await firestore.collection('suites').doc('stillwater-suite').get();
+  if (doc.exists) {
+    const data = doc.data();
+    if (data) {
+      console.log('Apps:', Object.keys(data.apps || {}));
+      if (data.apps?.persona) {
+        console.log('Persona Data:', JSON.stringify(data.apps.persona, null, 2));
+      } else {
+        console.log('Persona missing from apps map');
+      }
+      console.log('Top level keys:', Object.keys(data));
+    }
+  } else {
+    console.log('Suite doc not found');
+  }
+  process.exit(0);
 }
 
-checkSuites().catch(console.error);
+checkPersona();

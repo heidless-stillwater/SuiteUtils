@@ -10,6 +10,7 @@ import { DeployHistoryPage } from './pages/DeployHistoryPage';
 import { ThemeStudioPage } from './pages/ThemeStudioPage';
 import { BackupAdminPage } from './pages/BackupAdminPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
+import { DBAdminPage } from './pages/DBAdminPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { PricingPage } from './pages/PricingPage';
@@ -47,6 +48,7 @@ function App() {
             <Route path="/history" element={<DeployHistoryPage />} />
             <Route path="/workspace" element={<WorkspacePage />} />
             <Route path="/backups" element={<BackupAdminPage />} />
+            <Route path="/db-admin" element={<DBAdminPage />} />
             <Route path="/activity" element={<ActivityLogPage />} />
             <Route path="/themes" element={<ThemeStudioPage />} />
             <Route path="/settings" element={<SettingsPage />} />

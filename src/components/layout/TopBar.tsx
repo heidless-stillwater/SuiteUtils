@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { Bell, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSuite } from '../../contexts/SuiteContext';
+import { usePersona } from '../../contexts/PersonaContext';
 
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard',
@@ -48,23 +49,45 @@ export function TopBar() {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
         </button>
 
-        {/* User Avatar */}
-        {profile && (
-          <div className="flex items-center gap-3">
-            {profile.photoURL ? (
-              <img
-                src={profile.photoURL}
-                alt={profile.displayName || ''}
-                className="w-8 h-8 rounded-full border border-white/10"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
-                {(profile.displayName || profile.email)?.[0]?.toUpperCase()}
-              </div>
-            )}
-          </div>
-        )}
+        {/* User Avatar & Persona */}
+        <div className="flex items-center gap-3">
+          <PersonaIndicator />
+          {profile && (
+            <>
+              {profile.photoURL ? (
+                <img
+                  src={profile.photoURL}
+                  alt={profile.displayName || ''}
+                  className="w-8 h-8 rounded-full border border-white/10"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+                  {(profile.displayName || profile.email)?.[0]?.toUpperCase()}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </header>
+  );
+}
+
+function PersonaIndicator() {
+  const { profile, isAligned } = usePersona();
+  if (!profile) return null;
+
+  return (
+    <div 
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+        isAligned ? 'border-accent/20 bg-accent/5' : 'border-white/5 bg-white/5 opacity-50'
+      }`}
+      title={isAligned ? 'Synchronized with Persona Hub' : 'Syncing...'}
+    >
+      <div className={`w-1.5 h-1.5 rounded-full ${isAligned ? 'bg-accent animate-pulse' : 'bg-white/20'}`} />
+      <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
+        {profile.archetype}
+      </span>
+    </div>
   );
 }

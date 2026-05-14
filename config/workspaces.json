@@ -19,14 +19,14 @@
         "name": "PromptTool v1.0",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "heidless-prompt-tool"
+        "deployMethod": "cloud-build"
       },
       {
         "id": "promptresources",
         "name": "PromptResources v1.0",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "heidless-prompt-resources"
+        "hostingTarget": "prompt-resources"
       },
       {
         "id": "promptmasterspa",
@@ -40,7 +40,7 @@
         "name": "PromptAccreditation v1.0",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "heidless-prompt-accreditation"
+        "deployMethod": "cloud-build"
       },
       {
         "id": "plantune",
@@ -56,6 +56,13 @@
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
         "hostingTarget": "suite-utils"
+      },
+      {
+        "id": "persona",
+        "name": "Persona v1.0",
+        "dbId": "persona-db-0",
+        "projectPath": "~/projects/Persona",
+        "deployMethod": "cloud-build"
       }
     ]
   },
@@ -78,7 +85,7 @@
         "name": "PromptTool v1.0",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "prompttool-v0"
+        "deployMethod": "cloud-build"
       },
       {
         "id": "promptresources",
@@ -99,7 +106,7 @@
         "name": "PromptAccreditation v1.0",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "promptaccreditation-v0"
+        "deployMethod": "cloud-build"
       },
       {
         "id": "plantune",
@@ -114,6 +121,13 @@
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
         "hostingTarget": "suiteutils-v0"
+      },
+      {
+        "id": "persona",
+        "name": "Persona v1.0",
+        "dbId": "persona-db-0",
+        "projectPath": "~/projects/Persona",
+        "deployMethod": "cloud-build"
       }
     ]
   }

@@ -1,0 +1,49 @@
+{
+    "name": "prompt-tool",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "build:static": "echo 'DEPRECATED: PromptTool now requires an active Node backend. Use standard build.'",
+        "start": "next start",
+        "lint": "next lint",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "e2e": "playwright test",
+        "e2e:headed": "playwright test --headed",
+        "e2e:report": "playwright show-report"
+    },
+    "dependencies": {
+        "@google-cloud/aiplatform": "^6.7.0",
+        "@google/genai": "^1.0.0",
+        "@opentelemetry/api": "^1.9.1",
+        "@stripe/stripe-js": "^2.4.0",
+        "@tanstack/react-query": "^5.90.21",
+        "@tanstack/react-query-devtools": "^5.91.3",
+        "clsx": "^2.1.1",
+        "firebase": "^10.8.0",
+        "firebase-admin": "^12.0.0",
+        "framer-motion": "^12.34.0",
+        "lucide-react": "^0.564.0",
+        "next": "14.2.14",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0",
+        "recharts": "^3.7.0",
+        "stripe": "^14.14.0",
+        "tailwind-merge": "^3.4.0",
+        "zod": "^4.3.6"
+    },
+    "devDependencies": {
+        "@types/node": "^20",
+        "@types/react": "^18",
+        "@types/react-dom": "^18",
+        "autoprefixer": "^10.4.27",
+        "eslint": "^8",
+        "eslint-config-next": "14.2.14",
+        "postcss": "^8.5.9",
+        "tailwindcss": "^3.4.19",
+        "typescript": "^5"
+    }
+}

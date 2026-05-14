@@ -31,7 +31,7 @@ export interface UserProfile {
 
 export type DeployMethod = 'firebase' | 'cloud-build';
 export type EnvironmentTag = 'production' | 'staging' | 'dev';
-export type AppStatus = 'live' | 'deploying' | 'verifying' | 'failed' | 'not-configured';
+export type AppStatus = 'live' | 'deploying' | 'verifying' | 'failed' | 'not-configured' | 'stopped';
 
 export interface EnvironmentConfig {
   hostingTarget: string | null;
@@ -184,5 +184,12 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     database: 'suiteutils-db-0',
     project: 'heidless-apps-2',
     defaultEnv: { hostingTarget: 'suite-utils', deployMethod: 'firebase', status: 'live' },
+  },
+  'persona': {
+    displayName: 'Persona v1.0',
+    path: '~/projects/Persona',
+    database: 'persona-db-0',
+    project: 'heidless-apps-2',
+    defaultEnv: { hostingTarget: null, deployMethod: 'cloud-build', status: 'stopped' },
   },
 };

@@ -58,6 +58,17 @@ scheduleManager.init();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+app.get('/api/verify-code', (req, res) => {
+  res.json({
+    status: 'ok',
+    code: 'v7-PathDiagnostics',
+    filename: fileURLToPath(import.meta.url),
+    cwd: process.cwd(),
+    timestamp: new Date().toISOString(),
+    jobs: deploymentManager.getActiveJobs().length
+  });
+});
+
 // Serve static files from Vite build (dist)
 const distPath = path.join(process.cwd(), 'dist');
 if (fs.existsSync(distPath)) {
@@ -80,6 +91,18 @@ const terminalStateLocked = new Set<string>();
 const verifyingJobs = new Set<string>();
 
 deploymentManager.on('update', async (job: any) => {
+  // PERSIST IN-PROGRESS STATES
+  if (job.status === 'building' || job.status === 'deploying' || job.status === 'verifying') {
+    const workspaceId = job.workspaceId || 'stillwater-suite';
+    const appId = job.appId;
+    
+    const suiteRef = firestore.collection('suites').doc(workspaceId);
+    suiteRef.set({
+      [`apps.${appId}.environments.production.status`]: job.status,
+      updatedAt: Timestamp.now()
+    }, { merge: true }).catch(() => {});
+  }
+
   // Handle server-side verification
   if (job.status === 'verifying') {
     if (verifyingJobs.has(job.id)) return;
@@ -88,8 +111,11 @@ deploymentManager.on('update', async (job: any) => {
     // If no URL is present, we try one last time to extract it from logs or use a placeholder
     if (!job.url) {
       const logsText = job.logs.join('\n');
-      const urlMatch = logsText.match(/Service URL: (https?:\/\/\S+)/) || 
-                       logsText.match(/https?:\/\/[a-z0-9-]+\.[a-z0-9-]+\.a\.run\.app/);
+      // IMPROVED REGEX: Handle gcloud run deploy output more reliably
+      const urlMatch = logsText.match(/Service URL: (https?:\/\/\S+)/i) || 
+                       logsText.match(/https?:\/\/[a-z0-9-]+\.[a-z0-9-]+\.run\.app/i) ||
+                       logsText.match(/https?:\/\/[a-z0-9-]+\.[a-z0-9-]+\.a\.run\.app/i);
+      
       if (urlMatch) {
         job.url = urlMatch[1] || urlMatch[0];
       }
@@ -111,9 +137,9 @@ deploymentManager.on('update', async (job: any) => {
     } else {
       // FALLBACK: If it's been in verifying for more than 30s without a URL, 
       // and it's a Cloud Run app, we'll mark it as live but warn about the URL.
-      // This prevents the "hanging" state the user reported.
+      // We increase the timeout to 60s for Cloud Run as gcloud output can be delayed.
       const elapsed = (Date.now() - job.startedAt) / 1000;
-      if (elapsed > 45) {
+      if (elapsed > 300) { // 5 minutes total job time
         job.logs.push('\n── WARNING: Could not verify health (URL not found). Marking as LIVE.');
         verifyingJobs.delete(job.id);
         deploymentManager.finishJob(job.id);
@@ -136,27 +162,27 @@ deploymentManager.on('update', async (job: any) => {
     console.log(`[Global Persistence] Detected ${status} for ${appId}. Updating workspace: ${workspaceId}`);
 
     const suiteRef = firestore.collection('suites').doc(workspaceId);
-    const suiteUpdate: any = {
+    const updatePayload: any = {
       [`apps.${appId}.environments.production.status`]: status,
-      [`apps.${appId}.environments.production.lastDeployAt`]: Timestamp.now(),
       updatedAt: Timestamp.now()
     };
-    
-    if (job.url) {
-      suiteUpdate[`apps.${appId}.environments.production.deployUrl`] = job.url;
+
+    if (status === 'live' && job.url) {
+      updatePayload[`apps.${appId}.environments.production.deployUrl`] = job.url;
+      updatePayload[`apps.${appId}.environments.production.lastDeployAt`] = Timestamp.now();
     }
 
-    suiteRef.set(suiteUpdate, { merge: true })
-    .then(() => {
-      const msg = `[Global Persistence] Successfully updated ${appId} in ${workspaceId}\n`;
-    })
-    .catch(err => {
-      const msg = `[Global Persistence] Failed for ${appId} in ${workspaceId}: ${err.message}\n`;
-    });
+    try {
+      await suiteRef.update(updatePayload);
+      console.log(`[Global Persistence] Successfully updated ${appId} to ${status} in ${workspaceId}`);
+    } catch (err: any) {
+      // If document doesn't exist, fallback to set (though it should exist)
+      if (err.code === 5) { // NOT_FOUND
+         await suiteRef.set(updatePayload, { merge: true });
+      }
+    }
 
     // Persist history record when finished
-    const persistenceMsg = `[Persistence] Saving history record for ${appId} (${status}) to suite: ${workspaceId}\n`;
-    
     firestore.collection('deployments').add({
       suiteId: workspaceId,
       batchId: job.id,
@@ -908,7 +934,7 @@ app.post('/api/deploy', async (req, res) => {
     deploymentManager.removeListener('update', onUpdate);
   });
 
-  // Start the background process AFTER attaching listener
+  console.log(`\n[DEPLOY_API] >>>>> EXECUTING START_DEPLOY FOR: ${appId} (Job: ${jobId}) <<<<<\n`);
   deploymentManager.startDeploy(jobId, appId, resolvedPath, resolvedHostingTarget, firebaseProject, workspaceId, resolvedDeployMethod);
 });
 
@@ -1361,6 +1387,7 @@ app.get('/api/releases/run', async (req, res) => {
   }
 
   const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 10000); // Increased to 10s for Cloud Run cold starts
   activeReleaseControllers.set(appId, controller);
 
   try {

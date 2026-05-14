@@ -1,9 +1,11 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execFile, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import fs from 'fs';
+import fs, { appendFileSync } from 'fs';
 import path from 'path';
 
-const resolvePath = (p: string) => p.replace(/^~/, process.env.HOME || '');
+import os from 'os';
+const DEBUG_LOG_PATH = path.join(process.cwd(), 'logs/deploy_debug.log');
+const resolvePath = (p: string) => p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
 
 export interface DeploymentJob {
     id: string;
@@ -16,11 +18,19 @@ export interface DeploymentJob {
     duration?: number;
     error?: string;
     url?: string;
+    envVars?: Record<string, string>;
 }
 
 class DeploymentManager extends EventEmitter {
     private activeJobs = new Map<string, DeploymentJob>();
     private processes = new Map<string, ChildProcess>();
+
+    constructor() {
+        super();
+        const msg = `DeploymentManager initialized at ${new Date().toISOString()} (v8-ResilientPath)`;
+        console.log(`[DeploymentManager] ${msg}`);
+        fs.writeFileSync('GHOST_TEST.txt', msg);
+    }
 
     startDeploy(jobId: string, appId: string, projectPath: string, hostingTarget: string | null, firebaseProject: string, workspaceId: string, deployMethod: string = 'firebase') {
         const existingJob = Array.from(this.activeJobs.values()).find(
@@ -34,7 +44,7 @@ class DeploymentManager extends EventEmitter {
             id: jobId,
             appId,
             status: 'building',
-            logs: [`── Initializing ${deployMethod} deployment for ${appId}`],
+            logs: [`── Initializing ${deployMethod} deployment for ${appId} (v9-DirectSpawn)`],
             startedAt: Date.now(),
             workspaceId,
             deployMethod: deployMethod || 'firebase'
@@ -44,38 +54,105 @@ class DeploymentManager extends EventEmitter {
         this.emit('update', job);
 
         const runBuild = () => {
-            // We now force local build even for cloud-run to support high-speed standalone container builds
-            // which rely on locally generated .next/standalone artifacts.
-
             fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Spawning: npm run build in ${projectPath}\n`);
-            this.appendLog(jobId, `── Starting local build: npm run build...`);
-            fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Project Path: ${projectPath} | Resolved: ${resolvePath(projectPath)}\n`);
+            this.appendLog(jobId, `── Starting local build (TRACER_BINGO): npm run build...`);
+
+            const resolvedPath = resolvePath(projectPath);
+            fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Project Path: ${projectPath} | Resolved: ${resolvedPath}\n`);
 
             try {
-                if (!fs.existsSync(resolvePath(projectPath))) {
-                    throw new Error(`Project path does not exist: ${projectPath}`);
+                if (!fs.existsSync(resolvedPath)) {
+                    throw new Error(`Project path does not exist: ${resolvedPath}`);
                 }
 
-                const buildProc = spawn('npm', ['run', 'build'], {
-                    cwd: resolvePath(projectPath),
-                    shell: '/bin/bash',
-                    env: { 
-                      ...process.env, 
-                      PATH: process.env.PATH, // Explicitly inherit PATH
-                      FORCE_COLOR: '0',
-                      CPUS: '1',
-                      NODE_OPTIONS: '--max-old-space-size=4096'
+                // Load environment variables for build-time injection
+                const envVars: Record<string, string> = {};
+                const envPaths = ['.env.production', '.env.local', '.env'];
+
+                for (const envFile of envPaths) {
+                    const fullPath = path.join(resolvePath(projectPath), envFile);
+                    if (fs.existsSync(fullPath)) {
+                        this.appendLog(jobId, `── Detected ${envFile}, filtering build-time variables...`);
+                        const content = fs.readFileSync(fullPath, 'utf8');
+                        content.split('\n').forEach(line => {
+                            const trimmed = line.trim();
+                            if (trimmed && !trimmed.startsWith('#')) {
+                                const [key, ...valueParts] = trimmed.split('=');
+                                const value = valueParts.join('=');
+                                if (key && value) {
+                                    const k = key.trim();
+                                    const v = value.trim().replace(/^["']|["']$/g, '');
+
+                                    if (k.includes('PROJECT_ID') && v === 'heidless-apps-0' && firebaseProject === 'heidless-apps-2') {
+                                        return;
+                                    }
+
+                                    envVars[k] = v;
+                                }
+                            }
+                        });
+                        break;
                     }
+                }
+                job.envVars = envVars;
+
+                const nodePath = process.execPath;
+                const nodeBinDir = path.dirname(nodePath);
+                let npmCliPath = path.join(nodeBinDir, '../lib/node_modules/npm/bin/npm-cli.js');
+                
+                // Fallback for some systems where it might be in a different place
+                if (!fs.existsSync(npmCliPath)) {
+                  npmCliPath = '/home/heidless/.nvm/versions/node/v22.22.2/lib/node_modules/npm/bin/npm-cli.js';
+                }
+
+                if (!fs.existsSync(npmCliPath)) {
+                    throw new Error(`Could not locate npm-cli.js. Checked: ${npmCliPath}`);
+                }
+
+                this.appendLog(jobId, `── Starting local build (V8-RESILIENT): npm run build...`);
+                this.appendLog(jobId, `── DEBUG: nodePath=${nodePath}`);
+                this.appendLog(jobId, `── DEBUG: npmCliPath=${npmCliPath}`);
+                
+                // HARDEN ENVIRONMENT: Inject a robust PATH if it's missing or sparse
+                const fallbackPath = [
+                  nodeBinDir,
+                  '/usr/local/sbin',
+                  '/usr/local/bin',
+                  '/usr/sbin',
+                  '/usr/bin',
+                  '/sbin',
+                  '/bin'
+                ].join(':');
+
+                const finalEnv = { 
+                  ...process.env, 
+                  PATH: process.env.PATH ? `${process.env.PATH}:${fallbackPath}` : fallbackPath,
+                  ...envVars, 
+                  FORCE_COLOR: '0' 
+                };
+
+                this.appendLog(jobId, `── DEBUG: PATH=${finalEnv.PATH.slice(0, 100)}...`);
+                
+                appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] Spawning (V8): ${nodePath} ${npmCliPath} run build in ${resolvedPath}\n`);
+                appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] PATH: ${finalEnv.PATH}\n`);
+
+                const buildProc = spawn(nodePath, [npmCliPath, 'run', 'build'], {
+                    cwd: resolvedPath,
+                    env: finalEnv
                 });
 
                 this.processes.set(jobId, buildProc);
 
-                buildProc.stdout.on('data', (chunk) => this.appendLog(jobId, chunk.toString()));
-                buildProc.stderr.on('data', (chunk) => this.appendLog(jobId, chunk.toString(), true));
+                if (buildProc.stdout) {
+                  buildProc.stdout.on('data', (chunk) => this.appendLog(jobId, chunk.toString()));
+                }
+                if (buildProc.stderr) {
+                  buildProc.stderr.on('data', (chunk) => this.appendLog(jobId, chunk.toString(), true));
+                }
 
                 buildProc.on('error', (err) => {
-                    this.appendLog(jobId, `\n── ERROR: Failed to start npm build: ${err.message}`, true);
-                    this.failJob(jobId, `Failed to start npm: ${err.message}`);
+                    this.appendLog(jobId, `\n── ERROR: Failed to start npm build (V7): ${err.message}`, true);
+                    this.failJob(jobId, `Failed to start npm (V7): ${err.message}`);
                 });
 
                 buildProc.on('close', (code) => {
@@ -83,6 +160,9 @@ class DeploymentManager extends EventEmitter {
                     if (code !== 0) {
                         this.failJob(jobId, `Build failed with exit code ${code}`);
                     } else {
+                        this.appendLog(jobId, `── Local build successful (Code 0)`);
+                        appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] Local build SUCCESS for ${appId}. Proceeding to ${deployMethod} phase.\n`);
+
                         if (deployMethod === 'cloud-build' || deployMethod === 'cloud-run') {
                             this.runCloudRunDeploy(jobId, appId, projectPath, firebaseProject);
                         } else {
@@ -100,65 +180,40 @@ class DeploymentManager extends EventEmitter {
     }
 
     private runCloudRunDeploy(jobId: string, appId: string, projectPath: string, firebaseProject: string) {
+        appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] Entering runCloudRunDeploy for ${appId} (Job: ${jobId})\n`);
         const job = this.activeJobs.get(jobId);
-        if (!job) return;
+        if (!job) {
+          appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] ERROR: Job ${jobId} not found in runCloudRunDeploy (Check activeJobs map)\n`);
+          return;
+        }
 
         job.status = 'deploying';
         this.appendLog(jobId, `\n── Build complete. Starting Google Cloud Run deploy...`);
         this.emit('update', job);
 
-        // Load environment variables for build-time injection
-        const envVars: Record<string, string> = {};
-        const envPaths = ['.env.production', '.env.local', '.env'];
-        
-        for (const envFile of envPaths) {
-          const fullPath = path.join(resolvePath(projectPath), envFile);
-          if (fs.existsSync(fullPath)) {
-            this.appendLog(jobId, `── Detected ${envFile}, filtering build-time variables...`);
-            const content = fs.readFileSync(fullPath, 'utf8');
-            content.split('\n').forEach(line => {
-              const trimmed = line.trim();
-              if (trimmed && !trimmed.startsWith('#')) {
-                const [key, ...valueParts] = trimmed.split('=');
-                const value = valueParts.join('=');
-                if (key && value) {
-                  const k = key.trim();
-                  const v = value.trim().replace(/^["']|["']$/g, '');
-                  
-                  // Skip keys that point to the wrong project
-                  if (k.includes('PROJECT_ID') && v === 'heidless-apps-0' && firebaseProject === 'heidless-apps-2') {
-                    return;
-                  }
-                  
-                  envVars[k] = v;
-                }
-              }
-            });
-            break; 
-          }
-        }
+        const envVars = job.envVars || {};
 
         // FORCE CORRECT PROJECT ID
         envVars['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] = firebaseProject;
         envVars['FIREBASE_PROJECT_ID'] = firebaseProject;
-        
+
         // Ensure STRIPE_SECRET_KEY has at least a valid-looking placeholder if missing
         if (!envVars['STRIPE_SECRET_KEY']) {
-          envVars['STRIPE_SECRET_KEY'] = 'sk_test_placeholder_forced';
+            envVars['STRIPE_SECRET_KEY'] = 'sk_test_placeholder_forced';
         }
 
         // Write to a temporary .env.deploy file in the project directory
         // This is safer than passing hundreds of characters in the command line
         const envFilePath = path.join(resolvePath(projectPath), '.env.deploy');
         const envContent = Object.entries(envVars)
-          .map(([k, v]) => `${k}=${v}`)
-          .join('\n');
-        
+            .map(([k, v]) => `${k}=${v}`)
+            .join('\n');
+
         try {
-          fs.writeFileSync(envFilePath, envContent);
-          this.appendLog(jobId, `── Created .env.deploy with ${Object.keys(envVars).length} variables.`);
+            fs.writeFileSync(envFilePath, envContent);
+            this.appendLog(jobId, `── Created .env.deploy with ${Object.keys(envVars).length} variables.`);
         } catch (err: any) {
-          this.appendLog(jobId, `── Warning: Failed to create .env.deploy: ${err.message}`);
+            this.appendLog(jobId, `── Warning: Failed to create .env.deploy: ${err.message}`);
         }
 
         const deployArgs = [
@@ -175,25 +230,53 @@ class DeploymentManager extends EventEmitter {
         // We still use the flags for the most critical ones, but the .env.deploy 
         // will be picked up by the Dockerfile (if we update it) or by Next.js
         const criticalVars = [
-          'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
-          'FIREBASE_PROJECT_ID',
-          'STRIPE_SECRET_KEY',
-          'NEXT_PUBLIC_FIREBASE_API_KEY',
-          'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
-          'NEXT_PUBLIC_FIREBASE_APP_ID'
+            'NEXT_PUBLIC_FIREBASE_API_KEY',
+            'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+            'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+            'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+            'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+            'NEXT_PUBLIC_FIREBASE_APP_ID',
+            'NEXT_PUBLIC_FIREBASE_DATABASE_ID',
+            'STRIPE_SECRET_KEY'
         ].filter(k => envVars[k]).map(k => `${k}=${envVars[k]}`).join(',');
 
-        deployArgs.push(`--set-build-env-vars=${criticalVars}`);
-        deployArgs.push(`--set-env-vars=${criticalVars}`);
+        if (criticalVars) {
+            deployArgs.push(`--set-build-env-vars=${criticalVars}`);
+            deployArgs.push(`--set-env-vars=${criticalVars}`);
+        }
 
         this.appendLog(jobId, `── Executing Cloud Run Deploy: gcloud run deploy ${appId} --project ${firebaseProject} (with env injection)`);
-        
+
         fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Spawning: gcloud ${deployArgs.join(' ')}\n`);
-        
-        const deployProc = spawn('gcloud', deployArgs, {
+
+        // HARDEN ENVIRONMENT
+        const nodeBinDir = path.dirname(process.execPath);
+        const fallbackPath = [
+          nodeBinDir,
+          '/usr/local/sbin',
+          '/usr/local/bin',
+          '/usr/sbin',
+          '/usr/bin',
+          '/sbin',
+          '/bin'
+        ].join(':');
+
+        const finalEnv = {
+          ...process.env,
+          PATH: process.env.PATH ? `${process.env.PATH}:${fallbackPath}` : fallbackPath,
+          FORCE_COLOR: '0'
+        };
+
+        // Try to find absolute gcloud path
+        const gcloudPath = fs.existsSync('/usr/bin/gcloud') ? '/usr/bin/gcloud' : 'gcloud';
+
+        this.appendLog(jobId, `── DEBUG: PATH=${finalEnv.PATH.slice(0, 100)}...`);
+        appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] Spawning gcloud V8: ${gcloudPath} in ${resolvePath(projectPath)}\n`);
+        appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] PATH: ${finalEnv.PATH}\n`);
+
+        const deployProc = spawn(gcloudPath, deployArgs, {
             cwd: resolvePath(projectPath),
-            shell: true,
-            env: { ...process.env, FORCE_COLOR: '0' }
+            env: finalEnv
         });
 
         fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Spawned gcloud PID: ${deployProc.pid}\n`);
@@ -232,11 +315,30 @@ class DeploymentManager extends EventEmitter {
         this.appendLog(jobId, `\n── Build complete. Starting Firebase Hosting deploy...`);
         this.emit('update', job);
 
-        const deployArgs = ['deploy', '--only', `hosting:${hostingTarget || appId}`, '--project', firebaseProject, '--force'];
-        const deployProc = spawn('firebase', deployArgs, {
+        // Step 1: Use the project, Step 2: Deploy using the target name
+        const target = hostingTarget || appId;
+        const fullCommand = `firebase use ${firebaseProject} && firebase deploy --only hosting:${target} --project ${firebaseProject} --force`;
+        
+        this.appendLog(jobId, `── Identity Deploy: Pushing ${target} to ${firebaseProject}...`);
+
+        const saPath = process.env.GOOGLE_APPLICATION_CREDENTIALS 
+          ? path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS) 
+          : undefined;
+
+        const finalEnv: Record<string, string | undefined> = { 
+          ...process.env, 
+          PATH: process.env.PATH,
+          GOOGLE_CLOUD_PROJECT: firebaseProject,
+          FIREBASE_PROJECT: firebaseProject
+        };
+
+        if (saPath) {
+          finalEnv.GOOGLE_APPLICATION_CREDENTIALS = saPath;
+        }
+
+        const deployProc = spawn('sh', ['-c', fullCommand], {
             cwd: resolvePath(projectPath),
-            shell: '/bin/bash',
-            env: { ...process.env, PATH: process.env.PATH }
+            env: finalEnv
         });
 
         this.processes.set(jobId, deployProc);
@@ -258,7 +360,7 @@ class DeploymentManager extends EventEmitter {
         if (job) {
             if (job.status === 'live' || job.status === 'failed') return;
             job.logs.push(text);
-            
+
             const urlMatch = text.match(/https?:\/\/\S+\.(?:web\.app|run\.app)/);
             if (urlMatch) {
                 job.url = urlMatch[0];
@@ -303,7 +405,7 @@ class DeploymentManager extends EventEmitter {
         if (process) {
             process.kill('SIGKILL');
             this.processes.delete(jobId);
-            
+
             if (job) {
                 job.status = 'failed';
                 job.error = 'Deployment cancelled by user';

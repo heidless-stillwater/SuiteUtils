@@ -6,6 +6,7 @@ import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { SuiteProvider } from './contexts/SuiteContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
+import { PersonaProvider } from './contexts/PersonaContext';
 
 // GLOBAL API INTERCEPTOR: Inject active workspace ID into all suite-utils API calls
 const originalFetch = window.fetch;
@@ -100,9 +101,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <AuthProvider>
           <WorkspaceProvider>
-            <SuiteProvider>
-              <App />
-            </SuiteProvider>
+            <PersonaProvider>
+              <SuiteProvider>
+                <App />
+              </SuiteProvider>
+            </PersonaProvider>
           </WorkspaceProvider>
         </AuthProvider>
       </BrowserRouter>

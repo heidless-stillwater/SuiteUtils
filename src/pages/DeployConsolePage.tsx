@@ -26,7 +26,10 @@ import {
   Globe,
   Check,
   Database,
-  GripVertical
+  GripVertical,
+  ArrowRightToLine,
+  ChevronLeft,
+  Copy
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ActionModal } from '../components/common/ActionModal';
@@ -100,8 +103,10 @@ export function DeployConsolePage() {
   const [rollbackStates, setRollbackStates] = useState<Record<string, { active: boolean; stage: string; message: string; error?: string; url?: string }>>({});
   const [sortBy, setSortBy] = useState<'name' | 'last-deploy' | 'custom'>('custom');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
   const [appOrder, setAppOrder] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
 
   // Initialize/Sync deploy states from suite config AND workspace registry
   useEffect(() => {
@@ -580,6 +585,14 @@ export function DeployConsolePage() {
       return 0;
     });
   }, [deployStates, sortBy, appOrder, searchQuery]);
+  
+  const handleCopyLogs = () => {
+    if (!deployResult?.logs) return;
+    const text = deployResult.logs.join('\n');
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
 
   // Scroll logs to bottom
@@ -802,13 +815,15 @@ export function DeployConsolePage() {
             </button>
           </div>
         </div>
+      </div>
 
+      <div className={`grid grid-cols-1 ${isHistoryCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'} gap-6 transition-all duration-500`}>
         {/* App List */}
         <Reorder.Group 
           axis="y" 
           values={appOrder} 
           onReorder={setAppOrder}
-          className="lg:col-span-2 space-y-4"
+          className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}
         >
           {sortedApps.map((app) => {
             const isExpanded = expandedLog === app.appId;
@@ -862,12 +877,35 @@ export function DeployConsolePage() {
                     </div>
 
                     <div>
-                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white flex items-center gap-3 flex-wrap">
                         {app.displayName}
                         {app.isIsolated && <span className="px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 text-[10px] uppercase">Isolated</span>}
+                        
+                        <div className="flex items-center gap-2">
+                           <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-white/5 border ${
+                            app.status === 'live' ? 'text-green-400 border-green-500/20' :
+                            app.status === 'failed' ? 'text-red-400 border-red-500/20' :
+                            app.status === 'building' || app.status === 'deploying' ? 'text-primary border-primary/20 animate-pulse' :
+                            'text-white/10'
+                          }`}>{app.status}</span>
+
+                          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-white/5 border ${
+                            currentSuite?.apps?.[app.appId]?.health?.status === 'healthy' ? 'text-green-400 border-green-500/20' :
+                            currentSuite?.apps?.[app.appId]?.health?.status === 'degraded' ? 'text-amber-400 border-amber-500/20' :
+                            'text-red-400 border-red-500/20'
+                          }`}>
+                            {currentSuite?.apps?.[app.appId]?.health?.status || 'HEALTH_UNKNOWN'}
+                          </span>
+
+                          {deployHistory.find(h => h.appId === app.appId && h.status === 'live') && (
+                            <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                               {formatDistanceToNow(parseDate(deployHistory.find(h => h.appId === app.appId && h.status === 'live')?.startedAt), { addSuffix: true })}
+                            </span>
+                          )}
+                        </div>
                       </h3>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-[10px] text-white/30 font-medium uppercase tracking-wider">{app.appId}</span>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-[10px] text-white/30 font-black uppercase tracking-[0.2em]">{app.appId}</span>
                         <div className="w-1 h-1 rounded-full bg-white/10" />
                         <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-white/5 border border-white/5">
                           <Globe className="w-2.5 h-2.5 text-white/20" />
@@ -880,32 +918,9 @@ export function DeployConsolePage() {
                           </div>
                         )}
                         <div className="w-1 h-1 rounded-full bg-white/10" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
-                          app.status === 'live' ? 'text-green-400' :
-                          app.status === 'failed' ? 'text-red-400' :
-                          app.status === 'building' || app.status === 'deploying' ? 'text-primary animate-pulse' :
-                          'text-white/20'
-                        }`}>{app.status}</span>
-                        
-                        {/* Health Status */}
-                        <div className="w-1 h-1 rounded-full bg-white/10" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
-                          currentSuite?.apps?.[app.appId]?.health?.status === 'healthy' ? 'text-green-400' :
-                          currentSuite?.apps?.[app.appId]?.health?.status === 'degraded' ? 'text-amber-400' :
-                          'text-red-400'
-                        }`}>
-                          Health: {currentSuite?.apps?.[app.appId]?.health?.status || 'Unknown'}
+                        <span className="text-[9px] font-black text-white/10 uppercase tracking-widest">
+                          {app.deployMethod || 'firebase'}
                         </span>
-                        
-                        {/* Last Deployed Badge */}
-                        {deployHistory.find(h => h.appId === app.appId && h.status === 'live') && (
-                          <>
-                            <div className="w-1 h-1 rounded-full bg-white/10" />
-                            <span className="text-[10px] text-white/30 font-medium italic">
-                               Last: {formatDistanceToNow(parseDate(deployHistory.find(h => h.appId === app.appId && h.status === 'live')?.startedAt), { addSuffix: true })}
-                            </span>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -950,43 +965,55 @@ export function DeployConsolePage() {
                         <Terminal className="w-4 h-4" />
                       </button>
                     )}
+
+                    {/* Live App Link */}
+                    {(app.deployUrl || app.hostingTarget) && (
+                      <a
+                        href={app.deployUrl || `https://${app.hostingTarget}.web.app`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-lg bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-all border border-green-400/20"
+                        title="Open Live App"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
                   </div>
-                  
-                  {/* Deploy URL */}
-                  {app.deployUrl && (
-                    <a
-                      href={app.deployUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2 rounded-lg bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
                 </div>
                 
                 {/* Build Progress Bar */}
 
                 {/* Progress Bar */}
                 {(app.status === 'building' || app.status === 'deploying') && (
-                  <div className="mt-1">
+                  <div className="mt-1 px-4 pb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 overflow-hidden flex-1">
+                        <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                        <span className="text-[10px] text-white/50 font-mono truncate">
+                          {app.logs.length > 0 ? app.logs[app.logs.length - 1].replace(/\x1b\[[0-9;]*m/g, '').replace(/\n/g, '').trim() : 'Initializing process...'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-primary font-black ml-4">{Math.round(progress)}%</span>
+                    </div>
                     <div className="h-1 bg-white/5 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-1000 ${
                           app.status === 'building'
-                            ? 'bg-amber-400 animate-pulse'
-                            : 'bg-primary animate-pulse'
+                            ? 'bg-amber-400'
+                            : 'bg-primary'
                         }`}
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <div className="flex items-center justify-between mt-2 px-4 pb-3">
-                      <span className="text-[10px] text-white/30 font-medium">
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">
                         Elapsed: {formatElapsed(app.elapsed)}
                       </span>
-                      <span className="text-[10px] text-white/30 font-medium">
-                        Est: {formatDuration(estimate.estimatedDuration)}
-                      </span>
+                      {estimate && (
+                        <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">
+                          Est: {formatDuration(estimate.estimatedDuration)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1005,9 +1032,26 @@ export function DeployConsolePage() {
                         className="max-h-[300px] overflow-y-auto p-4 font-mono text-[11px] leading-relaxed scrollbar-thin scrollbar-thumb-white/10"
                       >
                         {app.logs.length === 0 ? (
-                          <div className="text-white/20 italic italic flex items-center gap-2">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Waiting for build pipeline logs...
+                          <div className={`italic flex items-center gap-2 ${
+                            app.status === 'live' ? 'text-green-400/60' : 
+                            app.status === 'failed' ? 'text-red-400/60' : 'text-white/20'
+                          }`}>
+                            {app.status === 'live' ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3" />
+                                Deployment completed successfully.
+                              </>
+                            ) : app.status === 'failed' ? (
+                              <>
+                                <Ban className="w-4 h-4" />
+                                Deployment failed. Check server logs.
+                              </>
+                            ) : (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Waiting for build pipeline logs...
+                              </>
+                            )}
                           </div>
                         ) : (
                           <div className="space-y-1">
@@ -1036,35 +1080,69 @@ export function DeployConsolePage() {
         </Reorder.Group>
 
         {/* History / Info Sidebar */}
-        <div className="space-y-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" />
-              Recent History
-            </h3>
-            <div className="space-y-3">
-              {deployHistory.slice(0, 5).map((record) => (
-                <div key={record.id} className="p-3 rounded-xl bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-white/90">{record.appId}</span>
-                    <span className={`text-[10px] font-bold uppercase ${record.status === 'live' ? 'text-green-400' : 'text-red-400'}`}>
-                      {record.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-white/30">
-                    <span>{formatDistanceToNow(parseDate(record.startedAt), { addSuffix: true })}</span>
-                    <span>{formatDuration(record.duration || 0)}</span>
-                  </div>
+        <AnimatePresence>
+          {!isHistoryCollapsed && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="space-y-6"
+            >
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 relative group/sidebar overflow-hidden">
+                <button 
+                  onClick={() => setIsHistoryCollapsed(true)}
+                  className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/5 text-white/20 hover:text-white hover:bg-white/10 opacity-0 group-hover/sidebar:opacity-100 transition-all z-10"
+                  title="Collapse Sidebar"
+                >
+                  <ArrowRightToLine className="w-4 h-4" />
+                </button>
+
+                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" />
+                  Recent History
+                </h3>
+                <div className="space-y-3">
+                  {deployHistory.slice(0, 10).map((record) => (
+                    <div key={record.id} className="p-3 rounded-xl bg-white/5 border border-white/5">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-white/90">{record.appId}</span>
+                        <span className={`text-[10px] font-bold uppercase ${record.status === 'live' ? 'text-green-400' : 'text-red-400'}`}>
+                          {record.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-white/30">
+                        <span>{formatDistanceToNow(parseDate(record.startedAt), { addSuffix: true })}</span>
+                        <span>{formatDuration(record.duration || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {deployResult && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className={`bg-[#050505] w-full max-w-lg flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border ${deployResult.status === 'live' ? 'border-green-500/30' : 'border-red-500/30'} rounded-3xl relative overflow-hidden animate-in zoom-in duration-300`}>
+      {isHistoryCollapsed && (
+        <motion.button
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          onClick={() => setIsHistoryCollapsed(false)}
+          className="fixed right-0 top-1/2 -translate-y-1/2 w-8 h-48 bg-primary/10 border-y border-l border-primary/20 rounded-l-2xl flex items-center justify-center group hover:bg-primary/20 transition-all z-[40] cursor-pointer"
+        >
+          <div className="flex flex-col items-center gap-6">
+            <Clock className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            <span className="[writing-mode:vertical-lr] text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 group-hover:text-primary transition-colors rotate-180">
+              Deployment History
+            </span>
+            <ChevronLeft className="w-4 h-4 text-primary/40 group-hover:text-primary group-hover:-translate-x-0.5 transition-all" />
+          </div>
+        </motion.button>
+      )}
+
+      {deployResult && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className={`bg-[#050505] w-full max-w-lg mx-4 flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border ${deployResult.status === 'live' ? 'border-green-500/30' : 'border-red-500/30'} rounded-3xl relative overflow-hidden animate-in zoom-in duration-300`}>
             <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${deployResult.status === 'live' ? 'from-green-500/50 via-green-500 to-green-500/50' : 'from-red-500/50 via-red-500 to-red-500/50'} z-20`} />
             
             <div className="p-8 pb-6 text-center space-y-4">
@@ -1130,7 +1208,16 @@ export function DeployConsolePage() {
               {/* Terminal Output in Modal */}
               {deployResult.logs && deployResult.logs.length > 0 && (
                 <div className="p-4 bg-black/60 rounded-2xl border border-white/5 space-y-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Final Terminal Output</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Final Terminal Output</p>
+                    <button 
+                      onClick={handleCopyLogs}
+                      className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                      title="Copy logs"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
                   <div className="max-h-[150px] overflow-y-auto font-mono text-[9px] text-white/50 space-y-1 scrollbar-thin scrollbar-thumb-white/10 p-2 bg-black/40 rounded-xl">
                     {deployResult.logs.slice(-20).map((log, i) => (
                       <div key={i} className="flex gap-2">
@@ -1150,8 +1237,7 @@ export function DeployConsolePage() {
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

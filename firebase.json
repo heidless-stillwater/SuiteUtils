@@ -1,34 +1,12 @@
 {
-  "firestore": {
-    "database": "suiteutils-db-0",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-
-  "hosting": {
-    "site": "suite-utils",
-    "public": "dist",
-    "headers": [
-      {
-        "source": "/**",
-        "headers": [
-          {
-            "key": "Cross-Origin-Opener-Policy",
-            "value": "same-origin-allow-popups"
-          }
-        ]
-      }
-    ],
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
+  "firestore": [
+    { "target": "persona", "database": "persona-db-0", "rules": "sovereign.rules" },
+    { "target": "prompttool", "database": "prompttool-db-0", "rules": "sovereign.rules" },
+    { "target": "resources", "database": "promptresources-db-0", "rules": "sovereign.rules" },
+    { "target": "master", "database": "promptmaster-spa-db-0", "rules": "sovereign.rules" },
+    { "target": "accreditation", "database": "promptaccreditation-db-0", "rules": "sovereign.rules" },
+    { "target": "plantune", "database": "plantune-db-0", "rules": "sovereign.rules" },
+    { "target": "suiteutils", "database": "suiteutils-db-0", "rules": "sovereign.rules" },
+    { "target": "autovideo", "database": "autovideo-db-0", "rules": "sovereign.rules" }
+  ]
 }
