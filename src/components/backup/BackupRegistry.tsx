@@ -172,6 +172,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
         valB = b.name;
       }
 
+      if (valA === valB) return 0;
       if (sortOrder === 'asc') return valA > valB ? 1 : -1;
       return valA < valB ? 1 : -1;
     });
@@ -261,7 +262,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                 className="p-1.5 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white transition-colors"
                 title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
               >
-                {sortOrder === 'asc' ? <ChevronDown className="w-4 h-4" /> : <ChevronDown className="w-4 h-4 rotate-180" />}
+                {sortOrder === 'asc' ? <ChevronDown className="w-4 h-4 rotate-180" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </div>
           </div>
