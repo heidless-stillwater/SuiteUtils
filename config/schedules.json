@@ -120,5 +120,13 @@
     "id": "99r9c",
     "status": "paused",
     "lastRun": "2026-05-03T14:19:28.171Z"
+  },
+  {
+    "name": "full-DB",
+    "cronExpression": "*/1 * * * *",
+    "scope": "StillwaterSuite",
+    "includeStorage": false,
+    "id": "n4j010y",
+    "status": "active"
   }
 ]

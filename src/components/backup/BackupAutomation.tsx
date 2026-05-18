@@ -99,6 +99,16 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
   running,
   API_URL
 }) => {
+  const [routineSortOrder, setRoutineSortOrder] = React.useState<'desc' | 'asc'>('desc');
+
+  const sortedSchedules = React.useMemo(() => {
+    return [...schedules].sort((a, b) => {
+      const timeA = a.lastRun ? new Date(a.lastRun).getTime() : 0;
+      const timeB = b.lastRun ? new Date(b.lastRun).getTime() : 0;
+      return routineSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+  }, [schedules, routineSortOrder]);
+
   if (activeTab !== 'automation') return null;
 
   return (
@@ -118,17 +128,30 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                 {schedules.length} Active
               </span>
               {schedules.length > 0 && !routinesCollapsed && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const allIds = schedules.map(s => s.id);
-                    if (selectedRoutines.size === allIds.length) setSelectedRoutines(new Set());
-                    else setSelectedRoutines(new Set(allIds));
-                  }}
-                  className="text-[10px] text-primary/40 hover:text-primary font-bold uppercase tracking-widest underline underline-offset-4 transition-colors"
-                >
-                  {selectedRoutines.size === schedules.length ? 'Deselect All' : 'Select All'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const allIds = schedules.map(s => s.id);
+                      if (selectedRoutines.size === allIds.length) setSelectedRoutines(new Set());
+                      else setSelectedRoutines(new Set(allIds));
+                    }}
+                    className="text-[10px] text-primary/40 hover:text-primary font-bold uppercase tracking-widest underline underline-offset-4 transition-colors"
+                  >
+                    {selectedRoutines.size === schedules.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                  <span className="text-white/10">|</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRoutineSortOrder(routineSortOrder === 'desc' ? 'asc' : 'desc');
+                    }}
+                    className="text-[10px] text-white/30 hover:text-primary font-bold uppercase tracking-widest transition-colors"
+                    title="Toggle Sort Order (Last Run)"
+                  >
+                    Sort: {routineSortOrder === 'desc' ? 'Recent First' : 'Oldest First'}
+                  </button>
+                </div>
               )}
             </div>
             <div className={`p-1 rounded-md hover:bg-white/5 transition-all ${!routinesCollapsed ? 'rotate-180' : ''}`}>
@@ -171,7 +194,7 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                 )}
 
                 {schedules.length > 0 ? (
-                  schedules.map((s) => (
+                  sortedSchedules.map((s) => (
                     <div key={s.id} className={`glass-card-static p-6 flex items-center justify-between group transition-all ${isRoutineRunning(s) ? 'border-primary/40 bg-primary/5 shadow-lg shadow-primary/5' : 'hover:border-primary/20'} ${selectedRoutines.has(s.id) ? 'border-primary/60 bg-primary/5' : ''}`}>
                       <div className="flex items-center gap-6 flex-1">
                         <input
