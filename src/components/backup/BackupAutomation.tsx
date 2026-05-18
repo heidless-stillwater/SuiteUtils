@@ -173,7 +173,7 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
 
           {!routinesCollapsed && (
             <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="max-h-[220px] overflow-y-auto pr-2 custom-scrollbar space-y-4">
+              <div className="space-y-4">
                 {/* Bulk Action for Routines */}
                 {selectedRoutines.size > 0 && (
                   <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/20 rounded-xl animate-in slide-in-from-top-2 duration-300">
