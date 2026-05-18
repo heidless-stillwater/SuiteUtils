@@ -1,20 +1,46 @@
 [
   {
-    "name": "full-STORAGE-180526",
-    "cronExpression": "*/5 * * * *",
-    "scope": "CustomSelection",
-    "appIds": [],
-    "includeStorage": true,
-    "id": "rqbqma",
-    "status": "paused"
-  },
-  {
     "name": "full-STORAGE-180526-0",
     "cronExpression": "*/5 * * * *",
     "scope": "CustomSelection",
     "appIds": [],
     "includeStorage": true,
     "id": "d00gm6",
+    "status": "paused"
+  },
+  {
+    "name": "full-DB-180526-0",
+    "cronExpression": "*/5 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "persona",
+      "promptresources",
+      "plantune",
+      "prompttool",
+      "promptaccreditation",
+      "suiteutils",
+      "promptmasterspa"
+    ],
+    "includeStorage": false,
+    "id": "8il4sp",
+    "status": "paused"
+  },
+  {
+    "name": "full-DB-180526-1",
+    "cronExpression": "*/1 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [
+      "persona",
+      "promptresources",
+      "ag-video-system",
+      "plantune",
+      "prompttool",
+      "promptaccreditation",
+      "suiteutils",
+      "promptmasterspa"
+    ],
+    "includeStorage": false,
+    "id": "yn59eo",
     "status": "paused"
   }
 ]

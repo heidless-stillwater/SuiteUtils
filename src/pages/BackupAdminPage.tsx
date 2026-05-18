@@ -976,40 +976,42 @@ export function BackupAdminPage() {
           API_URL={API_URL}
         />
 
-        <BackupRegistry
-          activeTab={activeTab as 'registry' | 'archive'}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          sortBy={sortBy}
-          setSortBy={setSortBy}
-          showSortMenu={showSortMenu}
-          setShowSortMenu={setShowSortMenu}
-          sortOrder={sortOrder}
-          setSortOrder={setSortOrder}
-          selectedBackups={selectedBackups}
-          setSelectedBackups={setSelectedBackups}
-          backups={backups}
-          openMigrateModal={openMigrateModal}
-          setDeleteConfirmModal={setDeleteConfirmModal}
-          loading={loading}
-          expandedId={expandedId}
-          setExpandedId={setExpandedId}
-          setRestoreModal={setRestoreModal}
-          handleArchive={handleArchive}
-          handleUnarchive={handleUnarchive}
-          isViewer={isViewer}
-          currentSuite={currentSuite}
-          selectedApps={selectedApps}
-          setSelectedApps={setSelectedApps}
-          includeStorage={includeStorage}
-          setIncludeStorage={setIncludeStorage}
-          error={error}
-          running={running}
-          sortMenuRef={sortMenuRef}
-          scopeSelectorCollapsed={scopeSelectorCollapsed}
-          setScopeSelectorCollapsed={setScopeSelectorCollapsed}
-          handleDownload={handleDownload}
-        />
+        {(activeTab === 'registry' || activeTab === 'archive') && (
+          <BackupRegistry
+            activeTab={activeTab as 'registry' | 'archive'}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+            showSortMenu={showSortMenu}
+            setShowSortMenu={setShowSortMenu}
+            sortOrder={sortOrder}
+            setSortOrder={setSortOrder}
+            selectedBackups={selectedBackups}
+            setSelectedBackups={setSelectedBackups}
+            backups={backups}
+            openMigrateModal={openMigrateModal}
+            setDeleteConfirmModal={setDeleteConfirmModal}
+            loading={loading}
+            expandedId={expandedId}
+            setExpandedId={setExpandedId}
+            setRestoreModal={setRestoreModal}
+            handleArchive={handleArchive}
+            handleUnarchive={handleUnarchive}
+            isViewer={isViewer}
+            currentSuite={currentSuite}
+            selectedApps={selectedApps}
+            setSelectedApps={setSelectedApps}
+            includeStorage={includeStorage}
+            setIncludeStorage={setIncludeStorage}
+            error={error}
+            running={running}
+            sortMenuRef={sortMenuRef}
+            scopeSelectorCollapsed={scopeSelectorCollapsed}
+            setScopeSelectorCollapsed={setScopeSelectorCollapsed}
+            handleDownload={handleDownload}
+          />
+        )}
 
 
         {(activeTab as string) === 'storage' && (
