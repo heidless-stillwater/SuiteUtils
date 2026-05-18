@@ -22,7 +22,7 @@ import { format } from 'date-fns';
 import type { BackupFile } from '../../types/backup';
 
 interface BackupRegistryProps {
-  activeTab: 'registry' | 'archive';
+  activeTab: 'registry' | 'archive' | 'automation';
   searchQuery: string;
   setSearchQuery: (v: string) => void;
   sortBy: 'created' | 'updated' | 'name' | 'size';
@@ -93,7 +93,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
   const [archiveCollapsed, setArchiveCollapsed] = useState(true);
   const [registryCollapsed, setRegistryCollapsed] = useState(false);
 
-  const isCollapsed = activeTab === 'archive' ? archiveCollapsed : registryCollapsed;
+  const isCollapsed = (activeTab === 'archive' || activeTab === 'automation') ? archiveCollapsed : registryCollapsed;
 
   const formatSize = (bytes?: string | number) => {
     if (!bytes) return '0 B';
@@ -148,7 +148,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
             <div 
               className="flex items-center gap-3 cursor-pointer group select-none"
               onClick={() => {
-                if (activeTab === 'archive') {
+                if (activeTab === 'archive' || activeTab === 'automation') {
                   setArchiveCollapsed(!archiveCollapsed);
                 } else {
                   setRegistryCollapsed(!registryCollapsed);
