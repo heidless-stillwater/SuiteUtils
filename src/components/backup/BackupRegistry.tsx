@@ -211,7 +211,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                   <h2 className="text-lg font-bold text-white group-hover:text-primary transition-colors">
                     {activeTab === 'registry' ? 'Cloud Explorer' : 'Archive Explorer'}
                   </h2>
-                  <span className="text-[9px] font-mono bg-white/5 border border-white/10 px-2 py-0.5 rounded text-white/50 font-bold uppercase tracking-wider">
+                  <span className="text-[18px] font-mono bg-white/5 border border-white/10 px-3 py-1 rounded text-white/50 font-bold uppercase tracking-wider">
                     {formatSize(totalStorageSize)}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-white/20 group-hover:text-white/60 transition-all ${
