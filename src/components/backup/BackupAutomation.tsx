@@ -269,8 +269,23 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                           onClick={() => runBackup(false, false, { scope: s.scope, name: s.name, appIds: s.appIds, includeStorage: s.includeStorage })}
                           disabled={running}
                           className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Run Routine On-Demand"
                         >
                           <Play className="w-4 h-4 fill-current" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await fetch(`${API_URL}/api/schedules/${s.id}/toggle-pause`, { method: 'POST' });
+                            fetchSchedules();
+                          }}
+                          className={`p-2.5 rounded-xl border transition-all ${
+                            s.status === 'paused'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                          }`}
+                          title={s.status === 'paused' ? 'Resume Routine' : 'Pause Routine'}
+                        >
+                          {s.status === 'paused' ? <Play className="w-4.5 h-4.5" /> : <Pause className="w-4 h-4" />}
                         </button>
                         <button
                           onClick={() => setEditingRoutineId(s.id)}
@@ -469,6 +484,20 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                         )}
                       </div>
                       <div className="max-h-40 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                        {/* Storage option at the top of the list */}
+                        <label className="flex items-center gap-3 p-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors border-b border-white/5 pb-2 mb-1.5 group/storage">
+                          <input
+                            type="checkbox"
+                            checked={newIncludeStorage}
+                            onChange={(e) => setNewIncludeStorage(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50 cursor-pointer"
+                          />
+                          <div className="flex items-center justify-between flex-1 min-w-0">
+                            <span className="text-[10px] font-bold text-amber-400 group-hover/storage:text-amber-300 transition-colors">Storage</span>
+                            <span className="text-[7px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded mr-1">Global</span>
+                          </div>
+                        </label>
+
                         {currentSuite && Object.entries(currentSuite.apps).map(([id, app]: [string, any]) => (
                           <label key={id} className="flex items-center gap-3 p-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors">
                             <input
