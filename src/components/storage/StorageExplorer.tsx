@@ -28,7 +28,7 @@ import {
   ArrowUp
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { API_URL } from '../../lib/api-config';
 
 const JsonNode = ({ label, value, depth = 0, zipPath, forceExpand = false }: { label: string; value: any, depth?: number, zipPath?: string | null, forceExpand?: boolean }) => {
@@ -535,12 +535,19 @@ export default function StorageExplorer({
                     <td className="px-6 py-4 text-right text-xs text-white/40 tabular-nums">
                       {item.isDir ? '--' : formatSize(item.size)}
                     </td>
-                    <td className="px-6 py-4 text-right text-xs text-white/40 tabular-nums">
-                      {item.lastUpdate 
-                        ? format(new Date(item.lastUpdate), 'MMM dd, yyyy HH:mm') 
-                        : item.modifiedTime 
-                          ? format(new Date(item.modifiedTime), 'MMM dd, yyyy HH:mm') 
-                          : '--'}
+                    <td className="px-6 py-4 text-right text-xs tabular-nums">
+                      <div className="text-white/80 font-medium">
+                        {item.lastUpdate 
+                          ? formatDistanceToNow(new Date(item.lastUpdate), { addSuffix: true })
+                          : item.modifiedTime 
+                            ? formatDistanceToNow(new Date(item.modifiedTime), { addSuffix: true })
+                            : '--'}
+                      </div>
+                      {(item.lastUpdate || item.modifiedTime) && (
+                        <div className="text-[9px] text-white/20 mt-0.5 font-mono">
+                          {format(new Date(item.lastUpdate || item.modifiedTime!), 'MMM dd, yyyy HH:mm')}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

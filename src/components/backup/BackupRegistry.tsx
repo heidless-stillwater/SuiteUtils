@@ -16,10 +16,21 @@ import {
   Minus,
   FolderOpen,
   History,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { BackupFile } from '../../types/backup';
+
+const formatDuration = (ms?: number): string => {
+  if (!ms) return '';
+  if (ms < 1000) return `${ms}ms`;
+  const secs = ms / 1000;
+  if (secs < 60) return `${secs.toFixed(1)}s`;
+  const mins = Math.floor(secs / 60);
+  const remainingSecs = Math.round(secs % 60);
+  return `${mins}m ${remainingSecs}s`;
+};
 
 interface BackupRegistryProps {
   activeTab: 'registry' | 'archive' | 'automation';
@@ -371,7 +382,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-bold text-white/90 truncate">{backup.name}</h3>
-                      <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
                         <span className="text-[10px] uppercase tracking-wider text-white/40 font-mono bg-white/5 px-1.5 py-0.5 rounded">
                           Created: {
                             (backup.timestamp || backup.createdTime)
@@ -379,6 +390,12 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                               : 'N/A'
                           }
                         </span>
+                        {backup.stats?.durationMs && (
+                          <span className="text-[10px] uppercase tracking-wider text-teal-400 font-mono bg-teal-500/10 border border-teal-500/20 px-1.5 py-0.5 rounded flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-teal-400/60" />
+                            Elapsed: {formatDuration(backup.stats.durationMs)}
+                          </span>
+                        )}
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5">
                             <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tighter ${
