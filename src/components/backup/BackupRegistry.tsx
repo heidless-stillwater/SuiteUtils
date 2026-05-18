@@ -483,7 +483,21 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                           <div className="flex gap-4">
                             <div>
                               <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Source Scope</p>
-                              <p className="text-[10px] text-white/80 font-bold">{backup.scope || (backup.name.split('_')[0] === 'Manual' ? 'Manual Run' : 'Scheduled')}</p>
+                              <p className="text-[10px] text-white/80 font-bold">
+                                {backup.scope || (backup.name.split('_')[0] === 'Manual' ? 'Manual Run' : 'Scheduled')}
+                              </p>
+                              {backup.fullPath && (
+                                <a
+                                  href={`https://console.cloud.google.com/storage/browser/${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'stillwater-sovereign-01.firebasestorage.app'}/${backup.fullPath.substring(0, backup.fullPath.lastIndexOf('/') + 1)}?project=${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'stillwater-sovereign-01'}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[9px] text-primary hover:text-primary/80 font-bold flex items-center gap-1 mt-1.5 transition-colors uppercase tracking-wider group/link"
+                                >
+                                  <FolderOpen className="w-3 h-3 text-primary/70 group-hover/link:text-primary transition-colors" />
+                                  GCS Directory
+                                  <ArrowUpRight className="w-2.5 h-2.5 opacity-40 group-hover/link:opacity-100 transition-opacity" />
+                                </a>
+                              )}
                             </div>
                             <div>
                               <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Type</p>
