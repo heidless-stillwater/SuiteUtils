@@ -100,6 +100,7 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
   API_URL
 }) => {
   const [routineSortOrder, setRoutineSortOrder] = React.useState<'desc' | 'asc'>('desc');
+  const [expandedRoutineId, setExpandedRoutineId] = React.useState<string | null>(null);
 
   const sortedSchedules = React.useMemo(() => {
     return [...schedules].sort((a, b) => {
@@ -206,100 +207,217 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
 
                 {schedules.length > 0 ? (
                   sortedSchedules.map((s) => (
-                    <div key={s.id} className={`glass-card-static p-6 flex items-center justify-between group transition-all ${isRoutineRunning(s) ? 'border-primary/40 bg-primary/5 shadow-lg shadow-primary/5' : 'hover:border-primary/20'} ${selectedRoutines.has(s.id) ? 'border-primary/60 bg-primary/5' : ''}`}>
-                      <div className="flex items-center gap-6 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedRoutines.has(s.id)}
-                          onChange={(e) => {
-                            const next = new Set(selectedRoutines);
-                            if (e.target.checked) next.add(s.id);
-                            else next.delete(s.id);
-                            setSelectedRoutines(next);
-                          }}
-                          className="w-4 h-4 rounded-full border-white/10 bg-white/5 text-primary focus:ring-primary/50 cursor-pointer"
-                        />
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-primary border transition-all ${isRoutineRunning(s) ? 'bg-primary/20 border-primary/30 animate-pulse' : 'bg-primary/10 border-primary/10'}`}>
-                          <Clock className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-[10px]">
-                            {renamingScheduleId === s.id ? (
-                              <input
-                                autoFocus
-                                value={renamingName}
-                                onChange={(e) => setRenamingName(e.target.value)}
-                                onBlur={() => handleRename(s.id)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleRename(s.id)}
-                                className="bg-white/5 border-primary/30 border rounded text-sm font-bold text-white px-2 py-0.5 outline-none focus:border-primary w-48 animate-in fade-in zoom-in-95 duration-200"
-                              />
-                            ) : (
-                              <h4
-                                onClick={() => {
-                                  setRenamingScheduleId(s.id);
-                                  setRenamingName(s.name || s.scope);
-                                }}
-                                className={`text-sm font-bold cursor-pointer hover:text-primary transition-all ${s.status === 'paused' ? 'text-white/20' : 'text-white/90'}`}
-                              >
-                                {s.name || 'Untitled Routine'}
-                              </h4>
-                            )}
-                            <span className="text-[10px] font-mono bg-white/5 px-1.5 py-0.5 rounded text-white/40 uppercase tracking-widest mr-[10px]">
-                              {s.cronExpression}
-                            </span>
-                            {s.status === 'paused' && (
-                              <span className="text-[9px] font-black bg-orange-500/10 text-orange-400 px-[10px] py-0.5 rounded border border-orange-500/20 uppercase tracking-widest">
-                                Paused
+                    <div 
+                      key={s.id} 
+                      className={`glass-card overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 ${
+                        isRoutineRunning(s) 
+                          ? 'border-primary/40 bg-primary/5 shadow-lg shadow-primary/5' 
+                          : 'hover:border-primary/20'
+                      } ${selectedRoutines.has(s.id) ? 'border-primary/60 bg-primary/5' : ''}`}
+                    >
+                      {/* Summary Row */}
+                      <div 
+                        onClick={() => setExpandedRoutineId(expandedRoutineId === s.id ? null : s.id)}
+                        className="p-6 flex items-center justify-between gap-6 cursor-pointer group select-none"
+                      >
+                        <div className="flex items-center gap-6 flex-1 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedRoutines.has(s.id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedRoutines);
+                              if (e.target.checked) next.add(s.id);
+                              else next.delete(s.id);
+                              setSelectedRoutines(next);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded-full border-white/10 bg-white/5 text-primary focus:ring-primary/50 cursor-pointer relative z-20"
+                          />
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-primary border transition-all shrink-0 ${isRoutineRunning(s) ? 'bg-primary/20 border-primary/30 animate-pulse' : 'bg-primary/10 border-primary/10'}`}>
+                            <Clock className="w-6 h-6" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-[10px] flex-wrap">
+                              {renamingScheduleId === s.id ? (
+                                <input
+                                  autoFocus
+                                  value={renamingName}
+                                  onChange={(e) => setRenamingName(e.target.value)}
+                                  onBlur={() => handleRename(s.id)}
+                                  onKeyDown={(e) => e.key === 'Enter' && handleRename(s.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="bg-white/5 border-primary/30 border rounded text-sm font-bold text-white px-2 py-0.5 outline-none focus:border-primary w-48 animate-in fade-in zoom-in-95 duration-200"
+                                />
+                              ) : (
+                                <h4
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRenamingScheduleId(s.id);
+                                    setRenamingName(s.name || s.scope);
+                                  }}
+                                  className={`text-sm font-bold cursor-pointer hover:text-primary transition-all truncate ${s.status === 'paused' ? 'text-white/20' : 'text-white/90'}`}
+                                >
+                                  {s.name || 'Untitled Routine'}
+                                </h4>
+                              )}
+                              <span className="text-[10px] font-mono bg-white/5 px-1.5 py-0.5 rounded text-white/40 uppercase tracking-widest mr-[10px]">
+                                {s.cronExpression}
                               </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-5 mt-1.5">
-                            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">
-                              Last Run: <span className="text-white/50">{s.lastRun ? format(new Date(s.lastRun), 'MMM dd, HH:mm') : 'Never'}</span>
-                            </p>
-                            <div className="w-1 h-1 rounded-full bg-white/10" />
-                            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">
-                              Storage: <span className={s.includeStorage ? 'text-green-400' : 'text-red-400'}>{s.includeStorage ? 'Included' : 'Excluded'}</span>
-                            </p>
+                              {s.status === 'paused' && (
+                                <span className="text-[9px] font-black bg-orange-500/10 text-orange-400 px-[10px] py-0.5 rounded border border-orange-500/20 uppercase tracking-widest">
+                                  Paused
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-5 mt-1.5 flex-wrap">
+                              <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">
+                                Last Run: <span className="text-white/50">{s.lastRun ? format(new Date(s.lastRun), 'MMM dd, HH:mm') : 'Never'}</span>
+                              </p>
+                              <div className="w-1 h-1 rounded-full bg-white/10 shrink-0" />
+                              <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">
+                                Storage: <span className={s.includeStorage ? 'text-green-400' : 'text-red-400'}>{s.includeStorage ? 'Included' : 'Excluded'}</span>
+                              </p>
+                            </div>
                           </div>
                         </div>
+                        
+                        <div className="flex items-center gap-[10px] shrink-0">
+                          <div className={`flex items-center gap-[10px] transition-all duration-200 ${expandedRoutineId === s.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                runBackup(false, false, { scope: s.scope, name: s.name, appIds: s.appIds, includeStorage: s.includeStorage });
+                              }}
+                              disabled={running}
+                              className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Run Routine On-Demand"
+                            >
+                              <Play className="w-4 h-4 fill-current" />
+                            </button>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await fetch(`${API_URL}/api/schedules/${s.id}/toggle-pause`, { method: 'POST' });
+                                fetchSchedules();
+                              }}
+                              className={`p-2.5 rounded-xl border transition-all ${
+                                s.status === 'paused'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                              }`}
+                              title={s.status === 'paused' ? 'Resume Routine' : 'Pause Routine'}
+                            >
+                              {s.status === 'paused' ? <Play className="w-4.5 h-4.5" /> : <Pause className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingRoutineId(s.id);
+                              }}
+                              className="p-2.5 rounded-xl bg-white/5 text-white/40 border border-transparent hover:text-primary hover:bg-primary/10 hover:border-primary/20 transition-all"
+                              title="Edit Routine Settings"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRoutineDeleteModal({ open: true, ids: [s.id] });
+                              }}
+                              className="p-2.5 rounded-xl bg-white/5 text-white/20 border border-transparent hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/20 transition-all"
+                              title="Delete Routine"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <ChevronDown className={`w-4 h-4 text-white/20 transition-transform duration-300 ${expandedRoutineId === s.id ? 'rotate-180 text-primary' : ''}`} />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-[10px]">
-                        <button
-                          onClick={() => runBackup(false, false, { scope: s.scope, name: s.name, appIds: s.appIds, includeStorage: s.includeStorage })}
-                          disabled={running}
-                          className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Run Routine On-Demand"
-                        >
-                          <Play className="w-4 h-4 fill-current" />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            await fetch(`${API_URL}/api/schedules/${s.id}/toggle-pause`, { method: 'POST' });
-                            fetchSchedules();
-                          }}
-                          className={`p-2.5 rounded-xl border transition-all ${
-                            s.status === 'paused'
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                          }`}
-                          title={s.status === 'paused' ? 'Resume Routine' : 'Pause Routine'}
-                        >
-                          {s.status === 'paused' ? <Play className="w-4.5 h-4.5" /> : <Pause className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={() => setEditingRoutineId(s.id)}
-                          className="p-2.5 rounded-xl bg-white/5 text-white/40 border border-transparent hover:text-primary hover:bg-primary/10 hover:border-primary/20 transition-all"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setRoutineDeleteModal({ open: true, ids: [s.id] })}
-                          className="p-2.5 rounded-xl bg-white/5 text-white/20 border border-transparent hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/20 transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+
+                      {/* Expanded Section - Accordion Metadata details */}
+                      {expandedRoutineId === s.id && (
+                        <div className="px-6 pb-6 pt-3 border-t border-white/5 bg-black/20 animate-in slide-in-from-top-2 duration-300 select-text">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Routine Identity</p>
+                                <p className="text-[10px] font-mono text-white/60 break-all bg-black/40 p-2.5 rounded-lg border border-white/5 selection:bg-primary/30">
+                                  {s.id}
+                                </p>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1.5">Execution Scope</p>
+                                  <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                    s.scope === 'StillwaterSuite' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                    {s.scope === 'StillwaterSuite' ? 'Full Suite' : 'Custom Selection'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1.5">Routine Status</p>
+                                  <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                    s.status === 'paused' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                  }`}>
+                                    {s.status === 'paused' ? 'Paused' : 'Active'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1.5">Target Applications</p>
+                                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+                                  {s.scope === 'StillwaterSuite' || !s.appIds || s.appIds.length === 0 ? (
+                                    s.scope === 'StillwaterSuite' ? (
+                                      <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-white/60">
+                                        All Suite Databases (*.json)
+                                      </span>
+                                    ) : (
+                                      <span className="px-2.5 py-1 rounded bg-amber-500/5 border border-amber-500/10 text-[9px] font-mono text-amber-400/80">
+                                        No Database Apps (Storage Only)
+                                      </span>
+                                    )
+                                  ) : (
+                                    s.appIds.map((appId: string) => {
+                                      const appObj = (currentSuite?.apps && !Array.isArray(currentSuite.apps) ? currentSuite.apps[appId] : null) || 
+                                                     (currentSuite?.apps && Array.isArray(currentSuite.apps) ? currentSuite.apps.find((a: any) => a.id === appId) : null) || 
+                                                     { name: appId };
+                                      return (
+                                        <span key={appId} className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-white/80">
+                                          {appObj.name || appObj.displayName || appId}
+                                        </span>
+                                      );
+                                    })
+                                  )}
+                                  {s.includeStorage && (
+                                    <span className="px-2.5 py-1 rounded bg-blue-500/10 border border-blue-500/20 text-[9px] font-mono text-blue-400 font-bold">
+                                      Cloud Storage Container
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Frequency Rule</p>
+                                  <p className="text-[10px] font-mono text-white/80 font-bold bg-black/30 px-2 py-1 rounded border border-white/5">
+                                    {s.cronExpression}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1">Last Run Time</p>
+                                  <p className="text-[10px] text-white/60 bg-black/30 px-2 py-1 rounded border border-white/5">
+                                    {s.lastRun ? format(new Date(s.lastRun), 'yyyy-MM-dd HH:mm:ss') : 'Never'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (
