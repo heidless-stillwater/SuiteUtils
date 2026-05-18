@@ -50,7 +50,8 @@ import BackupModals from '../components/backup/BackupModals';
 
 export function BackupAdminPage() {
   const { currentSuite } = useSuite();
-  const { isViewer } = useAuth();
+  const { isViewer: authIsViewer, isAdmin } = useAuth();
+  const isViewer = authIsViewer && !isAdmin;
   const [searchParams] = useSearchParams();
   const [backups, setBackups] = useState<BackupFile[]>([]);
   const [loading, setLoading] = useState(true);
