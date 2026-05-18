@@ -14,7 +14,7 @@ export interface SovereignStatus {
 /**
  * Hook to monitor the Sovereign Compliance status of the suite.
  */
-export function useSovereignStatus() {
+export function useSovereignStatus(enabled: boolean = true) {
     const [status, setStatus] = useState<SovereignStatus>({
         gated: false,
         status: 'green',
@@ -23,10 +23,19 @@ export function useSovereignStatus() {
     });
 
     const checkStatus = async () => {
+        console.log('[useSovereignStatus] Checking ecosystem status...', { enabled });
+        const startTime = Date.now();
         try {
             const res = await fetch('/api/compliance/sovereign');
             const data = await res.json();
 
+            // Ensure at least 800ms of loading time for visibility
+            const elapsed = Date.now() - startTime;
+            if (elapsed < 800) {
+                await new Promise(resolve => setTimeout(resolve, 800 - elapsed));
+            }
+
+            console.log('[useSovereignStatus] Status check complete:', data);
             setStatus({
                 gated: !!data.gated,
                 status: data.status || (data.gated ? 'red' : 'green'),
@@ -42,10 +51,12 @@ export function useSovereignStatus() {
     };
 
     useEffect(() => {
+        if (!enabled) return;
+        
         checkStatus();
         const interval = setInterval(checkStatus, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [enabled]);
 
     return status;
 }

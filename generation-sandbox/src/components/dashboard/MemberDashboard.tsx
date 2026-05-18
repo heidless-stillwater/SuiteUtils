@@ -18,7 +18,7 @@ interface MemberDashboardProps {
 export default function MemberDashboard({ dashboardData }: MemberDashboardProps) {
     const {
         profile, setAudienceMode, authLoading, user, credits,
-        availableCredits, effectiveRole, switchRole, signOut
+        availableCredits, effectiveRole, switchRole, signOut, ecosystemStatus
     } = dashboardData;
 
     if (authLoading || !profile) {
@@ -36,6 +36,7 @@ export default function MemberDashboard({ dashboardData }: MemberDashboardProps)
                 availableCredits={availableCredits || 0}
                 isAdminOrSu={false}
                 effectiveRole={effectiveRole}
+                ecosystemStatus={ecosystemStatus}
                 switchRole={switchRole}
                 setAudienceMode={setAudienceMode}
                 signOut={signOut}

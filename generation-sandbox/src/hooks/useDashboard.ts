@@ -28,9 +28,11 @@ import {
     useCreditHistory,
     queryKeys
 } from './queries/useQueryHooks';
+import { useSovereignStatus } from './useSovereignStatus';
 
 export function useDashboard() {
     const { user, profile, credits, loading: authLoading, signOut, switchRole, effectiveRole, setAudienceMode, isAdmin, isSu } = useAuth();
+    const ecosystemStatus = useSovereignStatus(!authLoading);
     const router = useRouter();
     const searchParams = useSearchParams();
     const { showToast } = useToast();
@@ -283,19 +285,35 @@ export function useDashboard() {
         }
     };
 
+    const handleUpdatePrinciples = async (nextPrinciples: string[]) => {
+        if (!user) return;
+        try {
+            await updateDoc(doc(db, 'users', user.uid), {
+                principles: nextPrinciples,
+                updatedAt: serverTimestamp()
+            });
+            showToast('Operating Principles synchronized', 'success');
+            // Optimistic update or refetch can be handled here
+        } catch (err) {
+            console.error('Principle update failed:', err);
+            showToast('Failed to sync principles', 'error');
+        }
+    };
+
     return {
         // State
         user, profile, authLoading, credits, recentImages, creditHistory, recentCommunityEntries,
         collections, loadingImages, loadingCommunity, loadingHistory, isHistoryExpanded,
         isGrouped, selectionMode, selectedIds, isBulkDeleting, isBulkPublishing,
         isBulkCollecting, isBulkTagging, isCollectionModalOpen, isTagModalOpen, effectiveRole,
-        isAdmin, isSu, viewMode,
+        isAdmin, isSu, viewMode, ecosystemStatus,
 
         // Actions
         signOut, switchRole, setAudienceMode, setIsHistoryExpanded, setIsGrouped,
         toggleSelectionMode, toggleImageSelection, toggleImageGroupSelection,
         handleSelectAll, handleBulkDelete, handleBulkAddToCollection,
         handleBulkPublishToCommunity, handleBulkAddTags, setIsCollectionModalOpen,
-        setIsTagModalOpen, groupImagesByPromptSet, setSelectedIds, setSelectionMode, setViewMode
+        setIsTagModalOpen, groupImagesByPromptSet, setSelectedIds, setSelectionMode, setViewMode,
+        handleUpdatePrinciples
     };
 }

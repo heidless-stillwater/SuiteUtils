@@ -3,8 +3,8 @@
     "id": "stillwater-suite",
     "name": "SuiteUtils v1.0",
     "description": "Production Hub for Stillwater Core Apps",
-    "gcpProjectId": "heidless-apps-2",
-    "ownerEmail": "heidlessemail18@gmail.com",
+    "gcpProjectId": "stillwater-sovereign-01",
+    "ownerEmail": "heidlessemail21@gmail.com",
     "createdAt": "2026-04-29T18:02:07.252Z",
     "apps": [
       {
@@ -59,7 +59,7 @@
       },
       {
         "id": "persona",
-        "name": "Persona v1.0",
+        "name": "Arjuna v1.0",
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
         "deployMethod": "cloud-build"
@@ -70,7 +70,7 @@
     "id": "new-gcp-server",
     "name": "Target: New GCP Server",
     "description": "Migration Target for Production Cluster",
-    "gcpProjectId": "heidless-apps-2",
+    "gcpProjectId": "stillwater-sovereign-01",
     "createdAt": "2026-05-02T17:48:00.000Z",
     "apps": [
       {
@@ -124,7 +124,7 @@
       },
       {
         "id": "persona",
-        "name": "Persona v1.0",
+        "name": "Arjuna v1.0",
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
         "deployMethod": "cloud-build"

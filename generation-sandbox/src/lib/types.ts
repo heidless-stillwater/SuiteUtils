@@ -76,7 +76,7 @@ export const BADGES: Record<string, { label: string, icon: string, color: string
 };
 
 // Admin email for initial setup
-export const ADMIN_EMAILS = ['heidlessemail18@gmail.com', 'heidlessemail17@gmail.com'];
+export const ADMIN_EMAILS = ['heidlessemail21@gmail.com', 'heidlessemail18@gmail.com', 'heidlessemail17@gmail.com'];
 
 // ============================================
 // System Configuration & Incentives

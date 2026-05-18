@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2, HardDrive, Database, Cloud, Trash2, Layout, Globe, CheckCircle2 } from 'lucide-react';
+import { User, Mail, Shield, LogOut, Crown, Bell, MessageSquare, Save, Loader2, HardDrive, Database, Cloud, Trash2, Layout, Globe, CheckCircle2, Rocket, Server, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { API_URL } from '../lib/api-config';
@@ -14,6 +15,12 @@ export function SettingsPage() {
   const [activeStorageProvider, setActiveStorageProvider] = useState<'gcs' | 'google-drive'>('google-drive');
   const [saving, setSaving] = useState(false);
   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [suiteModules, setSuiteModules] = useState<any[]>([]);
+  const [initialSuiteModules, setInitialSuiteModules] = useState<any[]>([]);
+  const [modulesSaving, setModulesSaving] = useState(false);
+  const [isOrchExpanded, setIsOrchExpanded] = useState(false);
+
+  const hasModuleChanges = JSON.stringify(suiteModules) !== JSON.stringify(initialSuiteModules);
 
   useEffect(() => {
     // Fetch notifications
@@ -31,7 +38,44 @@ export function SettingsPage() {
         setStrictMode(data.strictMode || false);
         setActiveStorageProvider(data.activeStorageProvider || 'google-drive');
       });
+
+    // Fetch suite orchestration config
+    fetch(`${API_URL}/api/suite/config`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setSuiteModules(data);
+          setInitialSuiteModules(data);
+        }
+      });
   }, []);
+
+  const handleSaveModules = async () => {
+    setModulesSaving(true);
+    try {
+      const enabledModules = suiteModules.reduce((acc, m) => ({
+        ...acc,
+        [m.script.replace('-ctl.sh', '')]: m.enabled
+      }), {});
+
+      await fetch(`${API_URL}/api/suite/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabledModules })
+      });
+      setInitialSuiteModules([...suiteModules]);
+    } catch (err) {
+      console.error('Failed to save module config:', err);
+    } finally {
+      setModulesSaving(false);
+    }
+  };
+
+  const toggleModule = (id: number) => {
+    setSuiteModules(prev => prev.map(m => 
+      m.id === id ? { ...m, enabled: !m.enabled } : m
+    ));
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -194,6 +238,83 @@ export function SettingsPage() {
         </div>
       </div>
  
+      <div className="glass-card-static p-6 space-y-6">
+        <div 
+          className="flex items-center justify-between cursor-pointer group"
+          onClick={() => setIsOrchExpanded(!isOrchExpanded)}
+        >
+          <div className="flex items-center gap-3">
+            <Rocket className={`w-5 h-5 transition-colors ${isOrchExpanded ? 'text-green-400' : 'text-white/20'}`} />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white/90">Ignition & Orchestration</h3>
+              {!isOrchExpanded && <p className="text-[10px] text-white/20 mt-0.5">Click to configure startup modules</p>}
+            </div>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-white/20 transition-transform duration-300 ${isOrchExpanded ? 'rotate-180' : ''}`} />
+        </div>
+
+        <AnimatePresence>
+          {isOrchExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden space-y-6"
+            >
+              <p className="text-[11px] text-white/30 leading-relaxed pt-2">
+                Configure which applications are automatically engaged during the <strong>Hive Ignition</strong> sequence. 
+                The Resurrector Watchdog will also respect these settings for automated background maintenance.
+              </p>
+
+              <div className="space-y-3">
+                {suiteModules.map((module) => (
+                  <div 
+                    key={module.id}
+                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
+                      module.enabled ? 'bg-primary/5 border-primary/20' : 'bg-white/5 border-white/5 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-lg ${module.enabled ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/20'}`}>
+                        <Server className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white/90 uppercase tracking-tight">{module.name}</h4>
+                        <p className="text-[10px] text-white/30 font-mono">{module.script}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => toggleModule(module.id)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        module.enabled ? 'bg-primary' : 'bg-white/10'
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        module.enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                onClick={handleSaveModules}
+                disabled={modulesSaving || !hasModuleChanges}
+                className={`w-full py-3 gap-2 mt-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center transition-all border ${
+                  modulesSaving || !hasModuleChanges 
+                    ? 'bg-white/5 text-white/20 border-white/5 cursor-not-allowed' 
+                    : 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
+                }`}
+              >
+                {modulesSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {modulesSaving ? 'Updating Hive Config...' : hasModuleChanges ? 'Apply Ignition Logic' : 'Config Synchronized'}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <div className="glass-card-static p-6 space-y-6">
         <div className="flex items-center gap-3">
           <HardDrive className="w-5 h-5 text-indigo-400" />

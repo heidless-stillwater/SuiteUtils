@@ -56,7 +56,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                 const app = data.apps[appId];
                 if (app) {
                   // Fix status for suiteutils if needed
-                  if (appId === 'suiteutils' && app.environments.production.status === 'not-configured') {
+                  if (appId === 'suiteutils' && app.environments.production.status !== 'live') {
                     app.environments.production.status = 'live';
                     needsSync = true;
                   }
@@ -71,9 +71,9 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                     app.environments.production.deployMethod = targetMethod;
                     needsSync = true;
                   }
-                  // Ensure project is set
-                  if (!app.project || app.project === 'heidless-apps-0') {
-                    app.project = 'heidless-apps-2';
+                  // Ensure project is set and updated to sovereign GCP project
+                  if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
+                    app.project = 'stillwater-sovereign-01';
                     needsSync = true;
                   }
                 }
@@ -87,7 +87,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                     displayName: config.displayName,
                     path: config.path,
                     database: config.database,
-                    project: config.project,
+                    project: config.project || 'stillwater-sovereign-01',
                     environments: {
                       production: { ...config.defaultEnv, lastDeployAt: null },
                       staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
@@ -188,7 +188,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         displayName: config.displayName,
         path: config.path,
         database: config.database,
-        project: config.project,
+        project: config.project || 'stillwater-sovereign-01',
         environments: {
           production: defaultEnv,
           staging: {

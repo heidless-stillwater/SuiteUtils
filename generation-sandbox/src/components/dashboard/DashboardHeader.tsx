@@ -17,6 +17,7 @@ interface DashboardHeaderProps {
     effectiveRole: string;
     availableCredits: number;
     isAdminOrSu: boolean;
+    ecosystemStatus?: any;
     switchRole: (role: any) => void;
     setAudienceMode: (mode: 'casual' | 'professional') => void;
     signOut: () => void;
@@ -28,6 +29,7 @@ export default function DashboardHeader({
     availableCredits,
     isAdminOrSu,
     effectiveRole,
+    ecosystemStatus,
     switchRole,
     setAudienceMode,
     signOut
@@ -50,7 +52,7 @@ export default function DashboardHeader({
                             <p className="text-[9px] font-black text-foreground-muted uppercase tracking-[0.2em] mt-1">Ecosystem Central</p>
                         </div>
                     </Link>
-                    <SuiteSwitcher />
+                    <SuiteSwitcher ecosystemStatus={ecosystemStatus} />
                 </div>
 
                 <div className="flex items-center gap-6">

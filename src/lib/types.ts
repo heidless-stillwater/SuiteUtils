@@ -186,7 +186,7 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     defaultEnv: { hostingTarget: 'suite-utils', deployMethod: 'firebase', status: 'live' },
   },
   'persona': {
-    displayName: 'Persona v1.0',
+    displayName: 'Arjuna v1.0',
     path: '~/projects/Persona',
     database: 'persona-db-0',
     project: 'heidless-apps-2',

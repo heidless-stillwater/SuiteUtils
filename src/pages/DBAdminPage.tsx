@@ -102,7 +102,7 @@ export function DBAdminPage() {
                   {profile.principles.map((p, i) => (
                     <div key={i} className="flex items-center gap-2 text-[10px] text-white/60 font-medium bg-white/5 p-2 rounded-lg">
                       <CheckCircle2 size={10} className="text-accent" />
-                      {p}
+                      {typeof p === 'string' ? p : (p as any).content}
                     </div>
                   ))}
                 </div>

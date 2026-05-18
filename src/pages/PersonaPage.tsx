@@ -1,62 +1,69 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Users, 
-  Shield, 
-  Terminal, 
   Cpu, 
   Sparkles, 
-  Search, 
+  Shield, 
+  Terminal, 
+  Activity, 
   Save, 
   Loader2, 
-  Plus, 
-  Trash2, 
-  CheckCircle2,
+  CheckCircle2, 
   AlertCircle,
+  Clock,
+  Zap,
+  Target,
+  ExternalLink,
   ChevronRight,
   MessageSquare
 } from 'lucide-react';
 import { API_URL } from '../lib/api-config';
-import { useSuite } from '../contexts/SuiteContext';
+import PrinciplesModal from '../components/dashboard/member/PrinciplesModal';
+import SovereignNeuralChat from '../components/dashboard/member/SovereignNeuralChat';
+
+interface Principle {
+  content: string;
+  updatedAt: string;
+}
 
 interface Archetype {
   id: string;
   name: string;
   expertise: string;
   communicationStyle: string;
-  principles: string[];
+  principles: (string | Principle)[];
   skills: string[];
   archetype: string;
   lastSyncAt: string;
 }
 
 export function PersonaPage() {
-  const { currentSuite } = useSuite();
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  // Editing State
-  const [editData, setEditData] = useState<Archetype | null>(null);
+  const [observations, setObservations] = useState<any[]>([]);
+  const [isPrinciplesModalOpen, setIsPrinciplesModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchArchetypes();
+    fetchData();
+    const interval = setInterval(fetchObservations, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchArchetypes = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/persona/archetypes`);
-      if (!res.ok) throw new Error('Failed to fetch archetypes');
+      if (!res.ok) throw new Error('Neural Core unreachable');
       const data = await res.json();
       setArchetypes(data);
       if (data.length > 0 && !selectedId) {
         setSelectedId(data[0].id);
-        setEditData(data[0]);
       }
+      await fetchObservations();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -64,28 +71,32 @@ export function PersonaPage() {
     }
   };
 
-  const handleSelect = (id: string) => {
-    const arch = archetypes.find(a => a.id === id);
-    if (arch) {
-      setSelectedId(id);
-      setEditData({ ...arch });
+  const fetchObservations = async () => {
+    try {
+      const res = await fetch('http://localhost:3006/observations');
+      if (res.ok) {
+        const data = await res.json();
+        setObservations(data);
+      }
+    } catch (e) {
+      // Bridge likely offline, fail silently for autonomous feel
     }
   };
 
-  const handleSave = async () => {
-    if (!editData) return;
+  const selectedArch = archetypes.find(a => a.id === selectedId);
+
+  const handleSave = async (updatedArch: Archetype) => {
     setSaving(true);
     setError(null);
-    setSuccess(false);
     try {
-      const res = await fetch(`${API_URL}/api/persona/archetypes/${editData.id}`, {
+      const res = await fetch(`${API_URL}/api/persona/archetypes/${updatedArch.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editData)
+        body: JSON.stringify(updatedArch)
       });
-      if (!res.ok) throw new Error('Failed to save changes');
+      if (!res.ok) throw new Error('Neural Sync failed');
       
-      setArchetypes(prev => prev.map(a => a.id === editData.id ? editData : a));
+      setArchetypes(prev => prev.map(a => a.id === updatedArch.id ? updatedArch : a));
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
@@ -95,87 +106,106 @@ export function PersonaPage() {
     }
   };
 
-  const updatePrinciple = (index: number, value: string) => {
-    if (!editData) return;
-    const newPrinciples = [...editData.principles];
-    newPrinciples[index] = value;
-    setEditData({ ...editData, principles: newPrinciples });
-  };
-
-  const addPrinciple = () => {
-    if (!editData) return;
-    setEditData({ ...editData, principles: [...editData.principles, 'New Operating Principle...'] });
-  };
-
-  const removePrinciple = (index: number) => {
-    if (!editData) return;
-    const newPrinciples = editData.principles.filter((_, i) => i !== index);
-    setEditData({ ...editData, principles: newPrinciples });
+  const handleSavePrinciples = async (newPrinciples: Principle[]) => {
+    if (!selectedArch) return;
+    const updated = { ...selectedArch, principles: newPrinciples };
+    await handleSave(updated);
   };
 
   if (loading) {
     return (
-      <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-        <span className="text-[10px] font-bold text-primary tracking-[0.3em] animate-pulse uppercase">Syncing Neural Core...</span>
+      <div className="h-[60vh] flex flex-col items-center justify-center gap-6">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Zap className="w-6 h-6 text-primary animate-pulse" />
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <p className="text-[10px] font-black text-primary uppercase tracking-[0.4em] animate-pulse">Syncing Neural Core</p>
+          <p className="text-[8px] font-mono text-white/20 uppercase tracking-widest">Establishing Sovereign Protocol</p>
+        </div>
       </div>
     );
   }
 
-  const activeArchetype = archetypes.find(a => a.id === selectedId);
-
   return (
-    <div className="page-enter space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Sovereign Persona</h1>
-          <p className="text-sm text-white/40 mt-1">Manage the Hive's Neural Directives and Operating Principles</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-            <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Neural Sync Active</span>
+    <div className="space-y-8 page-enter">
+      {/* Neural Core Header */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 glass-card p-8 relative overflow-hidden bg-primary/5 border-primary/20">
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+            <Cpu className="w-64 h-64" />
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving || !editData}
-            className="btn-primary py-2.5 px-6 gap-2"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? 'Syncing...' : 'Commit Changes'}
-          </button>
+          
+          <div className="relative z-10 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30 shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]">
+                <Cpu className="w-8 h-8" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black text-primary uppercase tracking-[0.4em] block mb-1">Intelligence Core</span>
+                <h2 className="text-3xl font-black text-white uppercase tracking-tighter">Sovereign Persona</h2>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Neural Sync Active</span>
+              </div>
+              <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                <Activity className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Port 3006 Stream</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 bg-orange-500/5 border-orange-500/20 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <Shield className="w-5 h-5 text-orange-400" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">Neural Ingestion</h3>
+            </div>
+            <p className="text-[10px] text-white/40 leading-relaxed uppercase tracking-wide">
+              Monitoring real-time behavioral insights from the bridge. Promoting observations hardens the archetype constitution.
+            </p>
+          </div>
+          <div className="mt-6 flex items-center justify-between pt-4 border-t border-white/5">
+            <span className="text-[10px] font-mono text-orange-400/60 uppercase">{observations.length} Pending Insights</span>
+            <Target className="w-4 h-4 text-orange-400 animate-pulse" />
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-12 gap-8">
-        {/* Sidebar: Archetype Selection */}
+        {/* Archetype Selector Sidebar */}
         <div className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="premium-label px-2">Sovereign Archetypes</div>
-          <div className="space-y-2">
-            {archetypes.map((arch) => (
+          <div className="premium-label px-2">Active Archetypes</div>
+          <div className="grid grid-cols-1 gap-2">
+            {archetypes.map(arch => (
               <button
                 key={arch.id}
-                onClick={() => handleSelect(arch.id)}
-                className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group ${
+                onClick={() => setSelectedId(arch.id)}
+                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group ${
                   selectedId === arch.id
-                    ? 'bg-primary/10 border-primary/40 shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]'
+                    ? 'bg-primary/20 border-primary/40 shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]'
                     : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
-                <div className={`p-2 rounded-lg transition-all ${
-                  selectedId === arch.id ? 'bg-primary text-white scale-110' : 'bg-white/5 text-white/20'
-                }`}>
-                  {arch.archetype === 'Architect' ? <Cpu className="w-4 h-4" /> :
-                   arch.archetype === 'Hacker' ? <Terminal className="w-4 h-4" /> :
-                   arch.archetype === 'Creative' ? <Sparkles className="w-4 h-4" /> :
-                   arch.archetype === 'Guardian' ? <Shield className="w-4 h-4" /> :
-                   <Search className="w-4 h-4" />}
+                <div className={`p-2 rounded-lg transition-all ${selectedId === arch.id ? 'bg-primary text-white scale-110' : 'bg-white/5 text-white/20'}`}>
+                   {arch.archetype === 'Architect' ? <Cpu className="w-4 h-4" /> :
+                    arch.archetype === 'Hacker' ? <Terminal className="w-4 h-4" /> :
+                    arch.archetype === 'Creative' ? <Sparkles className="w-4 h-4" /> :
+                    arch.archetype === 'Guardian' ? <Shield className="w-4 h-4" /> :
+                    <Cpu className="w-4 h-4" />}
                 </div>
                 <div className="flex-1">
-                  <h3 className={`text-sm font-bold uppercase tracking-wider ${
-                    selectedId === arch.id ? 'text-white' : 'text-white/40'
-                  }`}>{arch.archetype}</h3>
-                  <p className="text-[9px] text-white/20 font-mono mt-0.5">ID: {arch.id}</p>
+                  <h4 className={`text-[11px] font-black uppercase tracking-widest ${selectedId === arch.id ? 'text-white' : 'text-white/40'}`}>
+                    {arch.archetype}
+                  </h4>
+                  <p className="text-[8px] font-mono text-white/20 uppercase mt-0.5">{arch.expertise.split(',')[0]}</p>
                 </div>
                 {selectedId === arch.id && <ChevronRight className="w-4 h-4 text-primary" />}
               </button>
@@ -183,106 +213,81 @@ export function PersonaPage() {
           </div>
         </div>
 
-        {/* Main Content: Principle Editor */}
+        {/* Main Interface: Insights & Directives */}
         <div className="col-span-12 lg:col-span-9 space-y-8">
-          {editData && (
+          <AnimatePresence mode="wait">
             <motion.div
-              key={editData.id}
+              key={selectedId}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
               className="space-y-8"
             >
-              {/* Header Info */}
-              <div className="glass-card p-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                  {editData.archetype === 'Architect' ? <Cpu className="w-48 h-48" /> :
-                   editData.archetype === 'Hacker' ? <Terminal className="w-48 h-48" /> :
-                   editData.archetype === 'Creative' ? <Sparkles className="w-48 h-48" /> :
-                   editData.archetype === 'Guardian' ? <Shield className="w-48 h-48" /> :
-                   <Search className="w-48 h-48" />}
+              {/* Observation Feed */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">Pending Ingestion Feed</h3>
+                  <button onClick={fetchObservations} className="p-1.5 text-white/20 hover:text-white transition-colors">
+                    <Clock className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-
-                <div className="flex flex-col gap-6 relative z-10">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30 shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]">
-                      {editData.archetype === 'Architect' ? <Cpu className="w-8 h-8" /> :
-                       editData.archetype === 'Hacker' ? <Terminal className="w-8 h-8" /> :
-                       editData.archetype === 'Creative' ? <Sparkles className="w-8 h-8" /> :
-                       editData.archetype === 'Guardian' ? <Shield className="w-8 h-8" /> :
-                       <Search className="w-8 h-8" />}
+                
+                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                  {observations.length === 0 ? (
+                    <div className="p-8 text-center glass-card border-dashed border-white/10">
+                      <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Neural Buffer Empty</p>
                     </div>
-                    <div>
-                      <span className="text-[10px] font-black text-primary uppercase tracking-[0.4em] block mb-1">Archetype Profile</span>
-                      <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{editData.archetype}</h2>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-white/30 font-bold ml-1">Expertise Registry</label>
-                      <input
-                        type="text"
-                        value={editData.expertise}
-                        onChange={(e) => setEditData({ ...editData, expertise: e.target.value })}
-                        className="w-full bg-black/40 border-white/10 rounded-xl text-sm text-white py-3 px-4 focus:ring-primary/40 transition-all"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-white/30 font-bold ml-1">Last Neural Sync</label>
-                      <div className="w-full bg-white/5 border border-white/5 rounded-xl text-sm text-white/40 py-3 px-4 font-mono">
-                        {new Date(editData.lastSyncAt).toLocaleString()}
+                  ) : (
+                    observations.map((obs, idx) => (
+                      <div key={idx} className="p-4 glass-card-static flex items-center justify-between group hover:border-orange-500/30 transition-all">
+                        <div className="flex items-center gap-4">
+                          <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400 border border-orange-500/20">
+                            <Zap className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-white/80 font-bold">{obs.content || obs.type}</p>
+                            <p className="text-[9px] text-white/20 font-mono mt-0.5 uppercase">{obs.timestamp}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            if (!selectedArch) return;
+                            const updated = { ...selectedArch, principles: [...selectedArch.principles, obs.content] };
+                            handleSave(updated);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-400 text-[9px] font-black uppercase tracking-widest border border-orange-500/20 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          Promote to Principle
+                        </button>
                       </div>
-                    </div>
-                  </div>
+                    ))
+                  )}
                 </div>
               </div>
 
-              {/* Operating Principles Editor */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between px-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400">
-                      <Shield className="w-4 h-4" />
-                    </div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-white">Operating Principles</h3>
-                  </div>
-                  <button
-                    onClick={addPrinciple}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-black uppercase tracking-widest transition-all border border-primary/20"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    New Principle
-                  </button>
+              {/* Operating Principles Deep-Link */}
+              <div 
+                onClick={() => setIsPrinciplesModalOpen(true)}
+                className="group glass-card p-6 border-primary/20 bg-primary/5 hover:border-primary/40 transition-all cursor-pointer relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                  <Shield className="w-24 h-24 text-primary" />
                 </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  <AnimatePresence mode="popLayout">
-                    {editData.principles.map((principle, index) => (
-                      <motion.div
-                        key={`${editData.id}-principle-${index}`}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="group relative flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/30 transition-all focus-within:border-primary/50"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/20 shrink-0 select-none">
-                          {index + 1}
-                        </div>
-                        <textarea
-                          value={principle}
-                          onChange={(e) => updatePrinciple(index, e.target.value)}
-                          className="flex-1 bg-transparent border-none text-sm text-white/80 focus:ring-0 resize-none py-1 min-h-[44px]"
-                          rows={Math.max(1, Math.ceil(principle.length / 80))}
-                        />
-                        <button
-                          onClick={() => removePrinciple(index)}
-                          className="opacity-0 group-hover:opacity-100 p-2 rounded-lg hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all self-start"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+                
+                <div className="flex items-center justify-between relative z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+                      <Shield className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-white uppercase tracking-tighter group-hover:text-primary transition-colors">Neural Constitution</h3>
+                      <p className="text-xs text-white/30">Explore and edit the full registry of operating principles.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/20 group-hover:bg-primary/20 transition-all">
+                    {selectedArch?.principles?.length || 0} Principles Active
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </div>
                 </div>
               </div>
 
@@ -292,61 +297,65 @@ export function PersonaPage() {
                   <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400">
                     <MessageSquare className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">Communication Style (Behavioral)</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">Neural Tone & Behavior</h3>
                 </div>
                 
                 <div className="glass-card p-6">
                   <textarea
-                    value={editData.communicationStyle}
-                    onChange={(e) => setEditData({ ...editData, communicationStyle: e.target.value })}
-                    className="w-full bg-black/40 border-white/10 rounded-2xl text-sm font-mono text-white/70 py-4 px-6 focus:ring-primary/40 transition-all min-h-[300px]"
+                    value={selectedArch?.communicationStyle || ''}
+                    onChange={(e) => {
+                      if (!selectedArch) return;
+                      const updated = { ...selectedArch, communicationStyle: e.target.value };
+                      setArchetypes(prev => prev.map(a => a.id === updated.id ? updated : a));
+                    }}
+                    onBlur={() => selectedArch && handleSave(selectedArch)}
+                    className="w-full bg-black/40 border-white/10 rounded-2xl text-sm font-mono text-white/70 py-4 px-6 focus:ring-primary/40 transition-all min-h-[250px]"
                     placeholder="[TONE]: ...\n[STRUCTURE]: ...\n[BEHAVIOR]: ..."
                   />
                   <p className="text-[10px] text-white/20 mt-4 px-2 uppercase tracking-[0.2em]">
-                    Use [TONE], [STRUCTURE], and [BEHAVIOR] tags for optimal neural ingestion.
+                    Real-time behavior updates are synced to the local bridge upon focus loss.
                   </p>
                 </div>
               </div>
             </motion.div>
-          )}
+          </AnimatePresence>
         </div>
       </div>
 
+      {/* Neural Modals */}
+      <PrinciplesModal 
+        isOpen={isPrinciplesModalOpen}
+        onClose={() => setIsPrinciplesModalOpen(false)}
+        principles={selectedArch?.principles || []}
+        archetypeName={selectedArch?.archetype || 'Neural'}
+        onSave={handleSavePrinciples}
+      />
+
       {/* Status Toasts */}
       <AnimatePresence>
-        {success && (
+        {(success || saving) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             className="fixed bottom-10 right-10 z-[200]"
           >
-            <div className="flex items-center gap-3 px-6 py-4 rounded-2xl bg-green-500/20 border border-green-500/40 backdrop-blur-xl shadow-[0_0_40px_rgba(34,197,94,0.2)]">
-              <CheckCircle2 className="w-5 h-5 text-green-400" />
+            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl border backdrop-blur-xl shadow-2xl ${
+              saving ? 'bg-primary/20 border-primary/40' : 'bg-green-500/20 border-green-500/40'
+            }`}>
+              {saving ? <Loader2 className="w-5 h-5 text-primary animate-spin" /> : <CheckCircle2 className="w-5 h-5 text-green-400" />}
               <div>
-                <p className="text-sm font-bold text-white uppercase tracking-wider">Sync Successful</p>
-                <p className="text-[10px] text-green-400/60 font-mono">NEURAL CONSTITUTION UPDATED</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-10 right-10 z-[200]"
-          >
-            <div className="flex items-center gap-3 px-6 py-4 rounded-2xl bg-red-500/20 border border-red-500/40 backdrop-blur-xl shadow-[0_0_40px_rgba(239,68,68,0.2)]">
-              <AlertCircle className="w-5 h-5 text-red-400" />
-              <div>
-                <p className="text-sm font-bold text-white uppercase tracking-wider">Sync Failed</p>
-                <p className="text-[10px] text-red-400/60 font-mono">{error.toUpperCase()}</p>
+                <p className="text-sm font-bold text-white uppercase tracking-wider">{saving ? 'Neural Syncing...' : 'Sync Successful'}</p>
+                <p className={`text-[10px] font-mono uppercase ${saving ? 'text-primary/60' : 'text-green-400/60'}`}>
+                  {saving ? 'UPDATING CORE DIRECTIVES' : 'CONSTITUTION HARDENED'}
+                </p>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <SovereignNeuralChat />
     </div>
   );
 }

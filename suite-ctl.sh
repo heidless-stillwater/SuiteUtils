@@ -30,7 +30,7 @@ ensure_session
 # Phase 1: Selective Targeting
 if [[ "$OPTION" =~ ^[1-8]$ ]]; then
     # Target specific slot (e.g., stop 6 -> Persona)
-    TARGET_SCRIPTS=$(grep "\"id\": $OPTION" "$CONFIG_FILE" | grep -oP '"script": "\K[^"]+')
+    TARGET_SCRIPTS=$(grep -Pzo "\"id\": $OPTION(.|\n){0,100}\"script\": \"\K[^\"]+" "$CONFIG_FILE" | tr -d '\0')
 
 elif [ "$COMMAND" == "start" ] && [ "$OPTION" != "all" ]; then
     # Start only enabled modules

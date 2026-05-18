@@ -1,12 +1,12 @@
 {
   "projects": {
-    "default": "heidless-apps-2"
+    "default": "stillwater-sovereign-01"
   },
   "targets": {
-    "heidless-apps-2": {
+    "stillwater-sovereign-01": {
       "hosting": {
         "suite-utils": [
-          "suite-utils"
+          "stillwater-suite-utils"
         ]
       }
     }

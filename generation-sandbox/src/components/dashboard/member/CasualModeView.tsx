@@ -15,8 +15,9 @@ interface CasualModeViewProps {
 }
 
 export default function CasualModeView({ dashboardData }: CasualModeViewProps) {
-    const { profile, credits } = dashboardData;
+    const { profile, credits, ecosystemStatus } = dashboardData;
     const router = useRouter();
+    const statusLoading = ecosystemStatus?.loading;
     const [isTourModalOpen, setIsTourModalOpen] = useState(false);
     const { startTour } = useTour();
 
@@ -39,6 +40,87 @@ export default function CasualModeView({ dashboardData }: CasualModeViewProps) {
             {/* Support Level: Wallet Wisdom */}
             <div id="wallet-wisdom">
                 <WalletWisdom credits={credits} />
+            </div>
+
+            {/* --- Stillwater Ecosystem Suite Status --- */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {statusLoading ? (
+                    <div className="md:col-span-3 h-[120px] glass-card bg-black/60 flex flex-col items-center justify-center gap-3 animate-pulse border-2 border-primary/20">
+                        <Icons.spinner className="w-8 h-8 text-primary animate-spin" />
+                        <span className="text-[11px] font-black uppercase tracking-[0.3em] text-primary/80">Synchronizing Ecosystem Status...</span>
+                    </div>
+                ) : (
+                    [
+                    { 
+                        name: 'Stillwater Studio', 
+                        id: 'studio', 
+                        url: '#', 
+                        icon: '✨', 
+                        desc: 'AI Generation & Refinement',
+                        isCurrent: true 
+                    },
+                    { 
+                        name: 'Resources', 
+                        id: 'resources', 
+                        url: 'http://localhost:3002/resources', 
+                        icon: '📚', 
+                        desc: 'Premium Assets & Guides' 
+                    },
+                    { 
+                        name: 'Master Registry', 
+                        id: 'registry', 
+                        url: 'http://localhost:5173', 
+                        icon: '📋', 
+                        desc: 'Production Assets & Export' 
+                    }
+                ].map((app) => {
+                    const isUnlocked = profile?.suiteSubscription?.activeSuites?.includes(app.id) || profile?.role === 'admin' || profile?.role === 'su';
+                    return (
+                        <div 
+                            key={app.id}
+                            onClick={() => !app.isCurrent && window.open(app.url, '_blank')}
+                            className={`glass-card p-5 group cursor-pointer transition-all duration-500 border-x-0 border-t-0 border-b-2 ${
+                                app.isCurrent 
+                                ? 'border-primary/50 bg-primary/5 shadow-lg shadow-primary/5' 
+                                : isUnlocked 
+                                    ? 'border-emerald-500/30 hover:border-emerald-500/60 bg-white/5' 
+                                    : 'border-white/5 hover:border-white/20'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl group-hover:scale-110 transition-transform duration-500">{app.icon}</span>
+                                    <div>
+                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-white/90">{app.name}</h4>
+                                        <p className="text-[10px] text-foreground-muted font-bold">{app.desc}</p>
+                                    </div>
+                                </div>
+                                {isUnlocked ? (
+                                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                                        <Icons.check size={12} className="text-emerald-500" />
+                                    </div>
+                                ) : (
+                                    <div className="w-6 h-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                                        <Icons.lock size={12} className="text-white/40" />
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-4 overflow-hidden">
+                                <div className="flex items-center gap-2">
+                                    <div className={`h-1.5 w-1.5 rounded-full ${isUnlocked ? 'bg-emerald-500 animate-pulse' : 'bg-white/20'}`} />
+                                    <span className={`text-[9px] font-black uppercase tracking-tighter ${isUnlocked ? 'text-emerald-400' : 'text-foreground-muted'}`}>
+                                        {app.isCurrent ? 'Active Session' : isUnlocked ? 'Unlocked' : 'Encrypted'}
+                                    </span>
+                                </div>
+                                {!app.isCurrent && (
+                                    <Icons.arrowRight size={12} className="text-foreground-muted group-hover:translate-x-1 transition-transform" />
+                                )}
+                            </div>
+                        </div>
+                    );
+                })
+                )}
             </div>
 
             {/* Support Level: Starter Prompts */}

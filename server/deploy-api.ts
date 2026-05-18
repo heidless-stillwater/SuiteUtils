@@ -18,7 +18,7 @@ import cors from 'cors';
 import multer from 'multer';
 import { spawn } from 'child_process';
 import path from 'path';
-import fs from 'fs';
+import fs from 'fs-extra';
 import os from 'os';
 import { GoogleAuth } from 'google-auth-library';
 import { fileURLToPath } from 'url';
@@ -35,7 +35,9 @@ import { scheduleManager } from './services/ScheduleManager.js';
 import { operationMonitor } from './services/OperationMonitor.js';
 import { notificationManager } from './services/NotificationManager.js';
 import { settingsManager } from './services/SettingsManager.js';
+import { suiteConfigManager } from './services/SuiteConfigManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
+import { validationScanner } from './services/ValidationScanner.js';
 import { invitationManager } from './services/InvitationManager.js';
 import { deploymentManager } from './services/DeploymentManager.js';
 
@@ -55,7 +57,11 @@ const PORT = Number(process.env.PORT) || 5185;
 // Initialize Services
 scheduleManager.init();
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ 
+  origin: '*', 
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-workspace-id'],
+  credentials: true
+}));
 app.use(express.json());
 
 app.get('/api/verify-code', (req, res) => {
@@ -67,6 +73,47 @@ app.get('/api/verify-code', (req, res) => {
     timestamp: new Date().toISOString(),
     jobs: deploymentManager.getActiveJobs().length
   });
+});
+
+// SUITE ORCHESTRATION
+app.post('/api/suite/start-all', async (req, res) => {
+  try {
+    const wsId = (req as any).workspaceId;
+    const workspace = workspaceManager.getWorkspace(wsId);
+    
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    console.log(`🔥 [Ignition] Triggering Bulk Ignition for Workspace: ${wsId}`);
+    
+    // We filter out suiteutils itself (since it's already running) and 
+    // trigger parallel startup for the rest
+    // Respect suite.config.json enabled flags for cold-start ignition.
+    // This allows the user to configure exactly which apps are brought online during ignition.
+    const appsToStart = workspace.apps
+      .filter(app => {
+        if (app.id === 'suiteutils') return false;
+        const scriptPrefix = deploymentManager.APP_SCRIPT_MAP[app.id] || app.id;
+        return suiteConfigManager.isModuleEnabled(scriptPrefix);
+      })
+      .map(app => app.id);
+    
+    if (appsToStart.length > 0) {
+      await deploymentManager.bulkToggleLocalApps(appsToStart, true);
+      console.log(`🚀 [Ignition] Bulk start signal sent for: ${appsToStart.join(', ')}`);
+    }
+
+    const allModules = workspace.apps.map(app => app.id);
+
+    res.json({ 
+      success: true, 
+      message: `Ignition sequence initiated for ${allModules.length} modules.`,
+      modules: allModules
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PERSONA ARCHETYPE MANAGEMENT
@@ -87,10 +134,113 @@ app.post('/api/persona/archetypes/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
+    
+    // 1. Update Persistent Storage (Firestore)
     await personaDb.collection('config').doc(id).set({
       ...update,
       lastSyncAt: new Date().toISOString()
     }, { merge: true });
+
+    // 2. Broadcast Live Observation to Persona Engine
+    // We attempt to notify the persona of the change so it can ingest the new principles immediately
+    try {
+      await fetch(`http://localhost:3005/api/observation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'DIRECTIVE_UPDATE',
+          archetypeId: id,
+          payload: update,
+          timestamp: new Date().toISOString()
+        })
+      });
+      console.log(`[Neural Sync] Observation broadcast to Persona for archetype: ${id}`);
+    } catch (e) {
+      console.warn(`[Neural Sync] Persona Hub unreachable. Live sync skipped for ${id}.`);
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// VALIDATION BACKLOG MANAGEMENT
+app.get('/api/validations', async (req, res) => {
+  try {
+    const wsId = (req as any).workspaceId;
+    
+    // Dynamically scan for validation plans in docs/
+    const seed = await validationScanner.scanAll(wsId);
+
+    // Fetch existing results from Firestore
+    const snapshot = await firestore.collection('validations').where('workspaceId', '==', wsId).get();
+    const persisted = snapshot.docs.reduce((acc, doc) => {
+      acc[doc.id] = doc.data();
+      return acc;
+    }, {} as any);
+
+    // Merge: Persisted data (status/notes) overrides seed data, but preserve seed metadata (group/feature)
+    const merged = seed.map(item => {
+      const p = persisted[item.id];
+      if (p) {
+        if (p.deleted) return null;
+        return { 
+          ...item, 
+          status: p.status || item.status,
+          lastUpdated: p.lastUpdated || item.lastUpdated
+        };
+      }
+      return item;
+    }).filter(Boolean);
+
+    res.json(merged);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/validations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const wsId = (req as any).workspaceId;
+    
+    // We use the validation ID (e.g. VAL-001) as the document ID for simplicity
+    await firestore.collection('validations').doc(id).set({
+      id,
+      status,
+      lastUpdated: new Date().toISOString(),
+      workspaceId: wsId
+    }, { merge: true });
+    
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/validations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mode } = req.query;
+    const wsId = (req as any).workspaceId || 'stillwater-suite';
+
+    if (mode === 'hard') {
+      const deletedFromMarkdown = await validationScanner.hardDelete(id, wsId);
+      if (!deletedFromMarkdown) {
+        return res.status(404).json({ error: 'Validation test not found in markdown files' });
+      }
+      await firestore.collection('validations').doc(id).delete();
+    } else {
+      await firestore.collection('validations').doc(id).set({
+        id,
+        deleted: true,
+        lastUpdated: new Date().toISOString(),
+        workspaceId: wsId
+      }, { merge: true });
+    }
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -421,6 +571,30 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', async (req, res) => {
   await settingsManager.update(req.body);
   res.json({ success: true });
+});
+
+app.get('/api/suite/config', (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), 'suite.config.json');
+    const config = fs.readJsonSync(configPath);
+    res.json(config.modules);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/suite/config', async (req, res) => {
+  try {
+    const { enabledModules } = req.body; // Map of scriptPrefix -> enabled
+    if (enabledModules) {
+      Object.entries(enabledModules).forEach(([prefix, enabled]) => {
+        suiteConfigManager.setModuleEnabled(prefix, enabled as boolean);
+      });
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/workspaces', (req, res) => {
@@ -1562,7 +1736,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`\n🚀 SuiteUtils Deploy API running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
 });

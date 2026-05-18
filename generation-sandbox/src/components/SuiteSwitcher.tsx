@@ -12,8 +12,13 @@ const apps = [
     { name: 'Accreditation', url: 'http://localhost:3003', icon: Icons.shield, color: 'text-blue-400', desc: 'Compliance Hub' },
 ];
 
-export function SuiteSwitcher() {
+interface SuiteSwitcherProps {
+    ecosystemStatus?: any;
+}
+
+export function SuiteSwitcher({ ecosystemStatus }: SuiteSwitcherProps) {
     const [isOpen, setIsOpen] = useState(false);
+    const statusLoading = ecosystemStatus?.loading;
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -38,7 +43,11 @@ export function SuiteSwitcher() {
                 <div className="absolute top-full mt-3 left-0 w-80 bg-[#0f172a]/95 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] p-4 z-[100] animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex items-center justify-between mb-4 px-2">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20">Stillwater Ecosystem</h3>
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                        {statusLoading ? (
+                            <Icons.spinner size={10} className="text-primary animate-spin" />
+                        ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        )}
                     </div>
                     <div className="grid grid-cols-1 gap-1.5">
                         {apps.map((app) => (

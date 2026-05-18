@@ -8,5 +8,20 @@
     { "target": "plantune", "database": "plantune-db-0", "rules": "sovereign.rules" },
     { "target": "suiteutils", "database": "suiteutils-db-0", "rules": "sovereign.rules" },
     { "target": "autovideo", "database": "autovideo-db-0", "rules": "sovereign.rules" }
-  ]
+  ],
+  "hosting": {
+    "target": "suite-utils",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
 }

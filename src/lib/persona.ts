@@ -5,10 +5,15 @@
 
 const BRIDGE_URL = 'http://localhost:3006';
 
+export interface Principle {
+  content: string;
+  updatedAt: string;
+}
+
 export interface PersonaProfile {
   name: string;
   expertise: string;
-  principles: string[];
+  principles: (string | Principle)[];
   skills: string[];
   archetype: string;
   version: string;

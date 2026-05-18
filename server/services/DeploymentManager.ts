@@ -420,7 +420,7 @@ export class DeploymentManager extends EventEmitter {
         return false;
     }
 
-    private readonly APP_SCRIPT_MAP: Record<string, string> = {
+    public readonly APP_SCRIPT_MAP: Record<string, string> = {
         'ag-video-system': 'video',
         'prompttool': 'prompttool',
         'promptresources': 'resources',

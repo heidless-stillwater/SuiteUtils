@@ -1,10 +1,17 @@
 @import "tailwindcss";
-
 @import url('./stillwater-tokens.css');
 
+:root {
+  --primary: #10b981;
+  --primary-rgb: 16, 185, 129;
+  --accent: #6366f1;
+  --accent-rgb: 99, 102, 241;
+}
+
 @theme {
-  --color-primary: #0d9488;
-  --color-accent: #10b981;
+  --color-primary: #10b981;
+  --color-primary-light: #34d399;
+  --color-accent: #6366f1;
   --color-background: #0f172a;
   --color-background-secondary: #1e293b;
   --color-foreground: #f8fafc;
@@ -39,8 +46,8 @@
   }
 
   @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 20px rgba(13, 148, 136, 0.2); }
-    50% { box-shadow: 0 0 40px rgba(13, 148, 136, 0.4); }
+    0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
+    50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.4); }
   }
 }
 
@@ -64,23 +71,33 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Glass Panels & Surfaces */
 .glass-panel {
-  background: var(--gradient-glass, rgba(255, 255, 255, 0.02));
+  background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(20px);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 1.5rem;
-  box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.5));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
 }
 
 .glass-card {
-  @apply bg-white/[0.03] backdrop-blur-2xl border border-white/5 rounded-3xl transition-all duration-300;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
-  @apply border-white/10 bg-white/[0.04] shadow-[0_20px_40px_rgba(0,0,0,0.3)];
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
 }
 
 .glass-card-static {
-  @apply bg-white/[0.03] backdrop-blur-2xl border border-white/5 rounded-3xl;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1.5rem;
 }
 
 /* Typography & Branding */
@@ -171,7 +188,7 @@ select.cinematic {
 
 /* Buttons */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-accent text-white font-bold rounded-2xl transition-all duration-300 hover:shadow-[0_0_30px_rgba(13,148,136,0.3)] hover:scale-[1.02] active:scale-[0.98] text-sm;
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-accent text-white font-bold rounded-2xl transition-all duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-[0.98] text-sm;
 }
 
 .btn-secondary {

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Cloud, 
   Archive, 
@@ -90,6 +90,10 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
   setScopeSelectorCollapsed,
   handleDownload
 }) => {
+  const [archiveCollapsed, setArchiveCollapsed] = useState(true);
+  const [registryCollapsed, setRegistryCollapsed] = useState(false);
+
+  const isCollapsed = activeTab === 'archive' ? archiveCollapsed : registryCollapsed;
 
   const formatSize = (bytes?: string | number) => {
     if (!bytes) return '0 B';
@@ -140,14 +144,38 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
       {/* Left Column: List of Backups */}
       <div className="lg:col-span-2 space-y-4">
         <div className="glass-card-static p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeTab === 'registry' ? 'bg-primary/10' : 'bg-amber-500/10'}`}>
-                {activeTab === 'registry' ? <Cloud className="w-5 h-5 text-primary" /> : <Archive className="w-5 h-5 text-amber-400" />}
+          <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${isCollapsed ? '' : 'mb-6 pb-6 border-b border-white/5'}`}>
+            <div 
+              className="flex items-center gap-3 cursor-pointer group select-none"
+              onClick={() => {
+                if (activeTab === 'archive') {
+                  setArchiveCollapsed(!archiveCollapsed);
+                } else {
+                  setRegistryCollapsed(!registryCollapsed);
+                }
+              }}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                activeTab === 'registry' 
+                  ? (registryCollapsed ? 'bg-primary/5 text-primary/40' : 'bg-primary/10 text-primary') 
+                  : (archiveCollapsed ? 'bg-amber-500/5 text-amber-500/40' : 'bg-amber-500/10 text-amber-400')
+              }`}>
+                {activeTab === 'registry' ? <Cloud className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">{activeTab === 'registry' ? 'Cloud Explorer' : 'Archive Explorer'}</h2>
-                <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{activeTab === 'registry' ? 'GCS Staging Bucket' : 'Long-term Storage'}</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white group-hover:text-primary transition-colors">
+                    {activeTab === 'registry' ? 'Cloud Explorer' : 'Archive Explorer'}
+                  </h2>
+                  <ChevronDown className={`w-4 h-4 text-white/20 group-hover:text-white/60 transition-all ${
+                    activeTab === 'registry' 
+                      ? (registryCollapsed ? '' : 'rotate-180') 
+                      : (archiveCollapsed ? '' : 'rotate-180')
+                  }`} />
+                </div>
+                <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
+                  {activeTab === 'registry' ? 'GCS Staging Bucket' : 'Long-term Storage'}
+                </p>
               </div>
             </div>
 
@@ -200,7 +228,9 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-2 mb-4">
+          {!isCollapsed && (
+            <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
+              <div className="flex items-center justify-between px-2 mb-4">
             <button
               onClick={() => {
                 if (selectedBackups.size === sortedBackups.length) setSelectedBackups(new Set());
@@ -489,7 +519,9 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
             )}
           </div>
         </div>
-      </div>
+      )}
+    </div>
+  </div>
 
       {/* Right Column: Active Progress / Stats */}
       <div className="space-y-6">
