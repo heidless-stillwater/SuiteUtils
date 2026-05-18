@@ -732,13 +732,27 @@ export function BackupAdminPage() {
       .filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()))
       .sort((a, b) => {
         let comparison = 0;
+        const getMs = (item: any, dateField?: string) => {
+          const raw = item.timestamp || (dateField ? item[dateField] : null);
+          if (!raw) return 0;
+          if (typeof raw === 'object') {
+            if (raw._seconds !== undefined) return raw._seconds * 1000;
+            if (raw.seconds !== undefined) return raw.seconds * 1000;
+            if (typeof raw.toDate === 'function') return raw.toDate().getTime();
+          }
+          const num = Number(raw);
+          if (!isNaN(num)) return num;
+          const parsed = new Date(raw).getTime();
+          return isNaN(parsed) ? 0 : parsed;
+        };
+
         if (sortBy === 'created') {
-          const timeA = a.timestamp || (a.createdTime ? new Date(a.createdTime).getTime() : 0);
-          const timeB = b.timestamp || (b.createdTime ? new Date(b.createdTime).getTime() : 0);
+          const timeA = getMs(a, 'createdTime');
+          const timeB = getMs(b, 'createdTime');
           comparison = timeA - timeB;
         } else if (sortBy === 'updated') {
-          const timeA = a.timestamp || (a.modifiedTime ? new Date(a.modifiedTime).getTime() : 0);
-          const timeB = b.timestamp || (b.modifiedTime ? new Date(b.modifiedTime).getTime() : 0);
+          const timeA = getMs(a, 'modifiedTime');
+          const timeB = getMs(b, 'modifiedTime');
           comparison = timeA - timeB;
         } else if (sortBy === 'name') {
           comparison = (a.name || a.id).localeCompare(b.name || b.id);

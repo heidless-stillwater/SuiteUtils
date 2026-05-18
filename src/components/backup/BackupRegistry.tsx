@@ -137,6 +137,11 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
         const getMs = (item: any) => {
           const raw = item.timestamp || item.createdTime;
           if (!raw) return 0;
+          if (typeof raw === 'object') {
+            if (raw._seconds !== undefined) return raw._seconds * 1000;
+            if (raw.seconds !== undefined) return raw.seconds * 1000;
+            if (typeof raw.toDate === 'function') return raw.toDate().getTime();
+          }
           const num = Number(raw);
           if (!isNaN(num)) return num;
           const parsed = new Date(raw).getTime();
@@ -147,6 +152,11 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
       } else if (sortBy === 'updated') {
         const getMs = (raw: any) => {
           if (!raw) return 0;
+          if (typeof raw === 'object') {
+            if (raw._seconds !== undefined) return raw._seconds * 1000;
+            if (raw.seconds !== undefined) return raw.seconds * 1000;
+            if (typeof raw.toDate === 'function') return raw.toDate().getTime();
+          }
           const num = Number(raw);
           if (!isNaN(num)) return num;
           const parsed = new Date(raw).getTime();
