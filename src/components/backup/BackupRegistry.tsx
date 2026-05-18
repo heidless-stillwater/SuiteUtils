@@ -122,6 +122,13 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
     return order === 'asc' ? 'Name A-Z' : 'Name Z-A';
   };
 
+  const totalStorageSize = useMemo(() => {
+    return backups.reduce((acc, b) => {
+      const bytes = b.stats?.totalSize || parseInt(b.size || '0') || 0;
+      return acc + bytes;
+    }, 0);
+  }, [backups]);
+
   const filteredBackups = useMemo(() => {
     return backups.filter(f => 
       f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -204,6 +211,9 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                   <h2 className="text-lg font-bold text-white group-hover:text-primary transition-colors">
                     {activeTab === 'registry' ? 'Cloud Explorer' : 'Archive Explorer'}
                   </h2>
+                  <span className="text-[9px] font-mono bg-white/5 border border-white/10 px-2 py-0.5 rounded text-white/50 font-bold uppercase tracking-wider">
+                    {formatSize(totalStorageSize)}
+                  </span>
                   <ChevronDown className={`w-4 h-4 text-white/20 group-hover:text-white/60 transition-all ${
                     activeTab === 'registry' 
                       ? (registryCollapsed ? '' : 'rotate-180') 
