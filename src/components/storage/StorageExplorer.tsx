@@ -147,9 +147,19 @@ interface StorageItem {
   fullPath: string;
 }
 
-export default function StorageExplorer({ initialSearch = '', initialPath = 'AppSuite/backups/', initialSelected = '' }: { initialSearch?: string, initialPath?: string, initialSelected?: string }) {
+export default function StorageExplorer({ 
+  initialSearch = '', 
+  initialPath = 'AppSuite/backups/', 
+  initialSelected = '',
+  readOnly
+}: { 
+  initialSearch?: string, 
+  initialPath?: string, 
+  initialSelected?: string,
+  readOnly?: boolean
+}) {
   const { isViewer: authIsViewer, isAdmin } = useAuth();
-  const isViewer = authIsViewer && !isAdmin;
+  const isViewer = readOnly !== undefined ? readOnly : (authIsViewer && !isAdmin);
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [items, setItems] = useState<StorageItem[]>([]);
   const [loading, setLoading] = useState(true);

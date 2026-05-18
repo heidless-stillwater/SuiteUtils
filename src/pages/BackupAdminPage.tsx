@@ -1021,6 +1021,7 @@ export function BackupAdminPage() {
               initialSearch={searchParams.get('search') || ''} 
               initialPath={searchParams.get('path') || undefined}
               initialSelected={searchParams.get('selected') || undefined}
+              readOnly={false}
             />
           </div>
         )}
