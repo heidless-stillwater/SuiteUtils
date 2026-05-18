@@ -131,50 +131,48 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
 
   const sortedBackups = useMemo(() => {
     return [...filteredBackups].sort((a, b) => {
-      let valA: any, valB: any;
+      let valA: number | string = 0;
+      let valB: number | string = 0;
       
+      const parseDate = (item: any, dateField?: string) => {
+        const raw = item.timestamp || (dateField ? item[dateField] : null);
+        if (!raw) return 0;
+        if (typeof raw === 'object') {
+          if (raw._seconds !== undefined) return raw._seconds * 1000;
+          if (raw.seconds !== undefined) return raw.seconds * 1000;
+          if (typeof raw.toDate === 'function') return raw.toDate().getTime();
+        }
+        const num = Number(raw);
+        if (!isNaN(num)) return num;
+        const parsed = new Date(raw).getTime();
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
       if (sortBy === 'created') {
-        const getMs = (item: any) => {
-          const raw = item.timestamp || item.createdTime;
-          if (!raw) return 0;
-          if (typeof raw === 'object') {
-            if (raw._seconds !== undefined) return raw._seconds * 1000;
-            if (raw.seconds !== undefined) return raw.seconds * 1000;
-            if (typeof raw.toDate === 'function') return raw.toDate().getTime();
-          }
-          const num = Number(raw);
-          if (!isNaN(num)) return num;
-          const parsed = new Date(raw).getTime();
-          return isNaN(parsed) ? 0 : parsed;
-        };
-        valA = getMs(a);
-        valB = getMs(b);
+        valA = parseDate(a, 'createdTime');
+        valB = parseDate(b, 'createdTime');
       } else if (sortBy === 'updated') {
-        const getMs = (raw: any) => {
-          if (!raw) return 0;
-          if (typeof raw === 'object') {
-            if (raw._seconds !== undefined) return raw._seconds * 1000;
-            if (raw.seconds !== undefined) return raw.seconds * 1000;
-            if (typeof raw.toDate === 'function') return raw.toDate().getTime();
-          }
-          const num = Number(raw);
-          if (!isNaN(num)) return num;
-          const parsed = new Date(raw).getTime();
-          return isNaN(parsed) ? 0 : parsed;
-        };
-        valA = getMs(a.modifiedTime);
-        valB = getMs(b.modifiedTime);
+        valA = parseDate(a, 'modifiedTime');
+        valB = parseDate(b, 'modifiedTime');
       } else if (sortBy === 'size') {
         valA = a.stats?.totalSize || parseInt(a.size || '0');
         valB = b.stats?.totalSize || parseInt(b.size || '0');
       } else {
-        valA = a.name;
-        valB = b.name;
+        valA = a.name || a.id || '';
+        valB = b.name || b.id || '';
       }
 
       if (valA === valB) return 0;
-      if (sortOrder === 'asc') return valA > valB ? 1 : -1;
-      return valA < valB ? 1 : -1;
+
+      // String sorting
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        const comparison = valA.localeCompare(valB);
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }
+
+      // Numeric sorting (dates and sizes)
+      const diff = (valA as number) - (valB as number);
+      return sortOrder === 'asc' ? diff : -diff;
     });
   }, [filteredBackups, sortBy, sortOrder]);
 
