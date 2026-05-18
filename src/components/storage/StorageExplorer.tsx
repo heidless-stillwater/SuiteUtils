@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Folder, 
   File, 
@@ -25,7 +25,8 @@ import {
   ExternalLink,
   ChevronDown,
   FileIcon,
-  ArrowUp
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -176,6 +177,8 @@ export default function StorageExplorer({
   const [zipLoading, setZipLoading] = useState(false);
   const [quota, setQuota] = useState<{ limit: number; usage: number } | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>('gcs');
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const fetchQuota = async () => {
     try {
@@ -316,6 +319,37 @@ export default function StorageExplorer({
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleSort = (field: 'name' | 'size' | 'modified') => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedItems = useMemo(() => {
+    return [...filteredItems].sort((a, b) => {
+      if (a.isDir && !b.isDir) return -1;
+      if (!a.isDir && b.isDir) return 1;
+
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'size') {
+        const sizeA = Number(a.size || 0);
+        const sizeB = Number(b.size || 0);
+        comparison = sizeA - sizeB;
+      } else if (sortBy === 'modified') {
+        const timeA = new Date(a.lastUpdate || a.modifiedTime || 0).getTime();
+        const timeB = new Date(b.lastUpdate || b.modifiedTime || 0).getTime();
+        comparison = timeA - timeB;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredItems, sortBy, sortOrder]);
 
   const fetchZipContents = async (item: StorageItem) => {
     if (expandedZip === item.fullPath) {
@@ -463,7 +497,7 @@ export default function StorageExplorer({
             <RefreshCw className="w-10 h-10 animate-spin" />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Syncing with GCS...</span>
           </div>
-        ) : filteredItems.length > 0 ? (
+        ) : sortedItems.length > 0 ? (
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/5 bg-white/[0.01]">
@@ -481,14 +515,44 @@ export default function StorageExplorer({
                     className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50 cursor-pointer"
                   />
                 </th>
-                <th className="px-6 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Name</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest text-right">Size</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest text-right">Modified</th>
+                <th 
+                  onClick={() => handleSort('name')}
+                  className="px-6 py-3 text-[10px] font-bold text-white/30 hover:text-white uppercase tracking-widest cursor-pointer select-none transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    Name
+                    {sortBy === 'name' && (
+                      sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-primary" /> : <ArrowDown className="w-3 h-3 text-primary" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('size')}
+                  className="px-6 py-3 text-[10px] font-bold text-white/30 hover:text-white uppercase tracking-widest text-right cursor-pointer select-none transition-colors"
+                >
+                  <div className="flex items-center justify-end gap-1.5">
+                    Size
+                    {sortBy === 'size' && (
+                      sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-primary" /> : <ArrowDown className="w-3 h-3 text-primary" />
+                    )}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('modified')}
+                  className="px-6 py-3 text-[10px] font-bold text-white/30 hover:text-white uppercase tracking-widest text-right cursor-pointer select-none transition-colors"
+                >
+                  <div className="flex items-center justify-end gap-1.5">
+                    Modified
+                    {sortBy === 'modified' && (
+                      sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-primary" /> : <ArrowDown className="w-3 h-3 text-primary" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest text-center w-20">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredItems.sort((a, b) => Number(b.isDir) - Number(a.isDir)).map((item) => (
+              {sortedItems.map((item) => (
                 <>
                   <tr 
                     key={item.id} 
