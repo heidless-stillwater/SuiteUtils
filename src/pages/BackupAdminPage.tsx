@@ -351,7 +351,9 @@ export function BackupAdminPage() {
         name: customParams.name,
         appIds: customParams.appIds,
         includeStorage: customParams.includeStorage,
-        type: customParams.includeStorage ? 'full' : 'database'
+        type: customParams.includeStorage ? 'full' : 'database',
+        force,
+        queue
       } : {
         scope,
         appIds,
