@@ -1439,7 +1439,37 @@ app.get('/api/storage/list', async (req, res) => {
     const { path: directory = '' } = req.query;
     const storageProvider = getStorageProvider();
     
-    const items = await storageProvider.list(directory as string);
+    let items = await storageProvider.list(directory as string);
+
+    const cleanDir = (directory as string).startsWith('/') ? (directory as string).slice(1) : (directory as string);
+    if (cleanDir === 'AppSuite/backups' || cleanDir === 'AppSuite/backups/' || cleanDir === '') {
+      try {
+        const db = getFirestore(firebaseApp);
+        const snapshot = await db.collection('backups').get();
+        const registryMap = new Map();
+        snapshot.forEach(doc => {
+          registryMap.set(doc.id, doc.data());
+        });
+
+        items = items.map((item: any) => {
+          if (item.isDir) {
+            const folderName = item.fullPath.split('/').filter(Boolean).pop();
+            if (folderName && registryMap.has(folderName)) {
+              const reg = registryMap.get(folderName);
+              return {
+                ...item,
+                routineName: reg.name || reg.scope || folderName,
+                lastUpdate: reg.dateStr || reg.timestamp || item.modifiedTime
+              };
+            }
+          }
+          return item;
+        });
+      } catch (dbErr) {
+        console.error('[StorageList] Failed to enrich items with Firestore registry:', dbErr);
+      }
+    }
+
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

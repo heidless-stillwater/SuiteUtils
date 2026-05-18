@@ -145,6 +145,8 @@ interface StorageItem {
   modifiedTime?: string;
   isDir: boolean;
   fullPath: string;
+  routineName?: string;
+  lastUpdate?: string;
 }
 
 export default function StorageExplorer({ 
@@ -520,6 +522,11 @@ export default function StorageExplorer({
                             {item.name.toLowerCase().endsWith('.zip') && (
                               <span className="text-[8px] font-bold bg-primary/20 text-primary px-1 rounded-sm uppercase tracking-tighter">Inspectable</span>
                             )}
+                            {item.routineName && (
+                              <span className="text-[9px] font-bold bg-teal-500/10 text-teal-400 border border-teal-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                {item.routineName}
+                              </span>
+                            )}
                           </div>
                           <p className="text-[10px] text-white/20 truncate max-w-xs">{item.mimeType}</p>
                         </div>
@@ -529,7 +536,11 @@ export default function StorageExplorer({
                       {item.isDir ? '--' : formatSize(item.size)}
                     </td>
                     <td className="px-6 py-4 text-right text-xs text-white/40 tabular-nums">
-                      {item.modifiedTime ? format(new Date(item.modifiedTime), 'MMM dd, yyyy HH:mm') : '--'}
+                      {item.lastUpdate 
+                        ? format(new Date(item.lastUpdate), 'MMM dd, yyyy HH:mm') 
+                        : item.modifiedTime 
+                          ? format(new Date(item.modifiedTime), 'MMM dd, yyyy HH:mm') 
+                          : '--'}
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
