@@ -183,6 +183,31 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                     <div className="flex items-center gap-3">
                       <button
                         onClick={async () => {
+                          const selectedSchedules = schedules.filter(s => selectedRoutines.has(s.id));
+                          await Promise.all(selectedSchedules.map(async (s) => {
+                            const payload = {
+                              scope: s.scope,
+                              name: s.name,
+                              appIds: s.appIds,
+                              includeStorage: s.includeStorage,
+                              type: s.includeStorage ? 'full' : 'database',
+                              force: true
+                            };
+                            return fetch(`${API_URL}/api/backups/run`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(payload)
+                            });
+                          }));
+                          setSelectedRoutines(new Set());
+                          fetchSchedules();
+                        }}
+                        className="px-4 py-2 bg-primary/20 border border-primary/30 text-primary hover:bg-primary hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/10"
+                      >
+                        Run Selected (Parallel)
+                      </button>
+                      <button
+                        onClick={async () => {
                           for (const id of Array.from(selectedRoutines)) {
                             await fetch(`${API_URL}/api/schedules/${id}/toggle-pause`, { method: 'POST' });
                           }
