@@ -177,8 +177,8 @@ export default function StorageExplorer({
   const [zipLoading, setZipLoading] = useState(false);
   const [quota, setQuota] = useState<{ limit: number; usage: number } | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>('gcs');
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('modified');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const fetchQuota = async () => {
     try {
