@@ -452,18 +452,16 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                             </button>
                           )
                         )}
-                        {!isViewer && (
-                          <button
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setDeleteConfirmModal({ open: true, ids: [backup.id] }); 
-                            }}
-                            className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
-                            title="Delete Permanently"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setDeleteConfirmModal({ open: true, ids: [backup.id] }); 
+                          }}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
+                          title="Delete Permanently"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                       <ChevronDown className={`w-4 h-4 text-white/20 transition-transform duration-300 ${expandedId === backup.id ? 'rotate-180 text-primary' : ''}`} />
                     </div>
@@ -498,22 +496,18 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                                     GCS Directory
                                     <ArrowUpRight className="w-2.5 h-2.5 opacity-40 group-hover/link:opacity-100 transition-opacity" />
                                   </a>
-                                  {!isViewer && (
-                                    <>
-                                      <div className="w-1 h-1 rounded-full bg-white/10" />
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setDeleteConfirmModal({ open: true, ids: [backup.id] });
-                                        }}
-                                        className="text-[9px] text-red-400 hover:text-red-300 font-bold flex items-center gap-1 transition-colors uppercase tracking-wider group/delete"
-                                        title="Delete Snapshot Permanently"
-                                      >
-                                        <Trash2 className="w-3 h-3 text-red-500/70 group-hover/delete:text-red-400 transition-colors" />
-                                        Delete Snapshot
-                                      </button>
-                                    </>
-                                  )}
+                                  <div className="w-1 h-1 rounded-full bg-white/10" />
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirmModal({ open: true, ids: [backup.id] });
+                                    }}
+                                    className="text-[9px] text-red-400 hover:text-red-300 font-bold flex items-center gap-1 transition-colors uppercase tracking-wider group/delete"
+                                    title="Delete Snapshot Permanently"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-500/70 group-hover/delete:text-red-400 transition-colors" />
+                                    Delete Snapshot
+                                  </button>
                                 </div>
                               )}
                             </div>
