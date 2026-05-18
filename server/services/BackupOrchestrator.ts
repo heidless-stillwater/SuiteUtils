@@ -137,8 +137,9 @@ export class BackupOrchestrator {
     }
 
     // Determine what to backup based on type and explicit flags
+    const containsStorageApp = appIds && appIds.some(id => id.toLowerCase() === 'storage');
     const shouldBackupDB = type === 'full' || type === 'database';
-    const shouldBackupStorage = type === 'storage' || (type === 'full' && includeStorage);
+    const shouldBackupStorage = type === 'storage' || (type === 'full' && includeStorage) || containsStorageApp;
 
     const appsToBackup = shouldBackupDB
       ? (appIds && appIds.length > 0 
@@ -193,10 +194,14 @@ export class BackupOrchestrator {
         if (this.currentSignal?.aborted) throw new Error('Backup cancelled');
         onProgress?.({ step: 'storage', message: 'Starting Storage backup...', percent: 45 });
         operationMonitor.updateOperation(backupId, { message: 'Archiving Cloud Storage...', progress: 45 });
-        const success = await this.backupGlobalStorage(localSetDir, (p) => {
-          onProgress?.(p);
-          if (p.percent) operationMonitor.updateOperation(backupId, { progress: 45 + (p.percent * 0.3) });
-        });
+        const success = await this.backupGlobalStorage(
+          localSetDir, 
+          (p) => {
+            onProgress?.(p);
+            if (p.percent) operationMonitor.updateOperation(backupId, { progress: 45 + (p.percent * 0.3) });
+          },
+          containsStorageApp
+        );
         storageStatus = success ? 'success' : 'failed';
       }
 
@@ -425,44 +430,57 @@ export class BackupOrchestrator {
     return { projectIds, userIds };
   }
 
-  private async backupGlobalStorage(targetDir: string, onProgress?: (p: BackupProgressEvent) => void): Promise<boolean> {
+  private async backupGlobalStorage(
+    targetDir: string, 
+    onProgress?: (p: BackupProgressEvent) => void,
+    backupAllStorage?: boolean
+  ): Promise<boolean> {
     const bucketName = `${this.projectId}.firebasestorage.app`;
     const bucket = getStorage(this.firebaseApp).bucket(bucketName);
     const storageDir = path.join(targetDir, 'storage');
     await fs.ensureDir(storageDir);
 
-    console.log(`  - [Storage] Backing up bucket: ${bucketName} (Surgical Sync Enabled)...`);
+    console.log(`  - [Storage] Backing up bucket: ${bucketName} (${backupAllStorage ? 'FULL DIRECTORY BACKUP' : 'Surgical Sync Enabled'})...`);
     
     try {
-      const { projectIds, userIds } = await this.getActiveAssetIds();
-      
       const [allFiles] = await bucket.getFiles();
-      
-      // Filter files based on whitelist and active IDs
-      const files = allFiles.filter(file => {
-        const parts = file.name.split('/');
-        const rootDir = parts[0];
+      let files = [];
+
+      if (backupAllStorage) {
+        // Backup the entire storage directory, but exclude previous backups to prevent massive nested backup recursion
+        files = allFiles.filter(file => !file.name.startsWith('AppSuite/backups/'));
+      } else {
+        const { projectIds, userIds } = await this.getActiveAssetIds();
         
-        // 1. Direct Whitelist
-        if (this.WHITELISTED_ROOT_DIRS.includes(rootDir)) return true;
-        
-        // 2. Active Projects Filter
-        if (rootDir === 'projects' && parts.length > 1) {
-          return projectIds.has(parts[1]);
-        }
-        
-        // 3. Active Users Filter
-        if (rootDir === 'users' && parts.length > 1) {
-          return userIds.has(parts[1]);
-        }
-        
-        return false;
-      });
+        // Filter files based on whitelist and active IDs
+        files = allFiles.filter(file => {
+          // Skip previous backups to avoid zipping backup archives inside backup archives
+          if (file.name.startsWith('AppSuite/backups/')) return false;
+
+          const parts = file.name.split('/');
+          const rootDir = parts[0];
+          
+          // 1. Direct Whitelist
+          if (this.WHITELISTED_ROOT_DIRS.includes(rootDir)) return true;
+          
+          // 2. Active Projects Filter
+          if (rootDir === 'projects' && parts.length > 1) {
+            return projectIds.has(parts[1]);
+          }
+          
+          // 3. Active Users Filter
+          if (rootDir === 'users' && parts.length > 1) {
+            return userIds.has(parts[1]);
+          }
+          
+          return false;
+        });
+      }
 
       const totalFiles = files.length;
       const skippedCount = allFiles.length - totalFiles;
       
-      console.log(`    └─ Whitelist applied: Processing ${totalFiles} required files (Pruned ${skippedCount} orphaned/ephemeral items)`);
+      console.log(`    └─ Storage Filter applied: Processing ${totalFiles} total files (Pruned ${skippedCount} items)`);
       
       if (totalFiles === 0) {
         console.log('    └─ No required assets found in bucket.');

@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "name": "full-STORAGE-180526",
+    "cronExpression": "*/5 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [],
+    "includeStorage": true,
+    "id": "rqbqma",
+    "status": "paused"
+  }
+]
