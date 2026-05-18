@@ -1,6 +1,5 @@
+import './services/config-env.js';
 import express from 'express';
-import dotenv from 'dotenv';
-dotenv.config();
 
 import { suiteDb as firestore, adminApp as firebaseApp, personaDb } from './services/FirebaseAdmin.js';
 import { Timestamp, getFirestore } from 'firebase-admin/firestore';

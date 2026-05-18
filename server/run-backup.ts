@@ -1,10 +1,8 @@
+import './services/config-env.js';
 import { GCSStorageProvider } from './services/GCSStorageProvider.js';
 import { BackupOrchestrator } from './services/BackupOrchestrator.js';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
