@@ -103,8 +103,19 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
 
   const sortedSchedules = React.useMemo(() => {
     return [...schedules].sort((a, b) => {
-      const timeA = a.lastRun ? new Date(a.lastRun).getTime() : 0;
-      const timeB = b.lastRun ? new Date(b.lastRun).getTime() : 0;
+      const getMs = (item: any) => {
+        if (!item.lastRun) return 0;
+        const parsed = new Date(item.lastRun).getTime();
+        return isNaN(parsed) ? 0 : parsed;
+      };
+      const timeA = getMs(a);
+      const timeB = getMs(b);
+
+      // If one or both have never run, always place them at the bottom
+      if (timeA === 0 && timeB === 0) return 0;
+      if (timeA === 0) return 1;
+      if (timeB === 0) return -1;
+
       return routineSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
   }, [schedules, routineSortOrder]);
@@ -146,10 +157,10 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                       e.stopPropagation();
                       setRoutineSortOrder(routineSortOrder === 'desc' ? 'asc' : 'desc');
                     }}
-                    className="text-[10px] text-white/30 hover:text-primary font-bold uppercase tracking-widest transition-colors"
-                    title="Toggle Sort Order (Last Run)"
+                    className="text-[10px] text-white/40 hover:text-primary font-bold uppercase tracking-widest transition-colors"
+                    title={routineSortOrder === 'desc' ? 'Sorted: Recent First (Click to reverse)' : 'Sorted: Oldest First (Click to reverse)'}
                   >
-                    Sort: {routineSortOrder === 'desc' ? 'Recent First' : 'Oldest First'}
+                    Sorted: {routineSortOrder === 'desc' ? 'Recent First' : 'Oldest First'}
                   </button>
                 </div>
               )}
