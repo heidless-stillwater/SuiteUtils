@@ -109,6 +109,19 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
     return `${size.toFixed(1)} ${units[unitIndex]}`;
   };
 
+  const getSortLabel = (type: 'created' | 'updated' | 'name' | 'size', order: 'asc' | 'desc') => {
+    if (type === 'created') {
+      return order === 'desc' ? 'Recent First' : 'Oldest First';
+    }
+    if (type === 'updated') {
+      return order === 'desc' ? 'Recently Updated' : 'Least Recently Updated';
+    }
+    if (type === 'size') {
+      return order === 'desc' ? 'Largest Size' : 'Smallest Size';
+    }
+    return order === 'asc' ? 'Name A-Z' : 'Name Z-A';
+  };
+
   const filteredBackups = useMemo(() => {
     return backups.filter(f => 
       f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -194,14 +207,14 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
               <div className="relative" ref={sortMenuRef}>
                 <button
                   onClick={() => setShowSortMenu(!showSortMenu)}
-                  className="bg-black/80 border border-white/10 hover:border-white/20 rounded-xl py-1.5 px-3 text-[10px] text-white/70 font-bold uppercase tracking-wider focus:ring-primary/40 flex items-center gap-2 transition-all shadow-xl min-w-[100px]"
+                  className="bg-black/80 border border-white/10 hover:border-white/20 rounded-xl py-1.5 px-3 text-[10px] text-white/70 font-bold uppercase tracking-wider focus:ring-primary/40 flex items-center gap-2 transition-all shadow-xl min-w-[120px]"
                 >
-                  <span>{sortBy}</span>
+                  <span>{getSortLabel(sortBy, sortOrder)}</span>
                   <ChevronDown className={`w-3 h-3 transition-transform ${showSortMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showSortMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-32 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="absolute top-full right-0 mt-2 w-40 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
                     {(['created', 'updated', 'name', 'size'] as const).map((option) => (
                       <button
                         key={option}
@@ -211,7 +224,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                         }}
                         className={`w-full text-left px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors hover:bg-white/5 ${sortBy === option ? 'text-primary bg-primary/5' : 'text-white/40'}`}
                       >
-                        {option}
+                        {getSortLabel(option, sortOrder)}
                       </button>
                     ))}
                   </div>
