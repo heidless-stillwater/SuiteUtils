@@ -137,8 +137,11 @@ export class BackupOrchestrator {
     }
 
     // Determine what to backup based on type and explicit flags
-    const containsStorageApp = appIds && appIds.some(id => id.toLowerCase() === 'storage');
-    const shouldBackupDB = type === 'full' || type === 'database';
+    const containsStorageApp = !!(appIds && appIds.some(id => id.toLowerCase() === 'storage'));
+    
+    // Safely skip DB backups if this is a custom app selection and no database applications were checked
+    const isCustomSelectionWithNoApps = scope === 'CustomSelection' && !!(appIds && appIds.length === 0);
+    const shouldBackupDB = (type === 'full' || type === 'database') && !isCustomSelectionWithNoApps;
     const shouldBackupStorage = type === 'storage' || (type === 'full' && includeStorage) || containsStorageApp;
 
     const appsToBackup = shouldBackupDB

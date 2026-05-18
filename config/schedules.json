@@ -7,5 +7,14 @@
     "includeStorage": true,
     "id": "rqbqma",
     "status": "paused"
+  },
+  {
+    "name": "full-STORAGE-180526-0",
+    "cronExpression": "*/5 * * * *",
+    "scope": "CustomSelection",
+    "appIds": [],
+    "includeStorage": true,
+    "id": "d00gm6",
+    "status": "paused"
   }
 ]
