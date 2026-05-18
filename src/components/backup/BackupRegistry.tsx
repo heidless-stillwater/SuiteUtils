@@ -134,11 +134,26 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
       let valA: any, valB: any;
       
       if (sortBy === 'created') {
-        valA = a.timestamp || a.createdTime || 0;
-        valB = b.timestamp || b.createdTime || 0;
+        const getMs = (item: any) => {
+          const raw = item.timestamp || item.createdTime;
+          if (!raw) return 0;
+          const num = Number(raw);
+          if (!isNaN(num)) return num;
+          const parsed = new Date(raw).getTime();
+          return isNaN(parsed) ? 0 : parsed;
+        };
+        valA = getMs(a);
+        valB = getMs(b);
       } else if (sortBy === 'updated') {
-        valA = a.modifiedTime || 0;
-        valB = b.modifiedTime || 0;
+        const getMs = (raw: any) => {
+          if (!raw) return 0;
+          const num = Number(raw);
+          if (!isNaN(num)) return num;
+          const parsed = new Date(raw).getTime();
+          return isNaN(parsed) ? 0 : parsed;
+        };
+        valA = getMs(a.modifiedTime);
+        valB = getMs(b.modifiedTime);
       } else if (sortBy === 'size') {
         valA = a.stats?.totalSize || parseInt(a.size || '0');
         valB = b.stats?.totalSize || parseInt(b.size || '0');
