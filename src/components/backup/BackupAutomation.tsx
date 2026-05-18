@@ -369,7 +369,7 @@ const BackupAutomation: React.FC<BackupAutomationProps> = ({
                             <div className="space-y-4">
                               <div>
                                 <p className="text-[8px] uppercase tracking-widest text-white/20 font-bold mb-1.5">Target Applications</p>
-                                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+                                <div className="flex flex-wrap gap-1.5 mt-1">
                                   {s.scope === 'StillwaterSuite' || !s.appIds || s.appIds.length === 0 ? (
                                     s.scope === 'StillwaterSuite' ? (
                                       <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-white/60">
