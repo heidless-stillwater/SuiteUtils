@@ -487,16 +487,34 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                                 {backup.scope || (backup.name.split('_')[0] === 'Manual' ? 'Manual Run' : 'Scheduled')}
                               </p>
                               {backup.fullPath && (
-                                <a
-                                  href={`https://console.cloud.google.com/storage/browser/${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'stillwater-sovereign-01.firebasestorage.app'}/${backup.fullPath.substring(0, backup.fullPath.lastIndexOf('/') + 1)}?project=${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'stillwater-sovereign-01'}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[9px] text-primary hover:text-primary/80 font-bold flex items-center gap-1 mt-1.5 transition-colors uppercase tracking-wider group/link"
-                                >
-                                  <FolderOpen className="w-3 h-3 text-primary/70 group-hover/link:text-primary transition-colors" />
-                                  GCS Directory
-                                  <ArrowUpRight className="w-2.5 h-2.5 opacity-40 group-hover/link:opacity-100 transition-opacity" />
-                                </a>
+                                <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                                  <a
+                                    href={`https://console.cloud.google.com/storage/browser/${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'stillwater-sovereign-01.firebasestorage.app'}/${backup.fullPath.substring(0, backup.fullPath.lastIndexOf('/') + 1)}?project=${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'stillwater-sovereign-01'}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[9px] text-primary hover:text-primary/80 font-bold flex items-center gap-1 transition-colors uppercase tracking-wider group/link"
+                                  >
+                                    <FolderOpen className="w-3 h-3 text-primary/70 group-hover/link:text-primary transition-colors" />
+                                    GCS Directory
+                                    <ArrowUpRight className="w-2.5 h-2.5 opacity-40 group-hover/link:opacity-100 transition-opacity" />
+                                  </a>
+                                  {!isViewer && (
+                                    <>
+                                      <div className="w-1 h-1 rounded-full bg-white/10" />
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteConfirmModal({ open: true, ids: [backup.id] });
+                                        }}
+                                        className="text-[9px] text-red-400 hover:text-red-300 font-bold flex items-center gap-1 transition-colors uppercase tracking-wider group/delete"
+                                        title="Delete Snapshot Permanently"
+                                      >
+                                        <Trash2 className="w-3 h-3 text-red-500/70 group-hover/delete:text-red-400 transition-colors" />
+                                        Delete Snapshot
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               )}
                             </div>
                             <div>
