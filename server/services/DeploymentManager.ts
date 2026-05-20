@@ -67,6 +67,18 @@ export class DeploymentManager extends EventEmitter {
                     throw new Error(`Project path does not exist: ${resolvedPath}`);
                 }
 
+                // Automate cache-purging to avoid build conflicts
+                const nextCachePath = path.join(resolvedPath, '.next');
+                const viteCachePath = path.join(resolvedPath, 'dist');
+                if (fs.existsSync(nextCachePath)) {
+                    this.appendLog(jobId, `── Purging stale Next.js cache directory (.next)...`);
+                    fs.rmSync(nextCachePath, { recursive: true, force: true });
+                }
+                if (fs.existsSync(viteCachePath)) {
+                    this.appendLog(jobId, `── Purging stale build output directory (dist)...`);
+                    fs.rmSync(viteCachePath, { recursive: true, force: true });
+                }
+
                 // Load environment variables for build-time injection
                 const envVars: Record<string, string> = {};
                 const envPaths = ['.env.production', '.env.local', '.env'];
@@ -129,6 +141,7 @@ export class DeploymentManager extends EventEmitter {
                 const finalEnv = { 
                   ...process.env, 
                   PATH: process.env.PATH ? `${process.env.PATH}:${fallbackPath}` : fallbackPath,
+                  NODE_ENV: 'production',
                   ...envVars, 
                   FORCE_COLOR: '0' 
                 };

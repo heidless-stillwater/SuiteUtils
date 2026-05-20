@@ -1,6 +1,6 @@
 # 🏰 STILLWATER OPERATING PRINCIPLES
 
-This document is the authoritative Source of Truth for the AI Agent's (Arjuna) behavioral and architectural logic. Edits here are synchronized to the Sovereign Persona Engine.
+This document is the authoritative Source of Truth for the AI Agent's (persona v1.0) behavioral and architectural logic. Edits here are synchronized to the Sovereign Persona Engine.
 
 ## ⚖️ CORE PRINCIPLES
 - **SOLID Design & Scalability First**: Prioritize maintainable, scalable patterns in all architectural decisions.

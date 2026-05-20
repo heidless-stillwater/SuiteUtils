@@ -1,13 +1,14 @@
 {
   "firestore": [
-    { "target": "persona", "database": "persona-db-0", "rules": "sovereign.rules" },
-    { "target": "prompttool", "database": "prompttool-db-0", "rules": "sovereign.rules" },
-    { "target": "resources", "database": "promptresources-db-0", "rules": "sovereign.rules" },
-    { "target": "master", "database": "promptmaster-spa-db-0", "rules": "sovereign.rules" },
-    { "target": "accreditation", "database": "promptaccreditation-db-0", "rules": "sovereign.rules" },
-    { "target": "plantune", "database": "plantune-db-0", "rules": "sovereign.rules" },
-    { "target": "suiteutils", "database": "suiteutils-db-0", "rules": "sovereign.rules" },
-    { "target": "autovideo", "database": "autovideo-db-0", "rules": "sovereign.rules" }
+    { "database": "persona-db-0", "rules": "sovereign.rules" },
+    { "database": "prompttool-db-0", "rules": "sovereign.rules" },
+    { "database": "promptresources-db-0", "rules": "sovereign.rules" },
+    { "database": "promptmaster-spa-db-0", "rules": "sovereign.rules" },
+    { "database": "promptaccreditation-db-0", "rules": "sovereign.rules" },
+    { "database": "plantune-db-0", "rules": "sovereign.rules" },
+    { "database": "suiteutils-db-0", "rules": "sovereign.rules", "indexes": "firestore.indexes.json" },
+    { "database": "autovideo-db-0", "rules": "sovereign.rules" },
+    { "database": "(default)", "rules": "firestore.rules" }
   ],
   "hosting": {
     "target": "suite-utils",

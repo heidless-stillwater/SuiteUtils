@@ -52,7 +52,7 @@ async function migrateFullData() {
       const migratedData = {
         ...data,
         userId: targetUid,
-        authorName: 'Arjuna (Restored from Apps-2)',
+        authorName: 'persona v1.0 (Restored from Apps-2)',
         migrationTimestamp: admin.firestore.FieldValue.serverTimestamp()
       };
       

@@ -59,7 +59,7 @@
       },
       {
         "id": "persona",
-        "name": "Arjuna v1.0",
+        "name": "persona v1.0",
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
         "deployMethod": "cloud-build"
@@ -124,7 +124,7 @@
       },
       {
         "id": "persona",
-        "name": "Arjuna v1.0",
+        "name": "persona v1.0",
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
         "deployMethod": "cloud-build"

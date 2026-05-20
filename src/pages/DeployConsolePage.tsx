@@ -29,7 +29,9 @@ import {
   GripVertical,
   ArrowRightToLine,
   ChevronLeft,
-  Copy
+  Copy,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ActionModal } from '../components/common/ActionModal';
@@ -87,6 +89,7 @@ export function DeployConsolePage() {
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
   const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [deployHistory, setDeployHistory] = useState<DeploymentRecord[]>([]);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   // Modal State
   const [modalConfig, setModalConfig] = useState<{
@@ -103,10 +106,17 @@ export function DeployConsolePage() {
   const [rollbackStates, setRollbackStates] = useState<Record<string, { active: boolean; stage: string; message: string; error?: string; url?: string }>>({});
   const [sortBy, setSortBy] = useState<'name' | 'last-deploy' | 'custom'>('custom');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(true);
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
   const [appOrder, setAppOrder] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [copiedAppId, setCopiedAppId] = useState<string | null>(null);
+
+  const handleCopyLink = (url: string, appId: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedAppId(appId);
+    setTimeout(() => setCopiedAppId(null), 2000);
+  };
 
   // Initialize/Sync deploy states from suite config AND workspace registry
   useEffect(() => {
@@ -190,6 +200,22 @@ export function DeployConsolePage() {
       localStorage.setItem(`deploy_order_${activeWorkspaceId}`, JSON.stringify(appOrder));
     }
   }, [appOrder, activeWorkspaceId]);
+
+  // Self-heal and synchronize appOrder with deployStates changes to prevent missing/stale app IDs
+  useEffect(() => {
+    if (deployStates.length === 0) return;
+    const currentAppIds = deployStates.map(s => s.appId);
+    setAppOrder(prev => {
+      const filtered = prev.filter(id => currentAppIds.includes(id));
+      const missing = currentAppIds.filter(id => !filtered.includes(id));
+      const merged = [...filtered, ...missing];
+      
+      if (JSON.stringify(prev) !== JSON.stringify(merged)) {
+        return merged;
+      }
+      return prev;
+    });
+  }, [deployStates]);
 
 
   // Subscribe to history
@@ -549,6 +575,31 @@ export function DeployConsolePage() {
     }
   };
 
+  const handleShiftApp = (appId: string, direction: 'left' | 'right') => {
+    const visibleIndex = sortedApps.findIndex(s => s.appId === appId);
+    if (visibleIndex === -1) return;
+    
+    let neighborId: string | null = null;
+    if (direction === 'left' && visibleIndex > 0) {
+      neighborId = sortedApps[visibleIndex - 1].appId;
+    } else if (direction === 'right' && visibleIndex < sortedApps.length - 1) {
+      neighborId = sortedApps[visibleIndex + 1].appId;
+    }
+    
+    if (!neighborId) return;
+    
+    const newOrder = [...appOrder];
+    const indexA = newOrder.indexOf(appId);
+    const indexB = newOrder.indexOf(neighborId);
+    
+    if (indexA !== -1 && indexB !== -1) {
+      const temp = newOrder[indexA];
+      newOrder[indexA] = newOrder[indexB];
+      newOrder[indexB] = temp;
+      setAppOrder(newOrder);
+    }
+  };
+
   const deploySelected = async () => {
     if (selectedAppIds.size === 0 || batchRunning) return;
     
@@ -653,71 +704,45 @@ export function DeployConsolePage() {
         confirmVariant={modalConfig.type === 'rollback' ? 'danger' : 'primary'}
       />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Sleek Branding Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Rocket className="w-6 h-6 text-primary" />
-            Deploy Console
-          </h1>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-white/40 text-sm">Manage and monitor suite-wide deployments in real-time.</p>
-            <div className="w-1 h-1 rounded-full bg-white/10 mx-1" />
-            <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-              <Globe className="w-3 h-3 text-primary" />
-              <span className="text-[10px] font-bold text-primary/80 uppercase tracking-wider">
-                {currentSuite?.name || 'Loading...'}
-              </span>
-              <span className="text-[10px] font-mono text-white/30">
-                ({targetProject})
-              </span>
-            </div>
-            {targetEmail && (
-              <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/5 border border-white/10">
-                <ShieldCheck className="w-3 h-3 text-white/20" />
-                <span className="text-[10px] font-medium text-white/40 uppercase tracking-widest italic">
-                  {targetEmail}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-black text-white flex items-center gap-2.5 tracking-tight">
+              <Rocket className="w-6 h-6 text-primary" />
+              Deploy Console
+            </h1>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                <Globe className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                  {currentSuite?.name || 'Loading...'}
+                </span>
+                <span className="text-[9px] font-mono text-white/30">
+                  ({targetProject})
                 </span>
               </div>
-            )}
+              {targetEmail && (
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10">
+                  <ShieldCheck className="w-3 h-3 text-white/20" />
+                  <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider italic">
+                    {targetEmail}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
+          <p className="text-white/40 text-xs mt-1.5 font-medium leading-relaxed">
+            Manage and monitor suite-wide deployments in real-time.
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={toggleSelectAll}
-            className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-all text-sm font-bold flex items-center gap-2"
-          >
-            <Filter className="w-4 h-4" />
-            {selectedAppIds.size === deployStates.length ? 'Deselect All' : 'Select All'}
-          </button>
-          
-          <button
-            onClick={deploySelected}
-            disabled={selectedAppIds.size === 0 || batchRunning}
-            className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg ${
-              selectedAppIds.size > 0 && !batchRunning
-                ? 'bg-primary text-black shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]'
-                : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'
-            }`}
-          >
-            {batchRunning ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Rocket className="w-4 h-4" />
-            )}
-            {batchRunning ? 'Deploying Sequence...' : `Deploy Selected (${selectedAppIds.size})`}
-          </button>
-
-          <div className="w-[1px] h-8 bg-white/10 mx-1" />
-
-          <button
-            onClick={() => subscribeToDeployHistory(currentSuite?.id || '', setDeployHistory)}
-            className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-white/90 hover:bg-white/10 transition-all"
-            title="Refresh History"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+        {/* API Status Indicator */}
+        <div className="flex items-center gap-2.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl self-start md:self-auto">
+          <div className={`w-2 h-2 rounded-full ${apiAvailable ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+          <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">
+            Deploy API: {apiAvailable ? 'Online' : 'Offline'}
+          </span>
         </div>
       </div>
 
@@ -778,53 +803,109 @@ export function DeployConsolePage() {
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* API Status & Controls Card */}
-        <div className="lg:col-span-3 bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-             <div className="flex items-center gap-3">
-              <div className={`w-2.5 h-2.5 rounded-full ${apiAvailable ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-xs font-bold text-white/60 tracking-wider uppercase">Deploy API: {apiAvailable ? 'Online' : 'Offline'}</span>
-            </div>
-            
-            <div className="h-8 w-[1px] bg-white/10" />
-
-            <div className="flex items-center gap-2">
-              <Search className="w-4 h-4 text-white/20" />
-              <input 
-                type="text" 
-                placeholder="Search apps..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent border-none text-sm text-white focus:outline-none placeholder:text-white/10 w-48"
-              />
-            </div>
+      {/* Unified Dashboard Command Deck */}
+      <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl shadow-black/20">
+        {/* Left Side: Search & Refresh */}
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2.5 bg-black/30 border border-white/10 rounded-xl px-3 py-2 w-full sm:w-60 focus-within:border-primary/50 transition-colors">
+            <Search className="w-4 h-4 text-white/30" />
+            <input 
+              type="text" 
+              placeholder="Search apps..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none text-xs text-white focus:outline-none placeholder:text-white/20 w-full"
+            />
           </div>
+          <button
+            onClick={() => subscribeToDeployHistory(currentSuite?.id || '', setDeployHistory)}
+            className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-white/90 hover:bg-white/10 transition-all border border-white/5"
+            title="Refresh History"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-          <div className="flex items-center gap-3">
-             <button
-              onClick={() => {
-                if (sortBy === 'name') setSortBy('last-deploy');
-                else if (sortBy === 'last-deploy') setSortBy('custom');
-                else setSortBy('name');
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 text-white/40 hover:text-white/90 transition-all text-xs font-medium"
+        {/* Right Side: Filters, Sorting, Views & CTAs */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          {/* Sorting Dropdown */}
+          <button
+            onClick={() => {
+              if (sortBy === 'name') setSortBy('last-deploy');
+              else if (sortBy === 'last-deploy') setSortBy('custom');
+              else setSortBy('name');
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold border border-white/10"
+          >
+            <Filter className="w-3.5 h-3.5 text-white/30" />
+            Sort: {sortBy === 'name' ? 'Name' : sortBy === 'last-deploy' ? 'Recent' : 'Custom'}
+          </button>
+
+          {/* View Mode Switches */}
+          <div className="flex items-center bg-black/40 border border-white/10 rounded-xl p-0.5">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg transition-all ${
+                viewMode === 'list' 
+                  ? 'bg-white/10 text-white font-bold' 
+                  : 'text-white/40 hover:text-white/90'
+              }`}
+              title="List View"
             >
-              <Filter className="w-3.5 h-3.5" />
-              Sort: {sortBy === 'name' ? 'Name' : sortBy === 'last-deploy' ? 'Recent' : 'Custom Sequence'}
+              <List className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg transition-all ${
+                viewMode === 'grid' 
+                  ? 'bg-white/10 text-white font-bold' 
+                  : 'text-white/40 hover:text-white/90'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          <div className="w-[1px] h-6 bg-white/10 mx-1 hidden sm:block" />
+
+          {/* Select All Toggle */}
+          <button
+            onClick={toggleSelectAll}
+            className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold flex items-center gap-1.5"
+          >
+            {selectedAppIds.size === deployStates.length ? 'Deselect All' : 'Select All'}
+          </button>
+
+          {/* Core Batch Action CTA */}
+          <button
+            onClick={deploySelected}
+            disabled={selectedAppIds.size === 0 || batchRunning}
+            className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-lg ${
+              selectedAppIds.size > 0 && !batchRunning
+                ? 'bg-primary text-black shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]'
+                : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'
+            }`}
+          >
+            {batchRunning ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Rocket className="w-3.5 h-3.5" />
+            )}
+            {batchRunning ? 'Deploying...' : `Deploy Selected (${selectedAppIds.size})`}
+          </button>
         </div>
       </div>
 
       <div className={`grid grid-cols-1 ${isHistoryCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'} gap-6 transition-all duration-500`}>
         {/* App List */}
-        <Reorder.Group 
-          axis="y" 
-          values={appOrder} 
-          onReorder={setAppOrder}
-          className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}
-        >
+        {viewMode === 'list' ? (
+          <Reorder.Group 
+            axis="y" 
+            values={appOrder} 
+            onReorder={setAppOrder}
+            className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}
+          >
           {sortedApps.map((app) => {
             const isExpanded = expandedLog === app.appId;
             const isSelected = selectedAppIds.has(app.appId);
@@ -836,6 +917,7 @@ export function DeployConsolePage() {
                 value={app.appId}
                 key={app.appId}
                 dragListener={sortBy === 'custom'}
+                dragSnapToOrigin
                 className={`relative overflow-hidden bg-white/5 border transition-all cursor-default ${
                   isSelected ? 'border-primary/50 bg-primary/5 shadow-lg shadow-primary/5' : 'border-white/10'
                 } rounded-2xl ${
@@ -968,15 +1050,28 @@ export function DeployConsolePage() {
 
                     {/* Live App Link */}
                     {(app.deployUrl || app.hostingTarget) && (
-                      <a
-                        href={app.deployUrl || `https://${app.hostingTarget}.web.app`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-all border border-green-400/20"
-                        title="Open Live App"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
+                      <>
+                        <button
+                          onClick={() => handleCopyLink(app.deployUrl || `https://${app.hostingTarget}.web.app`, app.appId)}
+                          className="p-2 rounded-lg bg-white/5 text-white/30 hover:text-white/80 hover:bg-white/10 transition-all border border-white/10"
+                          title="Copy Live App Link"
+                        >
+                          {copiedAppId === app.appId ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                        <a
+                          href={app.deployUrl || `https://${app.hostingTarget}.web.app`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 rounded-lg bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-all border border-green-400/20"
+                          title="Open Live App"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1077,7 +1172,269 @@ export function DeployConsolePage() {
               </Reorder.Item>
             );
           })}
-        </Reorder.Group>
+          </Reorder.Group>
+        ) : (
+          <div className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} grid grid-cols-1 ${isHistoryCollapsed ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+            {sortedApps.map((app) => {
+              const isExpanded = expandedLog === app.appId;
+              const isSelected = selectedAppIds.has(app.appId);
+              const estimate = getEstimate(app.appId, app.deployMethod || 'firebase', deployHistory);
+              const progress = estimate ? Math.min(98, (app.elapsed / estimate.estimatedDuration) * 100) : 0;
+
+              return (
+                <motion.div 
+                  layout
+                  key={app.appId}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('.pointer-events-auto')) {
+                      return;
+                    }
+                    toggleSelect(app.appId);
+                  }}
+                  className={`relative overflow-hidden bg-white/5 border transition-all duration-300 cursor-pointer ${
+                    isSelected ? 'border-primary/50 bg-primary/5 shadow-lg shadow-primary/5' : 'border-white/10 hover:border-white/20'
+                  } rounded-2xl p-4 flex flex-col justify-between h-full gap-4 ${
+                    app.status === 'building' || app.status === 'deploying' ? 'ring-1 ring-primary/30' : ''
+                  }`}
+                >
+                  {/* Status Indicator Glow Background */}
+                  <div className={`absolute top-0 right-0 w-24 h-24 rounded-full filter blur-[40px] opacity-10 pointer-events-none transition-colors duration-500 ${
+                    app.status === 'live' ? 'bg-green-500' :
+                    app.status === 'failed' ? 'bg-red-500' :
+                    app.status === 'building' || app.status === 'deploying' ? 'bg-primary animate-pulse' :
+                    'bg-white'
+                  }`} />
+
+                  {/* Top Bar: Icon, Name, and Checkbox/Swap Handle */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl ${
+                        app.status === 'live' ? 'bg-green-400/10 text-green-400' :
+                        app.status === 'failed' ? 'bg-red-400/10 text-red-400' :
+                        app.status === 'building' || app.status === 'deploying' ? 'bg-primary/10 text-primary' :
+                        'bg-white/5 text-white/20'
+                      }`}>
+                        {app.status === 'building' || app.status === 'deploying' ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : app.status === 'live' ? (
+                          <CheckCircle2 className="w-5 h-5" />
+                        ) : (
+                          <Rocket className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-white truncate flex items-center gap-2">
+                          {app.displayName}
+                        </h3>
+                        <p className="text-[10px] text-white/30 font-black uppercase tracking-wider mt-0.5 truncate">{app.appId}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {sortBy === 'custom' && (
+                        <div className="flex items-center gap-0.5 mr-0.5 bg-white/5 rounded-lg p-0.5 border border-white/5 pointer-events-auto">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShiftApp(app.appId, 'left');
+                            }}
+                            className="p-1 rounded text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Move Left"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <div className="w-[1px] h-3 bg-white/10" />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShiftApp(app.appId, 'right');
+                            }}
+                            className="p-1 rounded text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Move Right"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(app.appId);
+                        }}
+                        className={`w-5 h-5 rounded border transition-all flex items-center justify-center flex-shrink-0 pointer-events-auto ${
+                          isSelected ? 'bg-primary border-primary text-black' : 'bg-white/5 border-white/10 text-transparent'
+                        }`}
+                      >
+                        <Check className="w-3 h-3" strokeWidth={4} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Badges / Pill Meta Grid */}
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/5 border ${
+                      app.status === 'live' ? 'text-green-400 border-green-500/20' :
+                      app.status === 'failed' ? 'text-red-400 border-red-500/20' :
+                      app.status === 'building' || app.status === 'deploying' ? 'text-primary border-primary/20 animate-pulse' :
+                      'text-white/10'
+                    }`}>{app.status}</span>
+
+                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/5 border ${
+                      currentSuite?.apps?.[app.appId]?.health?.status === 'healthy' ? 'text-green-400 border-green-500/20' :
+                      currentSuite?.apps?.[app.appId]?.health?.status === 'degraded' ? 'text-amber-400 border-amber-500/20' :
+                      'text-red-400 border-red-500/20'
+                    }`}>
+                      {currentSuite?.apps?.[app.appId]?.health?.status || 'HEALTH_UNKNOWN'}
+                    </span>
+
+                    {app.isIsolated && <span className="px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 text-[8px] font-black uppercase tracking-widest">Isolated</span>}
+
+                    <div className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-[8px] font-mono text-white/40 max-w-[120px] truncate">
+                      {app.deployMethod || 'firebase'}
+                    </div>
+                  </div>
+
+                  {/* Progress Section */}
+                  {(app.status === 'building' || app.status === 'deploying') && (
+                    <div className="bg-white/5 p-2 rounded-xl border border-white/5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[8px] text-white/40 font-bold uppercase tracking-wider">Deploying...</span>
+                        <span className="text-[9px] text-primary font-black">{Math.round(progress)}%</span>
+                      </div>
+                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-1000 ${
+                            app.status === 'building' ? 'bg-amber-400' : 'bg-primary'
+                          }`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1 text-[8px] text-white/20 font-bold uppercase tracking-widest">
+                        <span>Elapsed: {formatElapsed(app.elapsed)}</span>
+                        {estimate && <span>Est: {formatDuration(estimate.estimatedDuration)}</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bottom Strip: Action Buttons */}
+                  <div className="flex items-center justify-between border-t border-white/10 pt-3 mt-auto">
+                    <span className="text-[8px] text-white/20 font-bold uppercase tracking-wider">
+                      {deployHistory.find(h => h.appId === app.appId && h.status === 'live')
+                        ? formatDistanceToNow(parseDate(deployHistory.find(h => h.appId === app.appId && h.status === 'live')?.startedAt), { addSuffix: true })
+                        : 'No deploy history'}
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      {!batchRunning && (app.status !== 'building' && app.status !== 'deploying') ? (
+                        <>
+                          <button
+                            onClick={() => setModalConfig({ isOpen: true, type: 'deploy', app: app })}
+                            className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all border border-primary/20 group/btn"
+                            title="Deploy this app"
+                          >
+                            <Rocket className="w-3.5 h-3.5 group-hover/btn:animate-bounce" />
+                          </button>
+                          <button
+                            onClick={() => setModalConfig({ isOpen: true, type: 'rollback', app: app })}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-400/10 text-white/20 hover:text-cyan-400 transition-all border border-white/10"
+                            title="Rollback"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (app.status === 'building' || app.status === 'deploying' || app.status === 'verifying') && (
+                        <button 
+                          onClick={() => cancelAppDeployment(app.appId)}
+                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+                          title="Cancel Deployment"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Log toggle */}
+                      {(app.logs.length > 0 || app.status === 'building' || app.status === 'deploying') && (
+                        <button
+                          onClick={() => setExpandedLog(isExpanded ? null : app.appId)}
+                          className={`p-1.5 rounded-lg transition-colors border ${
+                            isExpanded ? 'bg-primary/20 text-primary border-primary/20' : 'bg-white/5 text-white/30 border-white/10 hover:text-white/60'
+                          }`}
+                        >
+                          <Terminal className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Live App Link */}
+                      {(app.deployUrl || app.hostingTarget) && (
+                        <>
+                          <button
+                            onClick={() => handleCopyLink(app.deployUrl || `https://${app.hostingTarget}.web.app`, app.appId)}
+                            className="p-1.5 rounded-lg bg-white/5 text-white/30 hover:text-white/80 hover:bg-white/10 transition-all border border-white/10"
+                            title="Copy Live App Link"
+                          >
+                            {copiedAppId === app.appId ? (
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <a
+                            href={app.deployUrl || `https://${app.hostingTarget}.web.app`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-all border border-green-400/20"
+                            title="Open Live App"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Terminal Log Area inside Card */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="border border-white/10 bg-black/40 overflow-hidden rounded-xl mt-2"
+                      >
+                        <div 
+                          ref={el => { logRefs.current[app.appId] = el; }}
+                          className="max-h-[150px] overflow-y-auto p-3 font-mono text-[9px] leading-relaxed scrollbar-thin scrollbar-thumb-white/10"
+                        >
+                          {app.logs.length === 0 ? (
+                            <div className="italic text-white/20">
+                              Waiting for logs...
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              {app.logs.map((log, i) => (
+                                <div key={i} className="flex gap-1.5">
+                                  <span className={`whitespace-pre-wrap break-all ${
+                                    log.includes('──') ? 'text-primary font-bold' :
+                                    log.includes('error') || log.includes('Failed') ? 'text-red-400' :
+                                    log.includes('success') || log.includes('Done') ? 'text-green-400' :
+                                    'text-white/60'
+                                  }`}>
+                                    {log}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
 
         {/* History / Info Sidebar */}
         <AnimatePresence>

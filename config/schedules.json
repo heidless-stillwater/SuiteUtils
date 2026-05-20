@@ -9,23 +9,6 @@
     "status": "paused"
   },
   {
-    "name": "full-DB-180526-0",
-    "cronExpression": "*/5 * * * *",
-    "scope": "CustomSelection",
-    "appIds": [
-      "persona",
-      "promptresources",
-      "plantune",
-      "prompttool",
-      "promptaccreditation",
-      "suiteutils",
-      "promptmasterspa"
-    ],
-    "includeStorage": false,
-    "id": "8il4sp",
-    "status": "paused"
-  },
-  {
     "name": "full-DB-180526-1",
     "cronExpression": "*/1 * * * *",
     "scope": "CustomSelection",
@@ -41,6 +24,7 @@
     ],
     "includeStorage": false,
     "id": "yn59eo",
-    "status": "paused"
+    "status": "paused",
+    "lastRun": "2026-05-18T14:31:51.591Z"
   }
 ]

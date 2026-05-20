@@ -35,7 +35,7 @@ async function migrateGalleryData() {
       const migratedData = {
         ...data,
         userId: targetUid,
-        authorName: 'Arjuna (Restored)', // Tagging as restored
+        authorName: 'persona v1.0 (Restored)', // Tagging as restored
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
       

@@ -115,7 +115,7 @@ export class HealthScanner {
       'promptmasterspa': 5173,
       'promptaccreditation': 3003,
       'plantune': 3004,
-      'persona': 3006,
+      'persona': 3005,
       'suiteutils': 5185
     };
 

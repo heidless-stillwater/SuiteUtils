@@ -23,13 +23,14 @@ async function inject() {
   const databases = [
     'persona-db-0', 'prompttool-db-0', 'promptresources-db-0', 
     'promptmaster-spa-db-0', 'promptaccreditation-db-0', 
-    'plantune-db-0', 'suiteutils-db-0', 'autovideo-db-0'
+    'plantune-db-0', 'suiteutils-db-0', 'autovideo-db-0', '(default)'
   ];
 
   console.log('--- Sovereign Rule Injection ---');
   // Create ruleset once
   const ruleset = await securityRules.createRuleset({
-    files: [{ name: 'firestore.rules', content: rulesContent }]
+    name: 'firestore.rules',
+    content: rulesContent
   });
   
   for (const dbId of databases) {

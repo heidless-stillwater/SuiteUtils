@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, RefreshCw, Loader2, ArrowRight, LayoutGrid, List, ArrowUp, ArrowDown, ExternalLink, ShieldAlert, X, Target, Layout, Server, Square, Play, CheckSquare, CheckCircle2, ChevronRight, Terminal, Search, Filter, Settings, Activity, Cpu, Shield, Zap, Maximize2, Minimize2, MoreVertical, Trash2, Copy, Clock, Check } from 'lucide-react';
+import { ShieldCheck, RefreshCw, Loader2, ArrowRight, LayoutGrid, List, ArrowUp, ArrowDown, ExternalLink, ShieldAlert, X, Target, Layout, Server, Square, Play, CheckSquare, CheckCircle2, ChevronRight, Terminal, Search, Filter, Settings, Activity, Cpu, Shield, Zap, Maximize2, Minimize2, MoreVertical, Trash2, Copy, Clock, Check, RotateCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -71,6 +71,13 @@ export function DashboardPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     validation: any;
     isLastInGroup: boolean;
+  } | null>(null);
+  const [orchestrationConfirmation, setOrchestrationConfirmation] = useState<{
+    appId?: string;
+    appIds?: string[];
+    action: 'start' | 'stop' | 'restart';
+    displayName: string;
+    isBulk?: boolean;
   } | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -259,7 +266,18 @@ export function DashboardPage() {
     return false;
   };
 
-  const handleAction = async (appId: string, action: 'start' | 'stop' | 'restart') => {
+  const handleAction = async (appId: string, action: 'start' | 'stop' | 'restart', force = false) => {
+    if (!force) {
+      const displayName = currentSuite?.apps?.[appId]?.displayName || appId;
+      setOrchestrationConfirmation({
+        appId,
+        action,
+        displayName,
+        isBulk: false
+      });
+      return;
+    }
+
     setLoadingAppId(appId);
     setCompletedIds(prev => prev.filter(id => id !== appId));
     
@@ -308,10 +326,24 @@ export function DashboardPage() {
     }
   };
 
-  const handleBulkToggle = async (enabled: boolean) => {
+  const handleBulkToggle = async (enabled: boolean, force = false) => {
     const action = enabled ? 'start' : 'stop';
     const targetIds = selectedIds.length > 0 ? selectedIds : apps.map(([id]) => id);
     
+    if (!force) {
+      const displayNames = targetIds.map(id => currentSuite?.apps?.[id]?.displayName || id);
+      const displayName = targetIds.length === apps.length 
+        ? 'All Modules'
+        : displayNames.join(', ');
+      setOrchestrationConfirmation({
+        appIds: targetIds,
+        action,
+        displayName,
+        isBulk: true
+      });
+      return;
+    }
+
     setBulkActionType(enabled ? 'enable' : 'disable');
     
     try {
@@ -788,9 +820,93 @@ export function DashboardPage() {
             </motion.div>
           </div>
         )}
+
+        {orchestrationConfirmation && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={cn(
+                "glass-card w-full max-w-md p-8 text-center flex flex-col items-center gap-6 border",
+                orchestrationConfirmation.action === 'start' ? 'border-primary/20' :
+                orchestrationConfirmation.action === 'stop' ? 'border-red-500/20' :
+                'border-indigo-500/20'
+              )}
+            >
+              <div className={cn(
+                "w-16 h-16 rounded-2xl border flex items-center justify-center shadow-lg",
+                orchestrationConfirmation.action === 'start' ? 'bg-primary/10 border-primary/20 text-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)]' :
+                orchestrationConfirmation.action === 'stop' ? 'bg-red-500/10 border-red-500/20 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]' :
+                'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.2)]'
+              )}>
+                {orchestrationConfirmation.action === 'start' ? <Play className="w-8 h-8 fill-current" /> :
+                 orchestrationConfirmation.action === 'stop' ? <Square className="w-8 h-8 fill-current" /> :
+                 <RotateCcw className="w-8 h-8 animate-spin-slow" />}
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg font-black text-white uppercase tracking-wider">
+                  {orchestrationConfirmation.isBulk 
+                    ? `Confirm Bulk ${orchestrationConfirmation.action === 'start' ? 'Ignition' : 'Extinction'}`
+                    : `Confirm Module ${orchestrationConfirmation.action === 'start' ? 'Ignition' : orchestrationConfirmation.action === 'stop' ? 'Extinction' : 'Reboot'}`}
+                </h3>
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Are you sure you want to <span className={cn(
+                    "font-bold uppercase",
+                    orchestrationConfirmation.action === 'start' ? 'text-primary' :
+                    orchestrationConfirmation.action === 'stop' ? 'text-red-400' :
+                    'text-indigo-400'
+                  )}>{orchestrationConfirmation.action === 'start' ? 'ignite' : orchestrationConfirmation.action === 'stop' ? 'extinguish' : 'reboot'}</span>{' '}
+                  <span className="text-white font-bold">{orchestrationConfirmation.displayName}</span>?
+                </p>
+                {orchestrationConfirmation.isBulk && (
+                  <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-mono text-white/40 mt-2 leading-relaxed text-left max-h-24 overflow-y-auto custom-scrollbar w-full">
+                    <span className="block text-[8px] font-black uppercase tracking-widest text-primary mb-1">Targeted Modules:</span>
+                    {orchestrationConfirmation.appIds?.map(id => (
+                      <div key={id} className="flex items-center gap-1.5 py-0.5">
+                        <div className="w-1 h-1 rounded-full bg-white/30" />
+                        <span>{currentSuite?.apps?.[id]?.displayName || id}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="w-full space-y-2">
+                <button
+                  onClick={() => {
+                    const { appId, action, isBulk } = orchestrationConfirmation;
+                    setOrchestrationConfirmation(null);
+                    if (isBulk) {
+                      handleBulkToggle(action === 'start', true);
+                    } else if (appId) {
+                      handleAction(appId, action, true);
+                    }
+                  }}
+                  className={cn(
+                    "w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all border shadow-lg hover:scale-[1.02] active:scale-[0.98] cursor-pointer",
+                    orchestrationConfirmation.action === 'start' ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-[0_0_20px_rgba(var(--primary-rgb),0.15)]' :
+                    orchestrationConfirmation.action === 'stop' ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.15)]' :
+                    'bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.15)]'
+                  )}
+                >
+                  Confirm {orchestrationConfirmation.action === 'start' ? 'Ignition' : orchestrationConfirmation.action === 'stop' ? 'Extinction' : 'Reboot'}
+                </button>
+                
+                <button
+                  onClick={() => setOrchestrationConfirmation(null)}
+                  className="w-full py-2.5 text-white/40 hover:text-white font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
 
-      {dashboardMode === 'REGISTRY' && <SovereignNeuralChat />}
+      {dashboardMode !== 'VALIDATION' && <SovereignNeuralChat />}
     </div>
   );
 }

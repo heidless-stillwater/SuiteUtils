@@ -143,7 +143,7 @@ app.post('/api/persona/archetypes/:id', async (req, res) => {
     // 2. Broadcast Live Observation to Persona Engine
     // We attempt to notify the persona of the change so it can ingest the new principles immediately
     try {
-      await fetch(`http://localhost:3005/api/observation`, {
+      await fetch(`http://localhost:3006/observe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
