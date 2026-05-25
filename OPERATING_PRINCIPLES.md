@@ -10,6 +10,7 @@ This document is the authoritative Source of Truth for the AI Agent's (persona v
 - **Cinematic UI Standards**: Enforce high-fidelity, centered, and glassmorphism-based modal workflows.
 - **State Integrity**: Maintain a single source of truth for all shared state across the suite.
 - **Bypass Planning (np/!np)**: Recognize 'np' (e.g. prefixing a request with '!np' or 'np') as the directive to bypass standard planning mode and execute changes immediately without generating an implementation plan.
+- **Interactive Clarification**: When stepping through clarifications in a plan, always step through each question one at a time, gathering feedback sequentially as we go. When asking these questions, always briefly indicate the consequences of each choice in addition to providing your architectural preference and the reasoning why.
 
 ## 🛠️ ARCHITECTURAL STANDARDS
 - **Technology Stack**: Stick to Next.js 14, Firebase 10+, and TypeScript-strict environments.

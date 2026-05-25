@@ -22,7 +22,7 @@ import {
   History,
   ArrowRight
 } from 'lucide-react';
-import remarkGfm from 'remark-gfm';
+import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { bridge } from '../../../lib/bridge';
 import { cn } from '../../../lib/utils';
@@ -119,7 +119,7 @@ export default function SovereignNeuralChat() {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 3006.',
+        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 3008.',
         timestamp: new Date().toISOString(),
         status: 'error'
       }]);
@@ -161,7 +161,7 @@ export default function SovereignNeuralChat() {
             <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Sovereign Neural Chat</h3>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[8px] font-mono text-white/40 uppercase">Bridge: 3006 :: Stable</span>
+              <span className="text-[8px] font-mono text-white/40 uppercase">Bridge: 3008 :: Stable</span>
             </div>
           </div>
         </div>
@@ -246,22 +246,23 @@ export default function SovereignNeuralChat() {
                     msg.role === 'user' ? "bg-primary/20 border border-primary/30 text-white" : "bg-white/5 border border-white/10 text-white/80"
                   )}
                 >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      h3: ({node, ...props}) => <h3 className="font-black text-primary text-sm tracking-tighter uppercase mt-[10px] first:mt-0" {...props} />,
-                      strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
-                      // Default p tag styling should be handled by the parent div's text-xs leading-relaxed
-                      // If specific margin between paragraphs is needed, it can be added here:
-                      // p: ({node, ...props}) => <p className="leading-relaxed mt-2 first:mt-0" {...props} />,
-                      // For now, let's rely on default markdown rendering for paragraphs
-                      // and ensure code blocks are styled.
-                      code: ({node, inline, className, children, ...props}) => {
-                        return <code className="bg-white/10 text-white/80 px-1 py-0.5 rounded font-mono text-[0.7rem]" {...props}>{children}</code>
-                      }
-                    }}
-                    className="prose prose-invert prose-sm max-w-none" // Tailwind Typography plugin for basic styling
-                  >{msg.content}</ReactMarkdown>
+                  <div className="prose prose-invert prose-sm max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h3: ({node, ...props}) => <h3 className="font-black text-primary text-sm tracking-tighter uppercase mt-[10px] first:mt-0" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
+                        // Default p tag styling should be handled by the parent div's text-xs leading-relaxed
+                        // If specific margin between paragraphs is needed, it can be added here:
+                        // p: ({node, ...props}) => <p className="leading-relaxed mt-2 first:mt-0" {...props} />,
+                        // For now, let's rely on default markdown rendering for paragraphs
+                        // and ensure code blocks are styled.
+                        code: ({node, className, children, ...props}) => {
+                          return <code className="bg-white/10 text-white/80 px-1 py-0.5 rounded font-mono text-[0.7rem]" {...props}>{children}</code>
+                        }
+                      }}
+                    >{msg.content}</ReactMarkdown>
+                  </div>
                   
                   {msg.command && (
                     <div className="mt-2 flex items-center gap-2 p-1.5 rounded-lg bg-black/40 border border-white/5 font-mono text-[9px] text-primary/60">

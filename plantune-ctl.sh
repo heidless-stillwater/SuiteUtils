@@ -8,13 +8,20 @@ LOG_FILE="/home/heidless/projects/SuiteUtils/plantune.log"
 case "$1" in
     start)
         echo "🚀 Starting ${APP_NAME} on Port ${PORT}..."
-        if fuser ${PORT}/tcp >/dev/null 2>&1; then
+        if ss -lnt | grep -qE ":${PORT}(\s|$)"; then
             echo "⚠️ ${APP_NAME} is already running on port ${PORT}."
             exit 1
         fi
         cd $APP_DIR
         nohup env PORT=${PORT} npm run dev -- -p ${PORT} > $LOG_FILE 2>&1 &
-        echo "✅ ${APP_NAME} background process initialized."
+        echo "⏳ ${APP_NAME} starting... (verifying in 5s)"
+        sleep 5
+        if ss -lnt | grep -qE ":${PORT}(\s|$)"; then
+            echo "✅ ${APP_NAME} is UP on port ${PORT}"
+        else
+            echo "❌ ${APP_NAME} failed to start on port ${PORT}. Last log:"
+            tail -n 10 $LOG_FILE 2>/dev/null
+        fi
         ;;
     stop)
         echo "🛑 Stopping ${APP_NAME}..."
@@ -27,7 +34,7 @@ case "$1" in
         $0 start
         ;;
     status)
-        PID=$(fuser ${PORT}/tcp 2>/dev/null | awk '{print $1}')
+        PID=$(ss -lntp | grep -E ":${PORT}(\s|$)" | grep -oP 'pid=\K\d+' | head -n 1)
         if [ -n "$PID" ]; then
             echo "✅ ${APP_NAME} is UP (PID: $PID) on Port ${PORT}"
         else

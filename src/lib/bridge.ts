@@ -1,5 +1,5 @@
 
-const BRIDGE_URL = 'http://localhost:3006';
+const BRIDGE_URL = 'http://localhost:3008';
 
 export interface SovereignPersona {
   name: string;

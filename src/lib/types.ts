@@ -193,3 +193,48 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     defaultEnv: { hostingTarget: null, deployMethod: 'cloud-build', status: 'stopped' },
   },
 };
+
+// ============================================================
+// SHARED SESSION TYPES
+// ============================================================
+
+/** The three planning files that constitute a session snapshot */
+export interface SessionFiles {
+  task_plan: string;   // contents of task_plan.md
+  progress: string;    // contents of progress.md
+  findings: string;    // contents of findings.md
+}
+
+/** A single immutable version entry in the session history array */
+export interface SessionVersion {
+  version: number;
+  updatedAt: Timestamp;
+  updatedBy: {
+    uid: string;
+    displayName: string;
+  };
+  files: SessionFiles;
+}
+
+/**
+ * Top-level Firestore document.
+ * Path: sessions/{userId}/{projectSlug}/{sessionId}
+ */
+export interface SharedSession {
+  sessionId: string;       // planning-with-files plan ID (e.g. "2026-05-25-suiteutils-...")
+  projectSlug: string;     // e.g. "suiteutils", "prompttool"
+  userId: string;          // owner UID
+  displayName: string;     // owner display name at time of last push
+  updatedAt: Timestamp;    // timestamp of latest push
+  files: SessionFiles;     // latest snapshot of all three planning files
+  history: SessionVersion[]; // append-only version log
+}
+
+/** A lightweight list-row version of SharedSession (no history array) */
+export type SharedSessionSummary = Omit<SharedSession, 'history'> & {
+  historyCount: number;
+};
+
+/** Filter options for listing sessions */
+export type SessionScope = 'mine' | 'all' | 'project';
+

@@ -37,5 +37,32 @@ service cloud.firestore {
     match /system_config/moderation {
       allow read: if true;
     }
+
+    // ─────────────────────────────────────────────────
+    // Shared Agent Sessions
+    // Structure: sessions/{userId}/{projectSlug}/{sessionId}
+    //
+    // • Write: only the owning user
+    // • Read:  any authenticated user (cross-account sharing)
+    // ─────────────────────────────────────────────────
+    match /users/{userId}/sessions/{sessionId} {
+      // Any authenticated user can read any session
+      allow read: if request.auth != null;
+
+      // Only the owning user can create or update their sessions
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.userId == userId
+        && request.resource.data.keys().hasAll(['sessionId', 'projectSlug', 'userId', 'displayName', 'updatedAt', 'files', 'history']);
+
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        // History must only grow (append-only — no deletions from history array)
+        && request.resource.data.history.size() >= resource.data.history.size();
+
+      // Only owner can delete
+      allow delete: if request.auth != null
+        && request.auth.uid == userId;
+    }
   }
 }

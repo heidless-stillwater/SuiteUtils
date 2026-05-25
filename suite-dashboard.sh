@@ -22,13 +22,8 @@ render() {
     printf "  ${CLR_BOLD}%-4s %-18s %-18s %-30s${CLR_RESET}\n" "ID" "CORRIDOR" "STATUS" "LAUNCH URLS"
     printf "  ${CLR_BORDER}──   ────────           ──────   ───────────${CLR_RESET}\n"
 
-    while IFS= read -r line; do
-        id=$(echo "$line" | grep -oP '"id": \K\d+')
-        name=$(echo "$line" | grep -oP '"name": "\K[^"]+')
-        port=$(echo "$line" | grep -oP '"port": \K\d+')
-        supporting=$(echo "$line" | grep -oP '"supportingPorts": \[\K[^\]]+')
-        
-        if ss -lnt | grep -q ":$port "; then
+    while read -r id name port supporting; do
+        if ss -lnt | grep -qE ":${port}(\s|$)"; then
             status="${CLR_ACCENT}🟢 ACTIVE${CLR_RESET}"
         else
             status="${CLR_STANDBY}💤 STANDBY${CLR_RESET}"
@@ -41,7 +36,7 @@ render() {
         printf "${CLR_PRIMARY}\e]8;;%s\e\\\\%s\e]8;;\e\\\\${CLR_RESET} " "$url" "$url"
         
         # Render Supporting URLs
-        if [ -n "$supporting" ]; then
+        if [ "$supporting" != "-" ]; then
             IFS=',' read -ra ADDR <<< "$supporting"
             for p in "${ADDR[@]}"; do
                 p=$(echo $p | tr -d ' ' | xargs)
@@ -50,7 +45,7 @@ render() {
             done
         fi
         printf "\n"
-    done < <(grep '"id":' "$CONFIG_FILE")
+    done < <(node -e 'const config = require("./suite.config.json"); config.modules.forEach(m => { const supporting = m.supportingPorts ? m.supportingPorts.join(",") : "-"; console.log(`${m.id} ${m.name} ${m.port} ${supporting}`); });')
 
     printf "\n"
     printf "  ${CLR_BORDER}────────────────────────────────────────────────────────────────────${CLR_RESET}\n"

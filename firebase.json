@@ -8,10 +8,11 @@
     { "database": "plantune-db-0", "rules": "sovereign.rules" },
     { "database": "suiteutils-db-0", "rules": "sovereign.rules", "indexes": "firestore.indexes.json" },
     { "database": "autovideo-db-0", "rules": "sovereign.rules" },
+    { "database": "urlshortener-db-0", "rules": "sovereign.rules" },
     { "database": "(default)", "rules": "firestore.rules" }
   ],
   "hosting": {
-    "target": "suite-utils",
+    "target": "stillwater-suite-utils",
     "public": "dist",
     "ignore": [
       "firebase.json",

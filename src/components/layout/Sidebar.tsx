@@ -14,6 +14,7 @@ import {
   LogOut,
   Zap,
   Users,
+  Share2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSuite } from '../../contexts/SuiteContext';
@@ -54,7 +55,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       }}
     >
       {/* Header Section */}
-      <div className="p-4 border-b border-white/5">
+      <div className={`p-4 border-b transition-colors duration-300 ${collapsed ? 'border-transparent' : 'border-white/5'}`}>
         {collapsed ? (
           <div className="flex justify-center">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_0_20px_rgba(13,148,136,0.3)]">
@@ -74,7 +75,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <NavLink
               key={item.path}
               to={item.path}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group ${
+              className={`flex items-center rounded-xl text-sm font-medium transition-all duration-200 group ${
+                collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
+              } ${
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-white/40 hover:bg-white/5 hover:text-white/70'
@@ -112,7 +115,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* User Profile Section */}
-      <div className="p-3 border-t border-white/5">
+      <div className={`p-3 border-t transition-colors duration-300 ${collapsed ? 'border-transparent' : 'border-white/5'}`}>
         {profile && !collapsed && (
           <div className="flex items-center gap-3 px-3 py-2 mb-2">
             {profile.photoURL ? (
@@ -138,7 +141,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Sign Out */}
         <button
           onClick={signOut}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-white/30 hover:text-red-400 hover:bg-red-400/5 transition-all duration-200 text-sm"
+          className={`flex items-center w-full rounded-xl text-white/30 hover:text-red-400 hover:bg-red-400/5 transition-all duration-200 text-sm ${
+            collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'
+          }`}
           title="Sign Out"
         >
           <LogOut className="w-[18px] h-[18px]" />
@@ -148,7 +153,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Collapse Toggle */}
         <button
           onClick={onToggle}
-          className="flex items-center gap-3 w-full px-3 py-2 mt-1 rounded-xl text-white/20 hover:text-white/50 hover:bg-white/5 transition-all duration-200 text-sm"
+          className={`flex items-center w-full mt-1 rounded-xl text-white/20 hover:text-white/50 hover:bg-white/5 transition-all duration-200 text-sm ${
+            collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'
+          }`}
         >
           {collapsed ? (
             <ChevronsRight className="w-[18px] h-[18px]" />

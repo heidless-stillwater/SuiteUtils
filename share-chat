@@ -1,0 +1,937 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import glob
+import time
+import sqlite3
+import re
+import argparse
+from datetime import datetime
+
+# ANSI Color Codes for Premium Terminal Aesthetics
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+C_RED = "\033[31m"
+C_GREEN = "\033[32m"
+C_YELLOW = "\033[33m"
+C_BLUE = "\033[34m"
+C_MAGENTA = "\033[35m"
+C_CYAN = "\033[36m"
+C_WHITE = "\033[37m"
+C_BG_BLUE = "\033[44m"
+
+# Hardcoded Paths
+CONVS_DIR = "/home/heidless/.gemini/antigravity-ide/conversations"
+BRAIN_DIR = "/home/heidless/.gemini/antigravity-ide/brain"
+
+def get_workspace_path():
+    """Detects the real workspace path dynamically based on script location."""
+    return os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+
+def get_conversations(workspace_path):
+    """
+    Scans database files associated with the current workspace.
+    Returns a list of dicts: {conv_id, mtime, db_path, is_active}
+    """
+    workspace_uri = f"file://{workspace_path}"
+    db_files = glob.glob(os.path.join(CONVS_DIR, "*.db"))
+    
+    results = []
+    active_id = None
+    latest_mtime = -1
+    
+    # First pass: find the absolute latest modified db file to determine active session
+    for db_path in db_files:
+        try:
+            mtime = os.path.getmtime(db_path)
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                active_id = os.path.basename(db_path)[:-3]
+        except Exception:
+            pass
+
+    for db_path in db_files:
+        conv_id = os.path.basename(db_path)[:-3]
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT data FROM trajectory_metadata_blob WHERE id="main";')
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                data = row[0]
+                # Check if workspace URI is present in the protobuf-like binary blob
+                if workspace_uri.encode('utf-8') in data:
+                    results.append({
+                        "conv_id": conv_id,
+                        "mtime": os.path.getmtime(db_path),
+                        "db_path": db_path,
+                        "is_active": (conv_id == active_id)
+                    })
+        except Exception:
+            pass
+            
+    # Sort by mtime descending (most recently updated first)
+    results.sort(key=lambda x: x["mtime"], reverse=True)
+    return results
+
+def clean_user_content(content):
+    """Extracts only the actual user request from inside the XML-like tags."""
+    if not content:
+        return ""
+    # Try to find content inside <USER_REQUEST> tags
+    match = re.search(r'<USER_REQUEST>(.*?)</USER_REQUEST>', content, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return content.strip()
+
+def parse_transcript(conv_id):
+    """
+    Parses transcript.jsonl if it exists.
+    Returns: (messages, last_mtime)
+    messages is a list of dicts: {role, content, actions, timestamp}
+    """
+    transcript_path = os.path.join(BRAIN_DIR, conv_id, ".system_generated/logs/transcript.jsonl")
+    if not os.path.exists(transcript_path):
+        return [], None
+        
+    messages = []
+    current_actions = []
+    
+    try:
+        with open(transcript_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                step = json.loads(line)
+                step_type = step.get("type")
+                source = step.get("source")
+                created_at = step.get("created_at")
+                
+                # Check for tool calls / actions
+                if step_type == "PLANNER_RESPONSE" and source == "MODEL" and step.get("tool_calls"):
+                    for tc in step["tool_calls"]:
+                        name = tc.get("name")
+                        args = tc.get("args") or {}
+                        
+                        # Clean arguments (sometimes they are json string encoded)
+                        cleaned_args = {}
+                        for k, v in args.items():
+                            if isinstance(v, str) and v.startswith('"') and v.endswith('"'):
+                                try:
+                                    cleaned_args[k] = json.loads(v)
+                                except Exception:
+                                    cleaned_args[k] = v.strip('"')
+                            else:
+                                cleaned_args[k] = v
+
+                        action_str = ""
+                        if name == "run_command":
+                            action_str = f"💻 Run command: `{cleaned_args.get('CommandLine')}`"
+                        elif name in ["replace_file_content", "multi_replace_file_content", "write_to_file"]:
+                            target = cleaned_args.get("TargetFile") or "file"
+                            action_str = f"📝 Edit/create file: `{os.path.basename(target)}`"
+                        elif name == "view_file":
+                            target = cleaned_args.get("AbsolutePath") or "file"
+                            action_str = f"🔍 View file: `{os.path.basename(target)}`"
+                        elif name == "grep_search":
+                            action_str = f"🔎 Search files for: `{cleaned_args.get('Query')}`"
+                        elif name == "list_dir":
+                            action_str = f"📁 List directory: `{os.path.basename(cleaned_args.get('DirectoryPath') or '')}`"
+                        else:
+                            action_str = f"🛠️ Tool call: `{name}`"
+                        
+                        current_actions.append(action_str)
+                
+                # Handle text entries
+                if step_type == "USER_INPUT" and source == "USER_EXPLICIT":
+                    raw_content = step.get("content") or ""
+                    cleaned = clean_user_content(raw_content)
+                    messages.append({
+                        "role": "User",
+                        "content": cleaned,
+                        "actions": [],
+                        "timestamp": created_at
+                    })
+                elif step_type == "PLANNER_RESPONSE" and source == "MODEL" and step.get("content"):
+                    # This is actual text response to user
+                    messages.append({
+                        "role": "Antigravity",
+                        "content": step["content"],
+                        "actions": list(current_actions),
+                        "timestamp": created_at
+                    })
+                    current_actions = [] # Clear action cache
+    except Exception:
+        pass
+        
+    return messages, os.path.getmtime(transcript_path)
+
+def cmd_status(args):
+    """Displays the active session information."""
+    workspace = get_workspace_path()
+    convs = get_conversations(workspace)
+    
+    active = next((c for c in convs if c["is_active"]), None)
+    if not active:
+        print(f"{C_RED}{C_BOLD}No active session found for this workspace.{C_RESET}")
+        return
+        
+    conv_id = active["conv_id"]
+    messages, _ = parse_transcript(conv_id)
+    
+    print(f"\n{C_CYAN}{C_BOLD}========== ACTIVE ANTIGRAVITY SESSION =========={C_RESET}")
+    print(f"{C_BOLD}Workspace:{C_RESET} {C_WHITE}{workspace}{C_RESET}")
+    print(f"{C_BOLD}Session ID:{C_RESET} {C_GREEN}{conv_id}{C_RESET}")
+    print(f"{C_BOLD}Last Updated:{C_RESET} {datetime.fromtimestamp(active['mtime']).strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{C_BOLD}Messages Count:{C_RESET} {len(messages)}")
+    
+    if messages:
+        print(f"\n{C_YELLOW}{C_BOLD}--- Conversation Preview (Last 3 Turns) ---{C_RESET}")
+        preview_turns = messages[-3:]
+        for turn in preview_turns:
+            role_color = C_MAGENTA if turn["role"] == "User" else C_CYAN
+            print(f"\n{role_color}{C_BOLD}[{turn['role']}]{C_RESET}")
+            content = turn["content"]
+            if len(content) > 200:
+                content = content[:200] + "..."
+            print(content)
+            if turn["actions"]:
+                print(f"  {C_WHITE}Actions:{C_RESET}")
+                for action in turn["actions"]:
+                    print(f"    * {action}")
+    print(f"{C_CYAN}{C_BOLD}================================================{C_RESET}\n")
+
+def cmd_list(args):
+    """Lists all historical conversations for the current workspace."""
+    workspace = get_workspace_path()
+    convs = get_conversations(workspace)
+    
+    if not convs:
+        print(f"{C_YELLOW}No conversations found for workspace {workspace}{C_RESET}")
+        return
+        
+    print(f"\n{C_CYAN}{C_BOLD}Historical Sessions for: {os.path.basename(workspace)}{C_RESET}")
+    print(f"{'Status':<8} | {'Session ID':<36} | {'Last Updated':<19} | {'Msgs':<4} | {'Last Request Preview'}")
+    print("-" * 110)
+    
+    for c in convs:
+        conv_id = c["conv_id"]
+        messages, _ = parse_transcript(conv_id)
+        
+        status_str = f"{C_GREEN}{C_BOLD}ACTIVE{C_RESET}" if c["is_active"] else f"{C_WHITE}idle{C_RESET}"
+        
+        # Last request preview
+        last_req = ""
+        user_msgs = [m for m in messages if m["role"] == "User"]
+        if user_msgs:
+            last_req = user_msgs[-1]["content"].replace('\n', ' ')
+            if len(last_req) > 40:
+                last_req = last_req[:37] + "..."
+                
+        last_updated = datetime.fromtimestamp(c["mtime"]).strftime('%Y-%m-%d %H:%M:%S')
+        
+        id_color = C_GREEN if c["is_active"] else C_CYAN
+        print(f"{status_str:<8} | {id_color}{conv_id}{C_RESET} | {last_updated} | {len(messages):<4} | {last_req}")
+    print()
+
+def cmd_activate(args):
+    """Switches the active conversation session."""
+    workspace = get_workspace_path()
+    convs = get_conversations(workspace)
+    target_id = args.conversation_id.strip()
+    
+    # Support partial matches/prefixes
+    matched = [c for c in convs if c["conv_id"].startswith(target_id)]
+    
+    if not matched:
+        print(f"{C_RED}{C_BOLD}Error: No matching conversation found for prefix '{target_id}'{C_RESET}")
+        return
+    elif len(matched) > 1:
+        print(f"{C_YELLOW}Prefix is ambiguous. Multiple matching sessions found:{C_RESET}")
+        for m in matched:
+            print(f"  - {m['conv_id']}")
+        return
+        
+    choice = matched[0]
+    conv_id = choice["conv_id"]
+    
+    print(f"Activating conversation: {C_CYAN}{conv_id}{C_RESET}...")
+    
+    now = time.time()
+    
+    # Touch SQLite database files in conversations/
+    db_file = os.path.join(CONVS_DIR, f"{conv_id}.db")
+    for ext in ["", "-wal", "-shm"]:
+        p = db_file + ext
+        if os.path.exists(p):
+            os.utime(p, (now, now))
+            
+    # Touch all files inside the brain directory
+    brain_path = os.path.join(BRAIN_DIR, conv_id)
+    if os.path.exists(brain_path):
+        os.utime(brain_path, (now, now))
+        for root, dirs, files in os.walk(brain_path):
+            for d in dirs:
+                os.utime(os.path.join(root, d), (now, now))
+            for f in files:
+                os.utime(os.path.join(root, f), (now, now))
+                
+    print(f"{C_GREEN}{C_BOLD}Success! Conversation {conv_id} is now set as the active session.{C_RESET}")
+    print(f"{C_WHITE}Switching accounts or reopening the Antigravity chat panel will load this thread.{C_RESET}\n")
+
+def cmd_export(args):
+    """Exports a conversation transcript to high-quality Markdown."""
+    workspace = get_workspace_path()
+    conv_id = args.conversation_id
+    
+    if not conv_id:
+        convs = get_conversations(workspace)
+        active = next((c for c in convs if c["is_active"]), None)
+        if not active:
+            print(f"{C_RED}{C_BOLD}Error: No active conversation to export. Please specify an ID.{C_RESET}")
+            return
+        conv_id = active["conv_id"]
+    else:
+        # Check prefix match
+        convs = get_conversations(workspace)
+        matched = [c for c in convs if c["conv_id"].startswith(conv_id)]
+        if not matched:
+            print(f"{C_RED}{C_BOLD}Error: Conversation ID prefix '{conv_id}' not found.{C_RESET}")
+            return
+        elif len(matched) > 1:
+            print(f"{C_YELLOW}Prefix is ambiguous. Matches:{C_RESET}")
+            for m in matched:
+                print(f"  - {m['conv_id']}")
+            return
+        conv_id = matched[0]["conv_id"]
+        
+    messages, _ = parse_transcript(conv_id)
+    if not messages:
+        print(f"{C_RED}No transcript content found for conversation {conv_id}{C_RESET}")
+        return
+        
+    # Ensure export folder exists
+    export_dir = os.path.join(workspace, "docs", "shared-chats")
+    os.makedirs(export_dir, exist_ok=True)
+    
+    filename = f"chat-{conv_id}.md"
+    export_path = os.path.join(export_dir, filename)
+    
+    # Read timestamp of the latest event
+    latest_time = "Unknown Date"
+    if messages:
+        # Find latest non-null timestamp
+        for m in reversed(messages):
+            if m.get("timestamp"):
+                latest_time = m["timestamp"]
+                break
+                
+    # Build beautiful Markdown
+    md = []
+    md.append(f"# 💬 Antigravity Pair-Programming Transcript")
+    md.append("")
+    md.append(f"> 📂 **Workspace:** `heidless-stillwater/{os.path.basename(workspace)}`")
+    md.append(f"> 🆔 **Conversation ID:** `{conv_id}`")
+    md.append(f"> 📅 **Last Activity:** `{latest_time}`")
+    md.append(f"> 📝 **Exported On:** `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`")
+    md.append(f"> 📊 **Total Messages:** {len(messages)}")
+    md.append("")
+    md.append("---")
+    md.append("")
+    
+    for turn in messages:
+        role = turn["role"]
+        content = turn["content"]
+        actions = turn["actions"]
+        
+        if role == "User":
+            md.append(f"## 👤 User Request")
+            md.append("")
+            # Render user request inside clean blockquote
+            indented_lines = "\n".join([f"> {line}" for line in content.split("\n")])
+            md.append(indented_lines)
+            md.append("")
+        else:
+            md.append(f"## 🤖 Antigravity Assistant")
+            md.append("")
+            md.append(content)
+            md.append("")
+            
+            if actions:
+                md.append("### 🛠️ Key Actions Taken")
+                md.append("")
+                for action in actions:
+                    md.append(f"* {action}")
+                md.append("")
+        
+        md.append("---")
+        md.append("")
+        
+    with open(export_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(md))
+        
+    print(f"\n{C_GREEN}{C_BOLD}Export complete!{C_RESET}")
+    print(f"{C_WHITE}Transcript saved beautifully in your workspace:{C_RESET}")
+    print(f"👉 {C_CYAN}docs/shared-chats/{filename}{C_RESET}\n")
+
+def cmd_inspect(args):
+    """Inspects a conversation database file for metadata and account information."""
+    workspace = get_workspace_path()
+    convs = get_conversations(workspace)
+    target_id = args.conversation_id.strip()
+    
+    matched = [c for c in convs if c["conv_id"].startswith(target_id)]
+    if not matched:
+        print(f"{C_RED}{C_BOLD}Error: No matching conversation found for prefix '{target_id}'{C_RESET}")
+        return
+    elif len(matched) > 1:
+        print(f"{C_YELLOW}Prefix is ambiguous. Matches:{C_RESET}")
+        for m in matched:
+            print(f"  - {m['conv_id']}")
+        return
+        
+    choice = matched[0]
+    conv_id = choice["conv_id"]
+    db_file = os.path.join(CONVS_DIR, f"{conv_id}.db")
+    
+    print(f"\n{C_CYAN}{C_BOLD}Inspecting Conversation DB: {conv_id}{C_RESET}")
+    print(f"Path: {db_file}")
+    
+    try:
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+        
+        # 1. Get Tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [r[0] for r in cursor.fetchall()]
+        print(f"{C_BOLD}Tables found:{C_RESET} {tables}")
+        
+        # 2. Schema and rows
+        for table in tables:
+            cursor.execute(f"PRAGMA table_info({table});")
+            cols = [c[1] for c in cursor.fetchall()]
+            cursor.execute(f"SELECT COUNT(*) FROM {table};")
+            count = cursor.fetchone()[0]
+            print(f"  * {C_GREEN}{table}{C_RESET} ({count} rows), Columns: {cols}")
+            
+        # 2b. Dump gen_metadata table specifically
+        if "gen_metadata" in tables:
+            print(f"\n{C_CYAN}{C_BOLD}--- Raw Dump of gen_metadata Table ---{C_RESET}")
+            cursor.execute("SELECT rowid, data FROM gen_metadata;")
+            for row in cursor.fetchall():
+                r_id, r_data = row
+                try:
+                    decoded = r_data.decode('utf-8', errors='ignore')
+                    print(f"  Row {r_id}: {decoded}")
+                except Exception as e:
+                    print(f"  Row {r_id} error: {e}")
+            
+            print(f"\n{C_CYAN}{C_BOLD}--- Extracting heidlessemail19 context ---{C_RESET}")
+            cursor.execute("SELECT rowid, data FROM gen_metadata;")
+            for row in cursor.fetchall():
+                r_id, r_data = row
+                if b"heidlessemail19" in r_data:
+                    idx = 0
+                    while True:
+                        idx = r_data.find(b"heidlessemail19", idx)
+                        if idx == -1:
+                            break
+                        start = max(0, idx - 150)
+                        end = min(len(r_data), idx + 150)
+                        print(f"  Row {r_id} Snippet:\n{r_data[start:end]}\n")
+                        idx += len(b"heidlessemail19")
+
+            
+        # 3. Scan blobs or metadata for email/user identifiers
+        print(f"\n{C_YELLOW}{C_BOLD}Scanning for account/email associations...{C_RESET}")
+        found_identifiers = []
+        
+        for table in tables:
+            try:
+                # Get columns of text/blob type
+                cursor.execute(f"PRAGMA table_info({table});")
+                text_cols = [c[1] for c in cursor.fetchall() if c[2] in ["TEXT", "BLOB", ""]]
+                
+                if not text_cols:
+                    continue
+                    
+                cursor.execute(f"SELECT rowid, {','.join(text_cols)} FROM {table};")
+                rows = cursor.fetchall()
+                for row in rows:
+                    rowid = row[0]
+                    for idx, val in enumerate(row[1:]):
+                        col_name = text_cols[idx]
+                        if not val:
+                            continue
+                        # If bytes, decode or search raw bytes
+                        val_str = ""
+                        is_binary = False
+                        if isinstance(val, bytes):
+                            is_binary = True
+                            try:
+                                val_str = val.decode('utf-8', errors='ignore')
+                            except Exception:
+                                pass
+                        elif isinstance(val, str):
+                            val_str = val
+                            
+                        if val_str:
+                            # Search for emails
+                            emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', val_str)
+                            for email in emails:
+                                found_identifiers.append({
+                                    "table": table,
+                                    "column": col_name,
+                                    "rowid": rowid,
+                                    "type": "Email",
+                                    "val": email,
+                                    "is_binary": is_binary
+                                })
+                            
+                            # Search for Google/Firebase user IDs
+                            uids = re.findall(r'\b[a-zA-Z0-9]{28}\b', val_str)
+                            for uid in uids:
+                                found_identifiers.append({
+                                    "table": table,
+                                    "column": col_name,
+                                    "rowid": rowid,
+                                    "type": "UID",
+                                    "val": uid,
+                                    "is_binary": is_binary
+                                })
+            except Exception as e:
+                print(f"Error scanning {table}: {e}")
+                
+        if found_identifiers:
+            print(f"{C_GREEN}{C_BOLD}Found identity markers in DB:{C_RESET}")
+            for ident in found_identifiers:
+                print(f"  - [{ident['type']}] Table: {C_CYAN}{ident['table']}{C_RESET}, Column: {C_YELLOW}{ident['column']}{C_RESET}, Rowid: {ident['rowid']}, Value: {ident['val']} (Binary: {ident['is_binary']})")
+        else:
+            print(f"{C_YELLOW}No email or UID markers found directly in the SQLite file.{C_RESET}")
+            
+        # 4. Dump trajectory_metadata_blob specifically
+        print(f"\n{C_CYAN}{C_BOLD}--- Trajectory Metadata Blob ('main') ---{C_RESET}")
+        try:
+            cursor.execute('SELECT data FROM trajectory_metadata_blob WHERE id="main";')
+            row = cursor.fetchone()
+            if row:
+                blob_data = row[0]
+                print(f"Blob size: {len(blob_data)} bytes")
+                # Try decoding printable characters and show clean text representation
+                text_chars = []
+                for b in blob_data:
+                    if 32 <= b <= 126:
+                        text_chars.append(chr(b))
+                    elif b == 10:
+                        text_chars.append('\n')
+                    elif b == 13:
+                        text_chars.append('\r')
+                    else:
+                        text_chars.append('.')
+                printable_str = "".join(text_chars)
+                print(f"{C_WHITE}{printable_str}{C_RESET}")
+            else:
+                print(f"{C_RED}No 'main' blob found in trajectory_metadata_blob.{C_RESET}")
+        except Exception as e:
+            print(f"Error reading trajectory_metadata_blob: {e}")
+            
+        conn.close()
+    except Exception as e:
+        print(f"{C_RED}Failed to inspect DB: {e}{C_RESET}")
+    print()
+
+def cmd_list_files(args):
+    """Lists all files in the conversations and IDE root folders to locate metadata indexing files."""
+    print(f"\n{C_CYAN}{C_BOLD}Listing files in Antigravity IDE paths:{C_RESET}")
+    
+    ide_root = "/home/heidless/.gemini/antigravity-ide"
+    print(f"\n{C_BOLD}Root: {ide_root}{C_RESET}")
+    if os.path.exists(ide_root):
+        try:
+            for item in os.listdir(ide_root):
+                p = os.path.join(ide_root, item)
+                mtime_str = datetime.fromtimestamp(os.path.getmtime(p)).strftime('%Y-%m-%d %H:%M:%S')
+                if os.path.isdir(p):
+                    print(f"  📁 {item:<25} | {mtime_str} | <DIR>")
+                else:
+                    print(f"  📄 {item:<25} | {mtime_str} | {os.path.getsize(p)} bytes")
+        except Exception as e:
+            print(f"  Error reading root: {e}")
+    else:
+        print("  Root directory does not exist.")
+        
+    conv_dir = os.path.join(ide_root, "conversations")
+    print(f"\n{C_BOLD}Conversations Dir: {conv_dir}{C_RESET}")
+    if os.path.exists(conv_dir):
+        try:
+            items = os.listdir(conv_dir)
+            print(f"  Total items: {len(items)}")
+            # Filter and show non-db files or interesting files first
+            non_dbs = [item for item in items if not item.endswith(".db") and not item.endswith(".db-wal") and not item.endswith(".db-shm")]
+            if non_dbs:
+                print(f"  {C_YELLOW}Non-DB files in conversations folder:{C_RESET}")
+                for item in non_dbs:
+                    p = os.path.join(conv_dir, item)
+                    mtime_str = datetime.fromtimestamp(os.path.getmtime(p)).strftime('%Y-%m-%d %H:%M:%S')
+                    print(f"    📄 {item:<25} | {mtime_str} | {os.path.getsize(p)} bytes")
+            
+            dbs = sorted([item for item in items if item.endswith(".db")], key=lambda x: os.path.getmtime(os.path.join(conv_dir, x)), reverse=True)
+            print(f"  {C_GREEN}DB files (latest first):{C_RESET}")
+            for item in dbs[:15]:
+                p = os.path.join(conv_dir, item)
+                mtime_str = datetime.fromtimestamp(os.path.getmtime(p)).strftime('%Y-%m-%d %H:%M:%S')
+                print(f"    🗄️ {item:<25} | {mtime_str} | {os.path.getsize(p)} bytes")
+            if len(dbs) > 15:
+                print(f"    ... and {len(dbs) - 15} more DB files.")
+        except Exception as e:
+            print(f"  Error reading conversations dir: {e}")
+    else:
+        print("  Conversations directory does not exist.")
+    print()
+
+def cmd_share(args):
+    """
+    Duplicates and rebinds a conversation to share it with another Google profile (username/email),
+    or grants access to all known profiles in-place.
+    """
+    import uuid
+    import shutil
+    
+    workspace = get_workspace_path()
+    convs = get_conversations(workspace)
+    
+    # 1. Resolve source conversation
+    source_id = args.conversation_id
+    if not source_id:
+        active = next((c for c in convs if c["is_active"]), None)
+        if not active:
+            print(f"{C_RED}{C_BOLD}Error: No active conversation to share. Please specify an ID.{C_RESET}")
+            return
+        source_id = active["conv_id"]
+    else:
+        # Prefix match
+        matched = [c for c in convs if c["conv_id"].startswith(source_id)]
+        if not matched:
+            print(f"{C_RED}{C_BOLD}Error: Conversation prefix '{source_id}' not found.{C_RESET}")
+            return
+        elif len(matched) > 1:
+            print(f"{C_YELLOW}Prefix is ambiguous. Matches:{C_RESET}")
+            for m in matched:
+                print(f"  - {m['conv_id']}")
+            return
+        source_id = matched[0]["conv_id"]
+        
+    target_email = args.target_email.strip() if args.target_email else "all"
+    
+    # Define known profiles
+    KNOWN_PROFILES = {
+        "heidlessemail21@gmail.com": "stqIDYHVcLRxjclsqaksiKMvSXz2",
+        "lockahrt.r@gmail.com": "L0ckahrtRUqb4asm2UmsVRZ6Cakg",
+        "heidlessemail01@gmail.com": "ZwbAIFT0leR5yuQc5521fki6ede2",
+        "heidlessemail08@gmail.com": "H08lessemailUqb4asm2UmsVRZ6C"
+    }
+    
+    # --- Special Case: Share with Everyone In-Place ---
+    if target_email.lower() in ["all", "everyone"]:
+        source_db = os.path.join(CONVS_DIR, f"{source_id}.db")
+        print(f"\n{C_CYAN}{C_BOLD}--- Sharing Conversation Globally (In-Place) ---{C_RESET}")
+        print(f"Session ID: {source_id}")
+        print(f"Granting access to: {C_GREEN}ALL PROFILES{C_RESET} ({', '.join(KNOWN_PROFILES.keys())})")
+        
+        try:
+            conn = sqlite3.connect(source_db)
+            cursor = conn.cursor()
+            
+            # Inject identity rows in gen_metadata
+            for email, uid in KNOWN_PROFILES.items():
+                # Format payload to match standard JSON metadata structures
+                payload_str = f'{{"email":"{email}","uid":"{uid}","shared":true}}'
+                payload_bytes = payload_str.encode('utf-8')
+                
+                # Check if this email/uid is already present in gen_metadata to prevent duplicates
+                cursor.execute("SELECT COUNT(*) FROM gen_metadata WHERE data LIKE ?;", (f"%{email}%",))
+                exists = cursor.fetchone()[0] > 0
+                
+                if not exists:
+                    cursor.execute("INSERT INTO gen_metadata (data, size) VALUES (?, ?);", (payload_bytes, len(payload_bytes)))
+                    print(f"  * Injected identity record for {C_GREEN}{email}{C_RESET}")
+                else:
+                    print(f"  * Identity record for {C_YELLOW}{email}{C_RESET} already exists.")
+                    
+            conn.commit()
+            conn.close()
+            
+            # Touch database files to force IDE reloading
+            now = time.time()
+            for ext in ["", "-wal", "-shm"]:
+                p = source_db + ext
+                if os.path.exists(p):
+                    os.utime(p, (now, now))
+                    
+            print(f"\n{C_GREEN}{C_BOLD}Success! The conversation has been shared globally in-place.{C_RESET}")
+            print(f"{C_WHITE}This active session is now collaboratively visible to ALL profiles without duplicating files!{C_RESET}\n")
+            return
+        except Exception as e:
+            print(f"{C_RED}Failed to share globally in-place: {e}{C_RESET}")
+            return
+            
+    # --- Standard Case: Clone and rebind for single user ---
+    target_uid = args.target_uid
+    if not target_uid:
+        if target_email in KNOWN_PROFILES:
+            target_uid = KNOWN_PROFILES[target_email]
+        else:
+            # Fallback: scan other historical DBs to resolve UID for the email
+            print(f"Resolving UID for '{target_email}' by scanning local historical databases...")
+            for c in convs:
+                db_path = os.path.join(CONVS_DIR, f"{c['conv_id']}.db")
+                try:
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                    tables = [r[0] for r in cursor.fetchall()]
+                    for table in tables:
+                        cursor.execute(f"PRAGMA table_info({table});")
+                        text_cols = [col[1] for col in cursor.fetchall() if col[2] in ["TEXT", "BLOB", ""]]
+                        if not text_cols: continue
+                        cursor.execute(f"SELECT {','.join(text_cols)} FROM {table};")
+                        for row in cursor.fetchall():
+                            for val in row:
+                                if not val: continue
+                                val_str = val.decode('utf-8', errors='ignore') if isinstance(val, bytes) else str(val)
+                                if target_email in val_str:
+                                    uids = re.findall(r'\b[a-zA-Z0-9]{28}\b', val_str)
+                                    if uids:
+                                        target_uid = uids[0]
+                                        print(f"{C_GREEN}Successfully resolved UID for {target_email} -> {target_uid}{C_RESET}")
+                                        break
+                            if target_uid: break
+                        if target_uid: break
+                    conn.close()
+                except Exception:
+                    pass
+                if target_uid: break
+                
+    if not target_uid:
+        print(f"{C_RED}{C_BOLD}Error: Could not automatically resolve UID for email '{target_email}'.{C_RESET}")
+        print(f"Please provide the 28-character Firebase/Google UID explicitly:")
+        print(f"  ./share-chat share {target_email} --target-uid <28-char-uid> [conv-id]")
+        return
+        
+    # 3. Detect source email and UID from source DB
+    source_email = args.source_email.strip() if args.source_email else None
+    source_uid = args.source_uid.strip() if args.source_uid else None
+    
+    if source_email and not source_uid:
+        if source_email in KNOWN_PROFILES:
+            source_uid = KNOWN_PROFILES[source_email]
+            
+    source_db = os.path.join(CONVS_DIR, f"{source_id}.db")
+    
+    if not source_email or not source_uid:
+        detected_email = None
+        detected_uid = None
+        try:
+            conn = sqlite3.connect(source_db)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [r[0] for r in cursor.fetchall()]
+            for table in tables:
+                cursor.execute(f"PRAGMA table_info({table});")
+                cols = [col[1] for col in cursor.fetchall() if col[2] in ["TEXT", "BLOB", ""]]
+                if not cols: continue
+                cursor.execute(f"SELECT {','.join(cols)} FROM {table};")
+                for row in cursor.fetchall():
+                    for val in row:
+                        if not val: continue
+                        val_str = val.decode('utf-8', errors='ignore') if isinstance(val, bytes) else str(val)
+                        emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', val_str)
+                        for e in emails:
+                            if e in KNOWN_PROFILES:
+                                detected_email = e
+                                detected_uid = KNOWN_PROFILES[e]
+                                break
+                        if detected_email: break
+                    if detected_email: break
+                if detected_email: break
+            conn.close()
+        except Exception as e:
+            pass
+            
+        if not source_email:
+            source_email = detected_email
+        if not source_uid:
+            source_uid = detected_uid
+        
+    if not source_email:
+        # Fallback to current profile
+        source_email = "heidlessemail21@gmail.com"
+        source_uid = "stqIDYHVcLRxjclsqaksiKMvSXz2"
+        
+    print(f"\n{C_CYAN}{C_BOLD}--- Sharing Conversation Session ---{C_RESET}")
+    print(f"Source Session ID: {source_id}")
+    print(f"Source Account:    {source_email} ({source_uid})")
+    print(f"Sharing With:      {target_email} ({target_uid})")
+    
+    # 4. Generate new UUID for the shared conversation
+    new_id = str(uuid.uuid4())
+    
+    new_db = os.path.join(CONVS_DIR, f"{new_id}.db")
+    new_brain_dir = os.path.join(BRAIN_DIR, new_id)
+    source_brain_dir = os.path.join(BRAIN_DIR, source_id)
+    
+    # 5. Clone and modify the database file
+    print(f"\nCloning database to {C_GREEN}{new_id}.db{C_RESET}...")
+    try:
+        with open(source_db, 'rb') as f:
+            db_bytes = f.read()
+            
+        # Surgical replacement of email and UID in binary format
+        shared_db_bytes = db_bytes.replace(source_email.encode('utf-8'), target_email.encode('utf-8'))
+        shared_db_bytes = shared_db_bytes.replace(source_uid.encode('utf-8'), target_uid.encode('utf-8'))
+        
+        with open(new_db, 'wb') as f:
+            f.write(shared_db_bytes)
+            
+        print("Database cloned and rebound successfully!")
+    except Exception as e:
+        print(f"{C_RED}Failed to clone database file: {e}{C_RESET}")
+        return
+        
+    # 6. Clone and modify the brain directory
+    if os.path.exists(source_brain_dir):
+        print(f"Cloning brain directory to {C_GREEN}brain/{new_id}{C_RESET}...")
+        try:
+            shutil.copytree(source_brain_dir, new_brain_dir)
+            
+            # Recurse and replace strings in text files (like transcript.jsonl)
+            for root, dirs, files in os.walk(new_brain_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        
+                        updated_content = content.replace(source_email, target_email)
+                        updated_content = updated_content.replace(source_uid, target_uid)
+                        
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(updated_content)
+                    except Exception:
+                        pass
+            print("Brain logs cloned and rebound successfully!")
+        except Exception as e:
+            print(f"{C_YELLOW}Warning: Failed to copy some brain log files: {e}{C_RESET}")
+            
+    # 7. Touch and activate the new conversation
+    print(f"\nActivating the shared session for the target profile...")
+    now = time.time()
+    for ext in ["", "-wal", "-shm"]:
+        p = new_db + ext
+        if os.path.exists(p):
+            os.utime(p, (now, now))
+    if os.path.exists(new_brain_dir):
+        os.utime(new_brain_dir, (now, now))
+        for root, dirs, files in os.walk(new_brain_dir):
+            for d in dirs:
+                os.utime(os.path.join(root, d), (now, now))
+            for f in files:
+                os.utime(os.path.join(root, f), (now, now))
+                
+    print(f"\n{C_GREEN}{C_BOLD}Success! The conversation has been shared and activated.{C_RESET}")
+    print(f"Session {C_CYAN}{new_id}{C_RESET} is now associated with {C_GREEN}{target_email}{C_RESET}.")
+    print(f"{C_WHITE}When you switch to that Google profile in the IDE and reload, this conversation will be active and visible!{C_RESET}\n")
+
+def print_custom_help():
+    print(f"\n{C_CYAN}{C_BOLD}🚀 ANTIGRAVITY CONVERSATION SHARING UTILITY (share-chat){C_RESET}")
+    print(f"Manage, resume, and export pair-programming chats across Google profiles.\n")
+    print(f"{C_BOLD}USAGE:{C_RESET}")
+    print(f"  ./share-chat <command> [arguments]\n")
+    print(f"{C_BOLD}COMMANDS:{C_RESET}")
+    print(f"  {C_GREEN}{C_BOLD}status{C_RESET}                   Show details of the active conversation (default)")
+    print(f"  {C_GREEN}{C_BOLD}list{C_RESET}                     List all workspace historical conversations")
+    print(f"  {C_GREEN}{C_BOLD}activate <id-prefix>{C_RESET}     Switch active conversation to specified ID prefix")
+    print(f"  {C_GREEN}{C_BOLD}export [id-prefix]{C_RESET}       Export conversation transcript to clean Markdown")
+    print(f"  {C_GREEN}{C_BOLD}inspect <id-prefix>{C_RESET}      Inspect conversation database metadata and accounts")
+    print(f"  {C_GREEN}{C_BOLD}share <email> [prefix]{C_RESET}   Duplicate and share conversation with target user profile")
+    print(f"  {C_GREEN}{C_BOLD}list-files{C_RESET}               List raw conversation database and state files")
+    print(f"  {C_GREEN}{C_BOLD}help{C_RESET}                     Show this colored, custom help guide\n")
+    print(f"{C_BOLD}EXAMPLES:{C_RESET}")
+    print(f"  {C_WHITE}./share-chat{C_RESET}                  Shows current active session preview")
+    print(f"  {C_WHITE}./share-chat list{C_RESET}             List all threads with previews")
+    print(f"  {C_WHITE}./share-chat activate aa145{C_RESET}   Make 'aa145...' active across all profiles")
+    print(f"  {C_WHITE}./share-chat export{C_RESET}            Export active session to docs/shared-chats/")
+    print(f"  {C_WHITE}./share-chat inspect d38{C_RESET}       Inspect account/identity details of 'd38...'")
+    print(f"  {C_WHITE}./share-chat share lockahrt.r@gmail.com e6c2b{C_RESET}")
+    print(f"                                   Share current active session with lockahrt.r account")
+    print(f"  {C_WHITE}./share-chat list-files{C_RESET}       List all conversation and IDE database files\n")
+    print(f"{C_CYAN}{C_BOLD}========================================================================={C_RESET}\n")
+
+def main():
+    # If the user requests help, show the premium custom help page
+    if len(sys.argv) > 1 and sys.argv[1] in ["help", "-h", "--help"]:
+        print_custom_help()
+        sys.exit(0)
+
+    parser = argparse.ArgumentParser(
+        description="Antigravity Chat Sharing & Resuming CLI Utility Tool",
+        formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False  # Disable default help so we can intercept it cleanly at the sub-command level if needed
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
+    
+    # Status subcommand
+    subparsers.add_parser("status", help="Show current active conversation details", add_help=False)
+    
+    # List subcommand
+    subparsers.add_parser("list", help="List all workspace conversations", add_help=False)
+    
+    # Activate subcommand
+    act_parser = subparsers.add_parser("activate", help="Set a conversation as active", add_help=False)
+    act_parser.add_argument("conversation_id", type=str, help="ID (or prefix) of the conversation to resume")
+    
+    # Export subcommand
+    exp_parser = subparsers.add_parser("export", help="Export a conversation transcript to Markdown", add_help=False)
+    exp_parser.add_argument("conversation_id", type=str, nargs="?", default=None, help="Conversation ID (or prefix) to export")
+    
+    # Inspect subcommand
+    ins_parser = subparsers.add_parser("inspect", help="Inspect conversation database details", add_help=False)
+    ins_parser.add_argument("conversation_id", type=str, help="ID (or prefix) of the conversation to inspect")
+    
+    # List files subcommand
+    subparsers.add_parser("list-files", help="List raw conversation database and state files", add_help=False)
+    
+    # Share subcommand
+    shr_parser = subparsers.add_parser("share", help="Share a conversation with another profile", add_help=False)
+    shr_parser.add_argument("target_email", type=str, nargs="?", default="all", help="Target user email profile to share with (defaults to 'all' to share with everyone)")
+    shr_parser.add_argument("conversation_id", type=str, nargs="?", default=None, help="Conversation ID to share (defaults to active)")
+    shr_parser.add_argument("--target-uid", type=str, default=None, help="Target user Firebase/Google UID")
+    shr_parser.add_argument("--source-email", type=str, default=None, help="Source user email profile to share from")
+    shr_parser.add_argument("--source-uid", type=str, default=None, help="Source user Firebase/Google UID")
+
+    args = parser.parse_args()
+    
+    # If no command is provided, default to status
+    if not args.command:
+        cmd_status(args)
+    elif args.command == "status":
+        cmd_status(args)
+    elif args.command == "list":
+        cmd_list(args)
+    elif args.command == "activate":
+        cmd_activate(args)
+    elif args.command == "export":
+        cmd_export(args)
+    elif args.command == "inspect":
+        cmd_inspect(args)
+    elif args.command == "list-files":
+        cmd_list_files(args)
+    elif args.command == "share":
+        cmd_share(args)
+
+if __name__ == "__main__":
+    main()

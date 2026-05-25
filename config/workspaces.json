@@ -12,57 +12,59 @@
         "name": "Video System v1.0",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "heidless-video-system"
+        "hostingTarget": "stillwater-sovereign-01"
       },
       {
         "id": "prompttool",
         "name": "PromptTool v1.0",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "deployMethod": "cloud-build"
+        "hostingTarget": "stillwater-prompt-tool"
       },
       {
         "id": "promptresources",
         "name": "PromptResources v1.0",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "prompt-resources"
+        "hostingTarget": "stillwater-prompt-resources"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1.1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "heidless-prompt-master"
+        "hostingTarget": "stillwater-prompt-master"
       },
       {
         "id": "promptaccreditation",
         "name": "PromptAccreditation v1.0",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "deployMethod": "cloud-build"
+        "hostingTarget": "stillwater-prompt-accreditation"
       },
       {
         "id": "plantune",
         "name": "PlanTune v1.0",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
-        "hostingTarget": "heidless-plan-tune",
-        "deployMethod": "cloud-build"
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://plantune-850624280491.us-central1.run.app"
       },
       {
         "id": "suiteutils",
         "name": "SuiteUtils v1.0",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "stillwater-suite-utils"
       },
       {
         "id": "persona",
         "name": "persona v1.0",
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
-        "deployMethod": "cloud-build"
+        "hostingTarget": "stillwater-persona",
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://persona-850624280491.us-central1.run.app"
       }
     ]
   },

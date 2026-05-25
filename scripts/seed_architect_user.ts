@@ -13,7 +13,7 @@ if (!admin.apps.length) {
 const adminApp = admin.app();
 
 const UID = 'stqIDYHVcLRxjclsqaksiKMvSXz2';
-const EMAIL = 'heidlessemail21@gmail.com';
+const EMAIL = 'heidlessemail18@gmail.com';
 const DISPLAY_NAME = 'Rob';
 const PHOTO_URL = 'https://lh3.googleusercontent.com/a/ACg8ocIIhlI9GYEFgkm0cxbrliCY8XAhKj1YZXr2HPjfZBUc5NwiCg=s96-c';
 
@@ -62,7 +62,10 @@ const userRecord = {
 const targetDatabases = [
   'promptresources-db-0',
   'promptaccreditation-db-0',
-  'persona-db-0'
+  'persona-db-0',
+  'promptmaster-spa-db-0',
+  'prompttool-db-0',
+  'urlshortener-db-0'
 ];
 
 async function seed() {

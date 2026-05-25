@@ -3,19 +3,31 @@ APP_NAME="Persona"
 APP_DIR="/home/heidless/projects/Persona"
 TMUX_SESSION="stillwater"
 PORT=3005
-BRIDGE_PORT=3006
+BRIDGE_PORT=3008
 LOG_FILE="/home/heidless/projects/SuiteUtils/persona.log"
 
 case "$1" in
     start)
         echo "🚀 Starting ${APP_NAME} Stack (UI:${PORT}, Bridge:${BRIDGE_PORT})..."
-        if fuser ${PORT}/tcp >/dev/null 2>&1 || fuser ${BRIDGE_PORT}/tcp >/dev/null 2>&1; then
+        if ss -lnt | grep -qE ":${PORT}(\s|$)" || ss -lnt | grep -qE ":${BRIDGE_PORT}(\s|$)"; then
             echo "⚠️ ${APP_NAME} components are already running."
             exit 1
         fi
         cd $APP_DIR
-        nohup env PORT=${PORT} ./scripts/start-persona.sh > $LOG_FILE 2>&1 &
-        echo "✅ ${APP_NAME} background stack initialized."
+        nohup env PORT=${PORT} ./scripts/start-persona.sh ${PORT} ${BRIDGE_PORT} > $LOG_FILE 2>&1 &
+        echo "⏳ ${APP_NAME} stack starting... (verifying in 8s)"
+        sleep 8
+        UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
+        BRIDGE_UP=$(ss -lnt | grep -cE ":${BRIDGE_PORT}(\s|$)")
+        if [ "$UI_UP" -gt 0 ] && [ "$BRIDGE_UP" -gt 0 ]; then
+            echo "✅ ${APP_NAME} is FULLY UP (UI: ${PORT} | Bridge: ${BRIDGE_PORT})"
+        elif [ "$UI_UP" -gt 0 ] || [ "$BRIDGE_UP" -gt 0 ]; then
+            echo "⚠️ ${APP_NAME} is DEGRADED (UI: $([ "$UI_UP" -gt 0 ] && echo UP || echo DOWN) | Bridge: $([ "$BRIDGE_UP" -gt 0 ] && echo UP || echo DOWN)). Last log:"
+            tail -n 10 $LOG_FILE 2>/dev/null
+        else
+            echo "❌ ${APP_NAME} failed to start. Last log:"
+            tail -n 10 $LOG_FILE 2>/dev/null
+        fi
         ;;
     stop)
         echo "🛑 Stopping ${APP_NAME} Stack..."
@@ -38,8 +50,8 @@ case "$1" in
         $0 start
         ;;
     status)
-        PID_UI=$(fuser ${PORT}/tcp 2>/dev/null | awk '{print $1}')
-        PID_BRIDGE=$(fuser ${BRIDGE_PORT}/tcp 2>/dev/null | awk '{print $1}')
+        PID_UI=$(ss -lntp | grep -E ":${PORT}(\s|$)" | grep -oP 'pid=\K\d+' | head -n 1)
+        PID_BRIDGE=$(ss -lntp | grep -E ":${BRIDGE_PORT}(\s|$)" | grep -oP 'pid=\K\d+' | head -n 1)
         
         if [ -n "$PID_UI" ] && [ -n "$PID_BRIDGE" ]; then
             echo "✅ ${APP_NAME} is FULLY UP (UI: $PID_UI | Bridge: $PID_BRIDGE)"

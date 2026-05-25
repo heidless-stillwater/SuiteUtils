@@ -1,9 +1,9 @@
 #!/bin/bash
-APP_NAME="PromptTool"
-APP_DIR="/home/heidless/projects/PromptTool"
+APP_NAME="URLShortener"
+APP_DIR="/home/heidless/projects/URLShortener"
 TMUX_SESSION="stillwater"
-PORT=3001
-LOG_FILE="/home/heidless/projects/SuiteUtils/prompttool.log"
+PORT=3006
+LOG_FILE="/home/heidless/projects/SuiteUtils/urlshortener.log"
 
 case "$1" in
     start)
@@ -13,7 +13,7 @@ case "$1" in
             exit 1
         fi
         cd $APP_DIR
-        nohup env PORT=${PORT} SERVICE_DATABASE_ID="prompttool-db-0" FIREBASE_DATABASE_ID="prompttool-db-0" NEXT_PUBLIC_FIREBASE_DATABASE_ID="prompttool-db-0" GOOGLE_APPLICATION_CREDENTIALS="/home/heidless/projects/PromptTool/service-account.json" npm run dev -- -p ${PORT} > $LOG_FILE 2>&1 &
+        nohup env PORT=${PORT} SERVICE_DATABASE_ID="urlshortener-db-0" FIREBASE_DATABASE_ID="urlshortener-db-0" NEXT_PUBLIC_FIREBASE_DATABASE_ID="urlshortener-db-0" GOOGLE_APPLICATION_CREDENTIALS="/home/heidless/projects/SuiteUtils/suite-admin-sovereign.json" npm start -- -p ${PORT} > $LOG_FILE 2>&1 &
         echo "⏳ ${APP_NAME} starting... (verifying in 5s)"
         sleep 5
         if ss -lnt | grep -qE ":${PORT}(\s|$)"; then

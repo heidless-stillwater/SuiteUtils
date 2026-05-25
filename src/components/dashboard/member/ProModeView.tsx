@@ -231,7 +231,8 @@ export default function ProModeView({
                 toggleSelect(appId);
               }}
               className={`glass-card p-5 group relative overflow-hidden cursor-pointer transition-all duration-500 ${
-                isSelected ? 'border-primary/60 bg-primary/20 ring-2 ring-primary/40 shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)]' : 
+                isWorking ? 'border-primary/60 bg-primary/20 ring-2 ring-primary/40 shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)]' : 
+                isSelected ? 'border-indigo-400/50 bg-indigo-400/10 ring-1 ring-indigo-400/30 shadow-[0_0_20px_rgba(129,140,248,0.15)]' :
                 (health?.status === 'UP') ? 'border-primary/30 bg-primary/10 shadow-[inset_0_0_20px_rgba(var(--primary-rgb),0.15),0_0_15px_rgba(var(--primary-rgb),0.1)]' :
                 'hover:border-white/10'
               }`}
@@ -280,7 +281,8 @@ export default function ProModeView({
                 isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'
               }`}>
                 <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${
-                  isSelected ? 'bg-primary border-primary' : 'border-white/20'
+                  isWorking ? 'bg-primary border-primary' :
+                  isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-white/20'
                 }`}>
                   {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
                 </div>

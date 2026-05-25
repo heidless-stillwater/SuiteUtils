@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { Sidebar } from './components/layout/Sidebar';
@@ -20,7 +20,13 @@ import { Loader2 } from 'lucide-react';
 
 function App() {
   const { user, loading } = useAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      setSidebarCollapsed(true);
+    }
+  }, [user]);
 
   if (loading) {
     return (
