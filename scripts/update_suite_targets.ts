@@ -64,6 +64,43 @@ async function main() {
     console.log("Updated plantune in memory.");
   }
 
+  // Update urlshortener
+  if (!apps.urlshortener) {
+    apps.urlshortener = {
+      path: "~/projects/URLShortener",
+      database: "urlshortener-db-0",
+      displayName: "URLShortener v1.0",
+      project: "heidless-apps-2",
+      environments: {
+        dev: {
+          lastDeployAt: null,
+          deployMethod: "cloud-build",
+          hostingTarget: null,
+          status: "not-configured"
+        },
+        staging: {
+          lastDeployAt: null,
+          deployMethod: "cloud-build",
+          hostingTarget: null,
+          status: "not-configured"
+        },
+        production: {
+          lastDeployAt: null,
+          status: "live",
+          deployMethod: "cloud-build",
+          hostingTarget: "stillwater-url-shortener",
+          deployUrl: "https://urlshortener-850624280491.us-central1.run.app"
+        }
+      }
+    };
+  } else {
+    if (!apps.urlshortener.environments) apps.urlshortener.environments = {};
+    if (!apps.urlshortener.environments.production) apps.urlshortener.environments.production = {};
+    apps.urlshortener.environments.production.hostingTarget = 'stillwater-url-shortener';
+    apps.urlshortener.environments.production.deployUrl = 'https://urlshortener-850624280491.us-central1.run.app';
+  }
+  console.log("Updated urlshortener in memory.");
+
   // Update Firestore
   await suiteRef.update({ apps });
   console.log("🟢 Firestore 'stillwater-suite' apps configuration updated successfully!");

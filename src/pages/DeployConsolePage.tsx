@@ -31,7 +31,9 @@ import {
   ChevronLeft,
   Copy,
   LayoutGrid,
-  List
+  List,
+  Maximize2,
+  X
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ActionModal } from '../components/common/ActionModal';
@@ -111,6 +113,38 @@ export function DeployConsolePage() {
   const [appOrder, setAppOrder] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [copiedAppId, setCopiedAppId] = useState<string | null>(null);
+  const [activeLogModalAppId, setActiveLogModalAppId] = useState<string | null>(null);
+  const [activeHistoryLogRecord, setActiveHistoryLogRecord] = useState<DeploymentRecord | null>(null);
+  const [copiedLogModal, setCopiedLogModal] = useState(false);
+  const [autoScrollLogs, setAutoScrollLogs] = useState(true);
+  const modalLogRef = useRef<HTMLDivElement | null>(null);
+  const modalApp = useMemo(() => {
+    if (activeLogModalAppId) {
+      const active = deployStates.find(s => s.appId === activeLogModalAppId);
+      if (active) return active;
+    }
+    if (activeHistoryLogRecord) {
+      return {
+        appId: activeHistoryLogRecord.appId,
+        displayName: activeHistoryLogRecord.displayName || activeHistoryLogRecord.appId,
+        status: activeHistoryLogRecord.status,
+        logs: activeHistoryLogRecord.logs || [],
+        deployMethod: activeHistoryLogRecord.deployMethod,
+        elapsed: activeHistoryLogRecord.duration || 0,
+      } as any;
+    }
+    return null;
+  }, [deployStates, activeLogModalAppId, activeHistoryLogRecord]);
+
+  const modalAppEstimate = useMemo(() => {
+    if (!modalApp) return null;
+    return getEstimate(modalApp.appId, modalApp.deployMethod || 'firebase', deployHistory);
+  }, [modalApp, deployHistory]);
+
+  const modalAppProgress = useMemo(() => {
+    if (!modalApp || !modalAppEstimate) return 0;
+    return Math.min(98, (modalApp.elapsed / modalAppEstimate.estimatedDuration) * 100);
+  }, [modalApp, modalAppEstimate]);
 
   const handleCopyLink = (url: string, appId: string) => {
     navigator.clipboard.writeText(url);
@@ -153,7 +187,7 @@ export function DeployConsolePage() {
           deployMethod: (wApp.deployMethod || prod?.deployMethod || 'firebase') as any,
           lastUpdated: prod?.lastUpdated || null,
           startedAt: isRunning ? existing.startedAt : undefined,
-          deployUrl: isRunning ? existing.deployUrl : undefined
+          deployUrl: isRunning ? existing.deployUrl : (prod?.deployUrl || undefined)
         };
       });
 
@@ -175,6 +209,7 @@ export function DeployConsolePage() {
             project: sApp.project || targetProject,
             deployMethod: (prod?.deployMethod || 'firebase') as any,
             lastUpdated: prod?.lastUpdated || null,
+            deployUrl: prod?.deployUrl || undefined,
           });
         }
       });
@@ -627,7 +662,11 @@ export function DeployConsolePage() {
     }
 
     return apps.sort((a, b) => {
-      if (sortBy === 'name') return a.displayName.localeCompare(b.displayName);
+      if (sortBy === 'name') {
+        const nameA = a.displayName || a.appId || '';
+        const nameB = b.displayName || b.appId || '';
+        return nameA.localeCompare(nameB);
+      }
       if (sortBy === 'last-deploy') {
         const dateA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
         const dateB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
@@ -645,20 +684,35 @@ export function DeployConsolePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyModalLogs = () => {
+    if (!modalApp?.logs) return;
+    const text = modalApp.logs.join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedLogModal(true);
+    setTimeout(() => setCopiedLogModal(false), 2000);
+  };
+
 
   // Scroll logs to bottom
   useEffect(() => {
     Object.values(logRefs.current).forEach(ref => {
       if (ref) ref.scrollTop = ref.scrollHeight;
     });
-  }, [deployStates]);
+    if (autoScrollLogs && modalLogRef.current) {
+      modalLogRef.current.scrollTop = modalLogRef.current.scrollHeight;
+    }
+  }, [deployStates, autoScrollLogs, activeLogModalAppId]);
 
   const filteredApps = React.useMemo(() => {
     return deployStates.filter(app => 
       app.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       app.appId.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => {
-      if (sortBy === 'name') return a.displayName.localeCompare(b.displayName);
+      if (sortBy === 'name') {
+        const nameA = a.displayName || a.appId || '';
+        const nameB = b.displayName || b.appId || '';
+        return nameA.localeCompare(nameB);
+      }
       const lastA = deployHistory.find(h => h.appId === a.appId)?.startedAt?.toMillis() || 0;
       const lastB = deployHistory.find(h => h.appId === b.appId)?.startedAt?.toMillis() || 0;
       return lastB - lastA;
@@ -1043,10 +1097,20 @@ export function DeployConsolePage() {
                         className={`p-2 rounded-lg transition-colors ${
                           isExpanded ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/30 hover:text-white/60'
                         }`}
+                        title="Toggle Inline Logs"
                       >
                         <Terminal className="w-4 h-4" />
                       </button>
                     )}
+
+                    {/* Log modal trigger */}
+                    <button
+                      onClick={() => setActiveLogModalAppId(app.appId)}
+                      className="p-2 rounded-lg bg-white/5 text-white/30 hover:text-white/80 hover:bg-white/10 transition-all border border-white/10"
+                      title="View Logs in Modal"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
 
                     {/* Live App Link */}
                     {(app.deployUrl || app.hostingTarget) && (
@@ -1360,10 +1424,23 @@ export function DeployConsolePage() {
                           className={`p-1.5 rounded-lg transition-colors border ${
                             isExpanded ? 'bg-primary/20 text-primary border-primary/20' : 'bg-white/5 text-white/30 border-white/10 hover:text-white/60'
                           }`}
+                          title="Toggle Inline Logs"
                         >
                           <Terminal className="w-3.5 h-3.5" />
                         </button>
                       )}
+
+                      {/* Log modal trigger */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveLogModalAppId(app.appId);
+                        }}
+                        className="p-1.5 rounded-lg bg-white/5 text-white/30 hover:text-white/80 hover:bg-white/10 transition-all border border-white/10"
+                        title="View Logs in Modal"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </button>
 
                       {/* Live App Link */}
                       {(app.deployUrl || app.hostingTarget) && (
@@ -1460,8 +1537,8 @@ export function DeployConsolePage() {
                 </h3>
                 <div className="space-y-3">
                   {deployHistory.slice(0, 10).map((record) => (
-                    <div key={record.id} className="p-3 rounded-xl bg-white/5 border border-white/5">
-                      <div className="flex items-center justify-between mb-1">
+                    <div key={record.id} className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white/90">{record.appId}</span>
                         <span className={`text-[10px] font-bold uppercase ${record.status === 'live' ? 'text-green-400' : 'text-red-400'}`}>
                           {record.status}
@@ -1471,6 +1548,18 @@ export function DeployConsolePage() {
                         <span>{formatDistanceToNow(parseDate(record.startedAt), { addSuffix: true })}</span>
                         <span>{formatDuration(record.duration || 0)}</span>
                       </div>
+                      {record.logs && record.logs.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setActiveHistoryLogRecord(record);
+                            setActiveLogModalAppId(null);
+                          }}
+                          className="w-full mt-1.5 py-1 px-2.5 rounded-lg bg-white/5 hover:bg-primary/10 text-white/60 hover:text-primary text-[10px] font-black uppercase tracking-wider transition-all border border-white/10 hover:border-primary/20 flex items-center justify-center gap-1.5"
+                        >
+                          <Terminal className="w-3.5 h-3.5" />
+                          Review Logs
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1592,6 +1681,170 @@ export function DeployConsolePage() {
               >
                 Close Status HUD
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeLogModalAppId && modalApp && (
+        <div className="fixed inset-0 z-[100] pointer-events-none flex items-end justify-end p-6">
+          <div className="bg-[#050505]/95 w-full max-w-lg md:max-w-xl h-[520px] flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border border-white/10 rounded-3xl relative overflow-hidden animate-in slide-in-from-bottom slide-in-from-right duration-300 pointer-events-auto">
+            {/* Top accent line */}
+            <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${modalApp.status === 'live' ? 'from-green-500/50 via-green-500 to-green-500/50' : modalApp.status === 'failed' ? 'from-red-500/50 via-red-500 to-red-500/50' : 'from-primary/50 via-primary to-primary/50'} z-20`} />
+            
+            {/* Modal Header */}
+            <div className="p-5 pb-3 flex items-center justify-between border-b border-white/5">
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-xl ${
+                  modalApp.status === 'live' ? 'bg-green-400/10 text-green-400' :
+                  modalApp.status === 'failed' ? 'bg-red-400/10 text-red-400' :
+                  modalApp.status === 'building' || modalApp.status === 'deploying' ? 'bg-primary/10 text-primary' :
+                  'bg-white/5 text-white/20'
+                }`}>
+                  {modalApp.status === 'building' || modalApp.status === 'deploying' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : modalApp.status === 'live' ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : (
+                    <Terminal className="w-4 h-4" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white tracking-tight flex items-center gap-2">
+                    {modalApp.displayName}
+                    <span className="text-xs text-white/30 font-mono font-normal">({modalApp.appId})</span>
+                  </h2>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 border ${
+                      modalApp.status === 'live' ? 'text-green-400 border-green-500/20' :
+                      modalApp.status === 'failed' ? 'text-red-400 border-red-500/20' :
+                      modalApp.status === 'building' || modalApp.status === 'deploying' ? 'text-primary border-primary/20 animate-pulse' :
+                      'text-white/10'
+                    }`}>{modalApp.status}</span>
+                    <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{modalApp.deployMethod || 'firebase'}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveLogModalAppId(null);
+                  setActiveHistoryLogRecord(null);
+                }}
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all border border-white/5"
+                title="Close"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Toolbar */}
+            <div className="px-5 py-2.5 bg-white/5 border-b border-white/5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-white/40 cursor-pointer hover:text-white/60 select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoScrollLogs}
+                    onChange={(e) => setAutoScrollLogs(e.target.checked)}
+                    className="rounded border-white/10 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 w-3 h-3"
+                  />
+                  Auto-Scroll
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {modalApp.logs && modalApp.logs.length > 0 && (
+                  <button 
+                    onClick={handleCopyModalLogs}
+                    className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-white/10"
+                    title="Copy all logs"
+                  >
+                    {copiedLogModal ? (
+                      <>
+                        <Check className="w-3 h-3 text-green-400" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        Copy Logs
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Progress Section */}
+            {(modalApp.status === 'building' || modalApp.status === 'deploying') && (
+              <div className="px-5 py-3 bg-white/5 border-b border-white/5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 overflow-hidden flex-1">
+                    <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                    <span className="text-[9px] text-white/50 font-mono truncate">
+                      {modalApp.logs.length > 0 ? modalApp.logs[modalApp.logs.length - 1].replace(/\x1b\[[0-9;]*m/g, '').replace(/\n/g, '').trim() : 'Initializing process...'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black text-primary ml-4">{Math.round(modalAppProgress)}%</span>
+                </div>
+                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${
+                      modalApp.status === 'building' ? 'bg-amber-400' : 'bg-primary'
+                    }`}
+                    style={{ width: `${modalAppProgress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[8px] text-white/20 font-bold uppercase tracking-widest">
+                  <span>Elapsed: {formatElapsed(modalApp.elapsed)}</span>
+                  {modalAppEstimate && <span>Est: {formatDuration(modalAppEstimate.estimatedDuration)}</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Scrollable Logs Output */}
+            <div 
+              ref={modalLogRef}
+              className="flex-1 overflow-y-auto p-5 font-mono text-[11px] leading-relaxed bg-black/60 scrollbar-thin scrollbar-thumb-white/10 select-text"
+            >
+              {modalApp.logs.length === 0 ? (
+                <div className={`italic flex items-center gap-2 justify-center py-12 ${
+                  modalApp.status === 'live' ? 'text-green-400/60' : 
+                  modalApp.status === 'failed' ? 'text-red-400/60' : 'text-white/20'
+                }`}>
+                  {modalApp.status === 'live' ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Deployment completed successfully. No logs generated.
+                    </>
+                  ) : modalApp.status === 'failed' ? (
+                    <>
+                      <Ban className="w-3.5 h-3.5" />
+                      Deployment failed. Check server logs.
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                      Waiting for build pipeline logs...
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {modalApp.logs.map((log, i) => (
+                    <div key={i} className="flex gap-3 group">
+                      <span className="text-white/10 select-none w-6 text-right flex-shrink-0">{i + 1}</span>
+                      <span className={`whitespace-pre-wrap break-all ${
+                        log.includes('──') ? 'text-primary font-bold' :
+                        log.includes('error') || log.includes('Failed') ? 'text-red-400' :
+                        log.includes('success') || log.includes('Done') ? 'text-green-400' :
+                        'text-white/60'
+                      }`}>
+                        {log}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

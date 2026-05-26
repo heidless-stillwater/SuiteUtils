@@ -25,3 +25,9 @@ Update `SuiteUtils/ui_state.json` and shift between `sovereign` and `hacker`.
 
 ### 🛡️ SAFETY RULES
 - NEVER `pkill node` globally. Use `fuser -k [PORT]/tcp`.
+
+### 🆔 AUTOMATIC SESSION INITIALIZATION
+- At the start of every new conversation (on your very first turn), you MUST run:
+  `npx tsx scripts/session-manager/manage.ts init`
+  This ensures a fresh session ID is generated and linked to the new conversation.
+

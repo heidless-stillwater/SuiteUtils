@@ -400,9 +400,11 @@ export function DashboardPage() {
     );
   }
 
-  const apps = Object.entries(currentSuite?.apps || {}).sort((a, b) => 
-    a[1].displayName.localeCompare(b[1].displayName)
-  );
+  const apps = Object.entries(currentSuite?.apps || {}).sort((a, b) => {
+    const nameA = a[1]?.displayName || a[0] || '';
+    const nameB = b[1]?.displayName || b[0] || '';
+    return nameA.localeCompare(nameB);
+  });
   const liveApps = healthResults.filter(h => h.status === 'UP' || h.appId.toLowerCase() === 'suiteutils');
   const failedApps = healthResults.filter(h => h.status === 'DOWN' && h.appId.toLowerCase() !== 'suiteutils');
 

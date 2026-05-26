@@ -65,6 +65,15 @@
         "hostingTarget": "stillwater-persona",
         "deployMethod": "cloud-build",
         "deployUrl": "https://persona-850624280491.us-central1.run.app"
+      },
+      {
+        "id": "urlshortener",
+        "name": "URLShortener v1.0",
+        "dbId": "urlshortener-db-0",
+        "projectPath": "~/projects/URLShortener",
+        "hostingTarget": "stillwater-url-shortener",
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://urlshortener-850624280491.us-central1.run.app"
       }
     ]
   },
@@ -129,6 +138,13 @@
         "name": "persona v1.0",
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
+        "deployMethod": "cloud-build"
+      },
+      {
+        "id": "urlshortener",
+        "name": "URLShortener v1.0",
+        "dbId": "urlshortener-db-0",
+        "projectPath": "~/projects/URLShortener",
         "deployMethod": "cloud-build"
       }
     ]

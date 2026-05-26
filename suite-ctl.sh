@@ -28,7 +28,7 @@ ensure_session() {
 ensure_session
 
 # Phase 1: Selective Targeting
-if [[ "$OPTION" =~ ^[1-8]$ ]]; then
+if [[ "$OPTION" =~ ^[1-9]$ ]]; then
     # Target specific slot (e.g., stop 6 -> Persona)
     TARGET_SCRIPTS=$(grep -Pzo "\"id\": $OPTION(.|\n){0,100}\"script\": \"\K[^\"]+" "$CONFIG_FILE" | tr -d '\0')
 

@@ -310,7 +310,7 @@ export default function ProModeView({
               </div>
 
               <h3 className="text-sm font-bold text-white/90 mb-1 uppercase tracking-tight truncate group-hover:text-primary transition-colors">
-                {config.displayName}
+                {config.displayName || config.name || appId}
               </h3>
               <p className="text-[10px] text-white/30 font-mono mb-4 truncate">{config.path}</p>
 

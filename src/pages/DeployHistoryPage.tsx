@@ -14,6 +14,9 @@ import {
   ExternalLink,
   WifiOff,
   RefreshCw,
+  Terminal,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import { subscribeToDeployHistory } from '../lib/deployment-service';
@@ -38,6 +41,7 @@ interface Release {
   appId?: string;
   appName?: string;
   hostingTarget?: string | null;
+  logs?: string[];
 }
 
 interface RollbackState {
@@ -63,6 +67,10 @@ export function DeployHistoryPage() {
   const [confirmRelease, setConfirmRelease] = useState<Release | null>(null);
   // Per-release rollback progress
   const [rollbackState, setRollbackState] = useState<Record<string, RollbackState>>({});
+
+  // Log modal state
+  const [activeLogRelease, setActiveLogRelease] = useState<Release | null>(null);
+  const [copiedLogModal, setCopiedLogModal] = useState(false);
 
   // ── Firestore real-time subscription ─────────────────────
   useEffect(() => {
@@ -94,6 +102,7 @@ export function DeployHistoryPage() {
             hostingTarget: appConfig?.environments?.production?.hostingTarget || null,
             duration: r.duration,
             deployUrl: r.deployUrl || null,
+            logs: r.logs,
           };
         });
         setReleases(mapped);
@@ -246,6 +255,25 @@ export function DeployHistoryPage() {
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  const getDisplayUrl = (rel: Release) => {
+    if (rel.deployUrl) {
+      try {
+        return new URL(rel.deployUrl).hostname;
+      } catch {
+        return rel.deployUrl;
+      }
+    }
+    return rel.hostingTarget ? `${rel.hostingTarget}.web.app` : '—';
+  };
+
+  const handleCopyHistoryLogs = () => {
+    if (!activeLogRelease?.logs) return;
+    const text = activeLogRelease.logs.join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedLogModal(true);
+    setTimeout(() => setCopiedLogModal(false), 2000);
+  };
+
   return (
     <div className="page-enter space-y-6">
       <div className="flex items-start justify-between">
@@ -385,7 +413,7 @@ export function DeployHistoryPage() {
                     <td className="px-5 py-3.5 text-sm font-semibold text-white/80">
                       <div className="flex items-center gap-2">
                         <a
-                          href={`https://${release.hostingTarget}.web.app`}
+                          href={release.deployUrl || (release.hostingTarget ? `https://${release.hostingTarget}.web.app` : '#')}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="hover:text-primary transition-colors flex items-center gap-1.5 group"
@@ -398,12 +426,12 @@ export function DeployHistoryPage() {
                         )}
                       </div>
                       <a
-                        href={`https://${release.hostingTarget}.web.app`}
+                        href={release.deployUrl || (release.hostingTarget ? `https://${release.hostingTarget}.web.app` : '#')}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[10px] text-white/25 font-mono mt-0.5 hover:text-primary/60 transition-colors"
                       >
-                        {release.hostingTarget}.web.app
+                        {getDisplayUrl(release)}
                       </a>
                     </td>
 
@@ -419,7 +447,7 @@ export function DeployHistoryPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <a
-                        href={`https://${release.hostingTarget}.web.app`}
+                        href={release.deployUrl || (release.hostingTarget ? `https://${release.hostingTarget}.web.app` : '#')}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs font-mono text-white/40 hover:text-primary transition-colors group"
@@ -472,15 +500,27 @@ export function DeployHistoryPage() {
                           <span>Failed</span>
                         </div>
                       )}
-                      {!rb && canRollback && (
-                        <button
-                          onClick={() => setConfirmRelease(release)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-cyan-400/10 text-white/40 hover:text-cyan-400 text-xs font-semibold transition-all"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          Rollback
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {release.logs && release.logs.length > 0 && (
+                          <button
+                            onClick={() => setActiveLogRelease(release)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-primary/10 text-white/40 hover:text-primary text-xs font-semibold transition-all border border-white/5 hover:border-primary/20"
+                            title="View Logs"
+                          >
+                            <Terminal className="w-3.5 h-3.5" />
+                            Logs
+                          </button>
+                        )}
+                        {!rb && canRollback && (
+                          <button
+                            onClick={() => setConfirmRelease(release)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-cyan-400/10 text-white/40 hover:text-cyan-400 text-xs font-semibold transition-all border border-white/5"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Rollback
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -560,6 +600,104 @@ export function DeployHistoryPage() {
                 <RotateCcw className="w-4 h-4" />
                 Roll Back Now
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {activeLogRelease && (
+        <div className="fixed inset-0 z-[100] pointer-events-none flex items-end justify-end p-6">
+          <div className="bg-[#050505]/95 w-full max-w-lg md:max-w-xl h-[520px] flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border border-white/10 rounded-3xl relative overflow-hidden pointer-events-auto">
+            {/* Top accent line */}
+            <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${activeLogRelease.status === 'live' ? 'from-green-500/50 via-green-500 to-green-500/50' : 'from-red-500/50 via-red-500 to-red-500/50'} z-20`} />
+            
+            {/* Modal Header */}
+            <div className="p-5 pb-3 flex items-center justify-between border-b border-white/5">
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-xl ${
+                  activeLogRelease.status === 'live' ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
+                }`}>
+                  {activeLogRelease.status === 'live' ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white tracking-tight flex items-center gap-2">
+                    {activeLogRelease.appName || activeLogRelease.appId}
+                    <span className="text-xs text-white/30 font-mono font-normal">({activeLogRelease.appId})</span>
+                  </h2>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 border ${
+                      activeLogRelease.status === 'live' ? 'text-green-400 border-green-500/20' : 'text-red-400 border-red-500/20'
+                    }`}>{activeLogRelease.status}</span>
+                    <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{activeLogRelease.type}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveLogRelease(null)}
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all border border-white/5"
+                title="Close"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Toolbar */}
+            <div className="px-5 py-2.5 bg-white/5 border-b border-white/5 flex items-center justify-between gap-4">
+              <div className="text-[10px] text-white/40 font-bold uppercase tracking-wider">
+                Deployment Log Archive
+              </div>
+
+              <div className="flex items-center gap-2">
+                {activeLogRelease.logs && activeLogRelease.logs.length > 0 && (
+                  <button 
+                    onClick={handleCopyHistoryLogs}
+                    className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-white/10"
+                    title="Copy all logs"
+                  >
+                    {copiedLogModal ? (
+                      <>
+                        <Check className="w-3 h-3 text-green-400" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        Copy Logs
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Scrollable Logs Output */}
+            <div 
+              className="flex-1 overflow-y-auto p-5 font-mono text-[11px] leading-relaxed bg-black/60 scrollbar-thin scrollbar-thumb-white/10 select-text"
+            >
+              {activeLogRelease.logs && activeLogRelease.logs.length > 0 ? (
+                <div className="space-y-0.5">
+                  {activeLogRelease.logs.map((log, i) => (
+                    <div key={i} className="flex gap-3 group">
+                      <span className="text-white/10 select-none w-6 text-right flex-shrink-0">{i + 1}</span>
+                      <span className={`whitespace-pre-wrap break-all ${
+                        log.includes('──') ? 'text-primary font-bold' :
+                        log.includes('error') || log.includes('Failed') ? 'text-red-400' :
+                        log.includes('success') || log.includes('Done') ? 'text-green-400' :
+                        'text-white/60'
+                      }`}>
+                        {log}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="italic text-white/20 text-center py-12">
+                  No logs available for this deployment record.
+                </div>
+              )}
             </div>
           </div>
         </div>

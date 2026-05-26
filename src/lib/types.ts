@@ -93,6 +93,7 @@ export interface DeploymentRecord {
   firebaseVersionId: string | null;
   cloudRunRevision: string | null;
   gitCommitSha: string | null;
+  logs?: string[];
 }
 
 export interface DeployBatch {
@@ -191,6 +192,13 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     database: 'persona-db-0',
     project: 'heidless-apps-2',
     defaultEnv: { hostingTarget: null, deployMethod: 'cloud-build', status: 'stopped' },
+  },
+  'urlshortener': {
+    displayName: 'URLShortener v1.0',
+    path: '~/projects/URLShortener',
+    database: 'urlshortener-db-0',
+    project: 'heidless-apps-2',
+    defaultEnv: { hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', status: 'live' },
   },
 };
 

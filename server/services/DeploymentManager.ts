@@ -441,7 +441,8 @@ export class DeploymentManager extends EventEmitter {
         'promptaccreditation': 'accreditation',
         'plantune': 'plantune',
         'suiteutils': 'utils',
-        'persona': 'persona'
+        'persona': 'persona',
+        'urlshortener': 'urlshortener'
     };
 
     public async startLocalApp(appId: string, workspaceId: string = 'stillwater-suite'): Promise<void> {

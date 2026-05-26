@@ -51,7 +51,8 @@ export class WorkspaceManager {
             { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'promptaccreditation-v0' },
             { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'plantune-v0' },
             { id: 'suiteutils', name: 'SuiteUtils', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suiteutils-v0' },
-            { id: 'persona', name: 'persona v1.0', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'persona-v0' }
+            { id: 'persona', name: 'persona v1.0', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'persona-v0' },
+            { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build' }
           ]
         };
         this.workspaces.set(defaultWorkspace.id, defaultWorkspace);
@@ -91,7 +92,8 @@ export class WorkspaceManager {
           { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'heidless-prompt-accreditation' },
           { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'heidless-plan-tune' },
           { id: 'suiteutils', name: 'SuiteUtils', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suite-utils' },
-          { id: 'persona', name: 'Persona', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'persona-v0' }
+          { id: 'persona', name: 'Persona', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'persona-v0' },
+          { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build' }
         ]
       };
       this.workspaces.set(id, ws);

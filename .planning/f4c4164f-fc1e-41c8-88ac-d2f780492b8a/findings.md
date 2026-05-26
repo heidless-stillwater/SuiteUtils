@@ -7,7 +7,8 @@
 -
 
 ## Technical Decisions
-| Standard Version CRUD | Facilitates precise and surgical developer workflows |
+| Decision | Rationale |
+|----------|-----------|
 
 ## Issues Encountered
 | Issue | Resolution |

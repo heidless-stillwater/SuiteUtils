@@ -374,7 +374,8 @@ deploymentManager.on('update', async (job: any) => {
       hostingTarget: job.hostingTarget || null,
       project: job.project || 'heidless-apps-2',
       errorLogs: job.error || null,
-      deployUrl: job.url || null
+      deployUrl: job.url || null,
+      logs: job.logs || []
     }).catch(err => console.error('[Persistence] History record failed:', err));
   }
 });

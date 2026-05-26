@@ -45,66 +45,74 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         console.log(`[SuiteContext] Received snapshot with ${snap.size} suites`);
         const loaded: Suite[] = [];
         snap.forEach((docSnap) => {
-          const data = docSnap.data() as Omit<Suite, 'id'>;
-          console.log(`[SuiteContext] Loading suite: ${data.name} (Owner: ${data.ownerId})`);
-          if (data.ownerId === user.uid) {
-            // Self-healing: Migrate legacy infrastructure to heidless-apps-2
-            let needsSync = false;
-            if (data.apps) {
-              Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
-                // 1. Migrate/fix existing apps
-                const app = data.apps[appId];
-                if (app) {
-                  // Fix status for suiteutils if needed
-                  if (appId === 'suiteutils' && app.environments.production.status !== 'live') {
-                    app.environments.production.status = 'live';
-                    needsSync = true;
-                  }
-                  // Migrate hosting targets and deploy methods
-                  const currentHosting = app.environments.production.hostingTarget;
-                  const targetHosting = config.defaultEnv.hostingTarget;
-                  const currentMethod = app.environments.production.deployMethod;
-                  const targetMethod = config.defaultEnv.deployMethod;
+          try {
+            const data = docSnap.data() as Omit<Suite, 'id'>;
+            console.log(`[SuiteContext] Loading suite: ${data.name} (Owner: ${data.ownerId})`);
+            if (data.ownerId === user.uid) {
+              // Self-healing: Migrate legacy infrastructure to heidless-apps-2
+              let needsSync = false;
+              if (data.apps) {
+                Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                  // 1. Migrate/fix existing apps
+                  const app = data.apps[appId];
+                  if (app) {
+                    // Fix status for suiteutils if needed
+                    if (appId === 'suiteutils' && app.environments?.production && app.environments.production.status !== 'live') {
+                      app.environments.production.status = 'live';
+                      needsSync = true;
+                    }
+                    // Migrate hosting targets and deploy methods
+                    if (app.environments?.production) {
+                      const currentHosting = app.environments.production.hostingTarget;
+                      const targetHosting = config.defaultEnv.hostingTarget;
+                      const currentMethod = app.environments.production.deployMethod;
+                      const targetMethod = config.defaultEnv.deployMethod;
 
-                  if (currentHosting !== targetHosting || currentMethod !== targetMethod) {
-                    app.environments.production.hostingTarget = targetHosting;
-                    app.environments.production.deployMethod = targetMethod;
-                    needsSync = true;
+                      if (currentHosting !== targetHosting || currentMethod !== targetMethod) {
+                        app.environments.production.hostingTarget = targetHosting;
+                        app.environments.production.deployMethod = targetMethod;
+                        needsSync = true;
+                      }
+                    }
+                    // Ensure project is set and updated to sovereign GCP project
+                    if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
+                      app.project = 'stillwater-sovereign-01';
+                      needsSync = true;
+                    }
                   }
-                  // Ensure project is set and updated to sovereign GCP project
-                  if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
-                    app.project = 'stillwater-sovereign-01';
-                    needsSync = true;
-                  }
-                }
-              });
+                });
 
-              // 2. Add missing apps from registry
-              Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
-                if (!data.apps[appId]) {
-                  console.log(`[SuiteContext] Found missing app in registry: ${appId}. Adding...`);
-                  data.apps[appId] = {
-                    displayName: config.displayName,
-                    path: config.path,
-                    database: config.database,
-                    project: config.project || 'stillwater-sovereign-01',
-                    environments: {
-                      production: { ...config.defaultEnv, lastDeployAt: null },
-                      staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
-                      dev: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
-                    },
-                  };
-                  needsSync = true;
-                }
-              });
+                // 2. Add missing apps from registry
+                Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                  if (!data.apps[appId]) {
+                    console.log(`[SuiteContext] Found missing app in registry: ${appId}. Adding...`);
+                    data.apps[appId] = {
+                      displayName: config.displayName,
+                      path: config.path,
+                      database: config.database,
+                      project: config.project || 'stillwater-sovereign-01',
+                      environments: {
+                        production: { ...config.defaultEnv, lastDeployAt: null },
+                        staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
+                        dev: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
+                      },
+                    };
+                    needsSync = true;
+                  }
+                });
+              }
+
+              if (needsSync) {
+                console.log(`[SuiteContext] Syncing updated config for suite: ${data.name}`);
+                setDoc(docSnap.ref, { apps: data.apps }, { merge: true }).catch((err: any) => {
+                  console.error('[SuiteContext] Failed to sync config:', err.message);
+                });
+              }
+
+              loaded.push(sanitize({ ...data, id: docSnap.id } as Suite));
             }
-
-            if (needsSync) {
-              console.log(`[SuiteContext] Syncing updated config for suite: ${data.name}`);
-              setDoc(docSnap.ref, { apps: data.apps }, { merge: true }).catch(() => {});
-            }
-
-            loaded.push(sanitize({ ...data, id: docSnap.id } as Suite));
+          } catch (err: any) {
+            console.error('[SuiteContext] Error parsing suite document:', docSnap.id, err.message);
           }
         });
         

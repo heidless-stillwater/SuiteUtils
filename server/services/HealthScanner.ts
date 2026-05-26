@@ -116,7 +116,8 @@ export class HealthScanner {
       'promptaccreditation': 3003,
       'plantune': 3004,
       'persona': 3005,
-      'suiteutils': 5185
+      'suiteutils': 5185,
+      'urlshortener': 3006
     };
 
     const port = portMap[id];
