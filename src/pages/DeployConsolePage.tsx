@@ -1830,7 +1830,7 @@ export function DeployConsolePage() {
                 </div>
               ) : (
                 <div className="space-y-0.5">
-                  {modalApp.logs.map((log, i) => (
+                  {modalApp.logs.map((log: string, i: number) => (
                     <div key={i} className="flex gap-3 group">
                       <span className="text-white/10 select-none w-6 text-right flex-shrink-0">{i + 1}</span>
                       <span className={`whitespace-pre-wrap break-all ${

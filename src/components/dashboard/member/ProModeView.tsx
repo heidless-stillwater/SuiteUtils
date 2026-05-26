@@ -45,6 +45,28 @@ export default function ProModeView({
   completedIds,
   bulkActionType
 }: ProModeViewProps) {
+  const [cardsPerRow, setCardsPerRow] = React.useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return parseInt(localStorage.getItem('hive-cards-per-row') || '4') || 4;
+    }
+    return 4;
+  });
+
+  const handleCardsPerRowChange = (cols: number) => {
+    setCardsPerRow(cols);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hive-cards-per-row', cols.toString());
+    }
+  };
+
+  const GRID_COLUMNS_MAP: Record<number, string> = {
+    1: 'grid-cols-1',
+    2: 'grid-cols-1 sm:grid-cols-2',
+    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    4: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+  };
+
   const getHealth = (appId: string) => {
     return healthResults.find(h => h.appId.toLowerCase() === appId.toLowerCase());
   };
@@ -210,11 +232,31 @@ export default function ProModeView({
               <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-black/90" />
             </div>
           </div>
+
+          {/* Card Density / Grid Columns Selector */}
+          <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-lg">
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/40 pl-3.5 pr-2">Grid Layout</span>
+            {[1, 2, 3, 4, 5].map((cols) => (
+              <button
+                key={cols}
+                type="button"
+                onClick={() => handleCardsPerRowChange(cols)}
+                className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${
+                  cardsPerRow === cols 
+                    ? 'bg-primary text-black shadow-[0_0_12px_rgba(var(--primary-rgb),0.35)]' 
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                }`}
+                title={`Show ${cols} card${cols > 1 ? 's' : ''} per row`}
+              >
+                {cols}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* High-Density Service Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4`}>
         {apps.map(([appId, config]) => {
           const health = getHealth(appId);
           const isUp = health?.status === 'UP' || appId.toLowerCase() === 'suiteutils';

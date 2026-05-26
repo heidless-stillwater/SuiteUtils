@@ -36,7 +36,7 @@ export default function ValidationConsole({ selectedId, onSelect, compact = fals
   const [viewMode, setViewMode] = useState<ViewMode>('GROUPED');
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortOrder, setSortOrder] = useState<SortOrder>('DESC');
-  const [statusFilters, setStatusFilters] = useState<('PASS' | 'PENDING' | 'FAIL')[]>(['PENDING', 'PASS', 'FAIL']);
+  const [statusFilters, setStatusFilters] = useState<('PASS' | 'PENDING' | 'FAIL')[]>(['PENDING']);
 
   const toggleStatusFilter = (status: 'PASS' | 'PENDING' | 'FAIL') => {
     setStatusFilters(prev => 

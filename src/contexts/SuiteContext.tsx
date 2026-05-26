@@ -79,6 +79,12 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                       app.project = 'stillwater-sovereign-01';
                       needsSync = true;
                     }
+                    // Ensure path is synced with the static registry (case casing self-healing)
+                    if (app.path !== config.path) {
+                      console.log(`[SuiteContext] Self-healing path casing for ${appId}: ${app.path} -> ${config.path}`);
+                      app.path = config.path;
+                      needsSync = true;
+                    }
                   }
                 });
 
