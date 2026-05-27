@@ -4,7 +4,20 @@ import path from 'path';
 import os from 'os';
 import { getTargetPaths } from './lib/suite-resolver.js';
 
+const QUICK_REFERENCE = `======================================================================
+🏰 STILLWATER SUITE: SOVEREIGN CHECKPOINT SYSTEM QUICK REFERENCE
+======================================================================
+• !baseline [label]  - Snapshot code state & configs across all suite repos
+                      Example: !baseline experiment-1
+• !alamo [tag]       - Hard reset code & restore envs from tag
+                      Example: !alamo alamo-experiment-1-1779879020
+• !finalize          - Soft reset and squash all baseline commits to staging
+                      Example: !finalize
+======================================================================`;
+
 async function main() {
+    console.log(QUICK_REFERENCE);
+    
     const args = process.argv.slice(2);
     if (args.length === 0) {
         console.error("Usage: npm run alamo <tag-name>");
@@ -13,7 +26,7 @@ async function main() {
     }
 
     const tag = args[0];
-    console.log(`🏰 STILLWATER SUITE: INITIATING ALAMO RESTORE [${tag}]`);
+    console.log(`\n🏰 STILLWATER SUITE: INITIATING ALAMO RESTORE [${tag}]`);
     console.log(`WARNING: This will DESTROY all uncommitted work and newly created files.`);
 
     const targetPaths = await getTargetPaths();

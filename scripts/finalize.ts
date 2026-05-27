@@ -3,8 +3,20 @@ import fs from 'fs-extra';
 import path from 'path';
 import { getTargetPaths } from './lib/suite-resolver.js';
 
+const QUICK_REFERENCE = `======================================================================
+🏰 STILLWATER SUITE: SOVEREIGN CHECKPOINT SYSTEM QUICK REFERENCE
+======================================================================
+• !baseline [label]  - Snapshot code state & configs across all suite repos
+                      Example: !baseline experiment-1
+• !alamo [tag]       - Hard reset code & restore envs from tag
+                      Example: !alamo alamo-experiment-1-1779879020
+• !finalize          - Soft reset and squash all baseline commits to staging
+                      Example: !finalize
+======================================================================`;
+
 async function main() {
-    console.log(`🏰 STILLWATER SUITE: INITIATING HISTORY FINALIZATION`);
+    console.log(QUICK_REFERENCE);
+    console.log(`\n🏰 STILLWATER SUITE: INITIATING HISTORY FINALIZATION`);
     console.log(`This will fold all checkpoint commits back into your staging area.\n`);
 
     const targetPaths = await getTargetPaths();
