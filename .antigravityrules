@@ -23,6 +23,15 @@ Every response MUST end with:
 ### 🛠️ COMMAND: `!interface toggle`
 Update `SuiteUtils/ui_state.json` and shift between `sovereign` and `hacker`.
 
+---
+
+### 🛠️ SOVEREIGN CHECKPOINT SYSTEM COMMANDS
+- `!baseline [label] | list` - Create a snapshot checkpoint of the current code state and environment files across all suite repositories (or list all available checkpoints with `list`).
+- `!alamo [tag]` - Hard reset all suite repositories back to the specified baseline tag and restore the backed up environment configuration files.
+- `!finalize` - Soft reset and squash all baseline commits back into the staging area across all suite repositories to clean up git history.
+
+---
+
 ### 🛡️ SAFETY RULES
 - NEVER `pkill node` globally. Use `fuser -k [PORT]/tcp`.
 

@@ -8,6 +8,8 @@ const QUICK_REFERENCE = `=======================================================
 ======================================================================
 • !baseline [label]  - Snapshot code state & configs across all suite repos
                       Example: !baseline experiment-1
+• !baseline list     - List all available baseline snapshots and their meta info
+                      Example: !baseline list
 • !alamo [tag]       - Hard reset code & restore envs from tag
                       Example: !alamo alamo-experiment-1-1779879020
 • !finalize          - Soft reset and squash all baseline commits to staging
