@@ -50,8 +50,8 @@ export class RollbackManager {
     } else {
       let credential = applicationDefault();
       
-      // If we are targeting heidless-apps-2, use the specific service account key if it exists
-      if (this.projectId === 'heidless-apps-2') {
+      // If we are targeting stillwater-sovereign-01, use the specific service account key if it exists
+      if (this.projectId === 'stillwater-sovereign-01') {
         const targetKeyPath = path.join(process.cwd(), 'server/config/service-account-target.json');
         if (fs.existsSync(targetKeyPath)) {
           console.log(`[RollbackManager] Loading target service account for ${this.projectId}`);

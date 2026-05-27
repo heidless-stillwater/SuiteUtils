@@ -97,7 +97,7 @@ export class DeploymentManager extends EventEmitter {
                                     const k = key.trim();
                                     const v = value.trim().replace(/^["']|["']$/g, '');
 
-                                    if (k.includes('PROJECT_ID') && v === 'heidless-apps-0' && firebaseProject === 'heidless-apps-2') {
+                                    if (k.includes('PROJECT_ID') && v === 'heidless-apps-0' && firebaseProject === 'stillwater-sovereign-01') {
                                         return;
                                     }
 

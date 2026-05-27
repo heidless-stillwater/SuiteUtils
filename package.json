@@ -10,7 +10,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "sync:principles": "tsx scripts/sync_principles.ts"
+    "sync:principles": "tsx scripts/sync_principles.ts",
+    "baseline": "tsx scripts/baseline.ts",
+    "alamo": "tsx scripts/alamo.ts",
+    "finalize": "tsx scripts/finalize.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

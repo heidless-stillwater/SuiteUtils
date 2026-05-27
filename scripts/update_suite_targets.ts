@@ -70,7 +70,7 @@ async function main() {
       path: "~/projects/URLShortener",
       database: "urlshortener-db-0",
       displayName: "URLShortener v1.0",
-      project: "heidless-apps-2",
+      project: "stillwater-sovereign-01",
       environments: {
         dev: {
           lastDeployAt: null,

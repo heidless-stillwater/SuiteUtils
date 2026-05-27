@@ -372,7 +372,7 @@ deploymentManager.on('update', async (job: any) => {
       duration: job.duration || 0,
       deployMethod: job.deployMethod || 'firebase',
       hostingTarget: job.hostingTarget || null,
-      project: job.project || 'heidless-apps-2',
+      project: job.project || 'stillwater-sovereign-01',
       errorLogs: job.error || null,
       deployUrl: job.url || null,
       logs: job.logs || []
@@ -718,7 +718,7 @@ function resolvePath(p: string): string {
 }
 function getStorageProvider(): IStorageProvider {
   const settings = settingsManager.getSettings();
-  const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
+  const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
   const credentialsPath = path.join(__dirname, 'config/service-account.json');
   if (settings.activeStorageProvider === 'google-drive') {
     return new GoogleDriveStorageProvider(credentialsPath);
@@ -749,7 +749,7 @@ async function getAccessToken(): Promise<string> {
 
 app.get('/api/releases/:hostingTarget', async (req, res) => {
   const { hostingTarget } = req.params;
-  const project = (req.query.project as string) || 'heidless-apps-2';
+  const project = (req.query.project as string) || 'stillwater-sovereign-01';
 
   try {
     const token = await getAccessToken();
@@ -803,7 +803,7 @@ app.post('/api/rollback', async (req, res) => {
 
   const workspaceId = (req as any).workspaceId || 'stillwater-suite';
   const workspace = workspaceManager.getWorkspace(workspaceId);
-  const firebaseProject = workspace?.gcpProjectId || project || 'heidless-apps-2';
+  const firebaseProject = workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
   console.log(`\n[Rollback] ${hostingTarget} → ${versionName} (Workspace: ${workspaceId}, Project: ${firebaseProject})`);
 
   // SSE setup
@@ -948,7 +948,7 @@ app.post('/api/deploy', async (req, res) => {
   const { appId, projectPath, hostingTarget, project, displayName } = req.body;
   const workspaceId = req.headers['x-workspace-id'] as string || 'stillwater-suite';
   let workspace = workspaceManager.getWorkspace(workspaceId) as any;
-  let firebaseProject = project || 'heidless-apps-2';
+  let firebaseProject = project || 'stillwater-sovereign-01';
   let resolvedDeployMethod = req.body.deployMethod || 'firebase';
   let resolvedHostingTarget = hostingTarget || null;
   
@@ -1019,17 +1019,17 @@ app.post('/api/deploy', async (req, res) => {
     resolvedHostingTarget = hostingTarget || envData?.hostingTarget || workspaceApp.hostingTarget || null;
   }
 
-  firebaseProject = workspace?.gcpProjectId || project || 'heidless-apps-2';
+  firebaseProject = workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
 
   // 3. GLOBAL FAIL-SAFE: If this is PlanTune and we still resolved to apps-0, 
   // try to find the 'Target: New GCP Server' workspace globally (Local or Firestore)
-  if (appId === 'plantune' && firebaseProject === 'heidless-apps-2') {
+  if (appId === 'plantune' && firebaseProject === 'stillwater-sovereign-01') {
     
     // Check local workspaces first
-    const localFallback = workspaceManager.getWorkspaces().find(w => w.gcpProjectId === 'heidless-apps-2');
+    const localFallback = workspaceManager.getWorkspaces().find(w => w.gcpProjectId === 'stillwater-sovereign-01');
     if (localFallback) {
       workspace = localFallback;
-      firebaseProject = 'heidless-apps-2';
+      firebaseProject = 'stillwater-sovereign-01';
       const localApp = workspace.apps.find((a: any) => a.id === 'plantune');
       if (localApp) {
         resolvedDeployMethod = localApp.deployMethod || 'cloud-build';
@@ -1037,12 +1037,12 @@ app.post('/api/deploy', async (req, res) => {
       }
     } else {
       // Check Firestore
-      const globalSuites = await firestore.collection('suites').where('gcpProjectId', '==', 'heidless-apps-2').get();
+      const globalSuites = await firestore.collection('suites').where('gcpProjectId', '==', 'stillwater-sovereign-01').get();
       if (!globalSuites.empty) {
         const suiteDoc = globalSuites.docs[0];
         const suiteData = suiteDoc.data();
         
-        firebaseProject = 'heidless-apps-2';
+        firebaseProject = 'stillwater-sovereign-01';
         resolvedDeployMethod = 'cloud-build';
         resolvedHostingTarget = null;
         
@@ -1515,7 +1515,7 @@ app.get('/api/storage/zip-contents', async (req, res) => {
     if (!(storageProvider instanceof GCSStorageProvider)) {
       return res.status(400).json({ error: 'Zip inspection is only supported on GCS for now.' });
     }
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const file = bucket.file(filePath as string);
     
@@ -1549,7 +1549,7 @@ app.get('/api/storage/zip-file-content', async (req, res) => {
     if (!(storageProvider instanceof GCSStorageProvider)) {
       return res.status(400).json({ error: 'Zip file extraction is only supported on GCS for now.' });
     }
-    const bucketName = process.env.GCS_BUCKET_NAME || 'heidless-apps-2.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const zipFile = bucket.file(zipPath as string);
     

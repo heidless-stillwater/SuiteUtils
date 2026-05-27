@@ -14,7 +14,7 @@ function getEnsuredApp(): App {
 
     const privateKey = process.env.FIREBASE_PRIVATE_KEY || process.env.SERVICE_PRIVATE_KEY;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.SERVICE_CLIENT_EMAIL;
-    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.SERVICE_PROJECT_ID || 'heidless-apps-2';
+    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.SERVICE_PROJECT_ID || 'stillwater-sovereign-01';
     
     console.log('[Firebase Admin] Target Project ID:', projectId);
     console.log('[Firebase Admin] GOOGLE_CLOUD_PROJECT:', process.env.GOOGLE_CLOUD_PROJECT);
