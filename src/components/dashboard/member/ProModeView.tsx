@@ -380,6 +380,7 @@ export default function ProModeView({
                         ? 'text-red-400 bg-red-400/10 hover:bg-red-400/20' 
                         : 'text-primary bg-primary/10 hover:bg-primary/20'
                     } border border-transparent hover:border-current/20 disabled:opacity-50`}
+                    title={isWorking ? "Orchestrating..." : (isUp ? "Extinguish Module" : "Ignite Module")}
                   >
                     {isWorking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (isUp ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />)}
                   </button>
@@ -387,6 +388,7 @@ export default function ProModeView({
                     onClick={() => handleAction(appId, 'restart')}
                     disabled={isWorking || !isUp}
                     className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/30 hover:text-white transition-all border border-white/5 disabled:opacity-20"
+                    title="Reboot Module"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>

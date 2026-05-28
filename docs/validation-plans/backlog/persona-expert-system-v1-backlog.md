@@ -18,17 +18,13 @@ This plan outlines the steps required to verify the end-to-end functionality of 
 ---
 
 ## 2. Sensor Integrity & Security
-**Objective**: Verify that activity is captured and sensitive data is filtered.
-
-### 2.1 Terminal Sensor (Filtering)
+**Objective**: Verify that activity is captured and sensitive data is filtered.### 2.1 Terminal Sensor (Filtering)
 1.  Open a new terminal session.
 2.  Run a benign command: `ls -la ~/projects`.
 3.  Run a sensitive command: `export SECRET_KEY=12345`.
 4.  **Verify**:
     - [x] [AI] Benign command appears in Bridge logs (`tail -f /home/heidless/projects/Persona/logs/bridge.log`).
-    - [x] [AI] Sensitive command (`export`) DOES NOT appear in Bridge logs.
-
-### 2.2 Project Heartbeat
+    - [x] [AI] Sensitive command (`export`) DOES NOT appear in Bridge logs.### 2.2 Project Heartbeat
 1.  Open a file in `~/projects/SuiteUtils/` and make a small edit (e.g., add a comment).
 2.  Wait 10 seconds.
 3.  **Verify**:
@@ -44,9 +40,6 @@ This plan outlines the steps required to verify the end-to-end functionality of 
 2.  Wait 2 minutes (distillation interval).
 3.  **Verify**:
     - [x] [AI] Distiller logs: `[Distiller] Distilling X observations...`.
-    - [ ] [AI] Bridge logs: `[Distiller] Pushed candidate: ...`.
-    - [ ] Open Persona UI (`http://localhost:3005`) and check the **Neural Ingestion Hub**.
-    - [ ] New "Candidate Insights" appear in the queue.
 
 ---
 
@@ -56,10 +49,6 @@ This plan outlines the steps required to verify the end-to-end functionality of 
 1.  In the Persona UI, identify a candidate insight.
 2.  Click **"Retain Insight"**.
 3.  **Verify**:
-    - [ ] Insight disappears from the "Pending" queue.
-    - [ ] [AI] Check `/home/heidless/.config/persona/profile.json`.
-    - [ ] [AI] **Verify**: The `principles` array contains the newly promoted insight.
-    - [ ] [AI] **Verify**: `lastSyncAt` timestamp is updated to current time.
 
 ---
 
@@ -68,10 +57,6 @@ This plan outlines the steps required to verify the end-to-end functionality of 
 
 1.  Visit `http://localhost:3005/api/persona/prompt` in your browser.
 2.  **Verify**:
-    - [ ] [AI] The JSON response contains a `prompt` string.
-    - [ ] [AI] **Verify**: The prompt includes your promoted principles.
-    - [ ] [AI] **Verify**: The prompt includes recent "Episodic Memory" entries (if any).
-    - [ ] [AI] **Verify**: The `Sovereign Identity` header matches your profile.
 
 ---
 

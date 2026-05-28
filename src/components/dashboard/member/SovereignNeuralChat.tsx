@@ -27,6 +27,21 @@ import remarkGfm from 'remark-gfm';
 import { bridge } from '../../../lib/bridge';
 import { cn } from '../../../lib/utils';
 
+export const autolinkValidations = (text: string): string => {
+  if (!text) return '';
+  return text.replace(/\b(VAL-[A-Z0-9-]+)\b/g, (match, valId, offset) => {
+    const before = text.substring(Math.max(0, offset - 15), offset);
+    if (before.includes('validation://') || before.includes('val://') || before.includes('validation=')) {
+      return match;
+    }
+    const after = text.substring(offset + match.length, offset + match.length + 15);
+    if (after.startsWith(')') || (after.startsWith(']') && after.includes('('))) {
+      return match;
+    }
+    return `[${valId}](validation://${valId})`;
+  });
+};
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -252,16 +267,44 @@ export default function SovereignNeuralChat() {
                       components={{
                         h3: ({node, ...props}) => <h3 className="font-black text-primary text-sm tracking-tighter uppercase mt-[10px] first:mt-0" {...props} />,
                         strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
-                        // Default p tag styling should be handled by the parent div's text-xs leading-relaxed
-                        // If specific margin between paragraphs is needed, it can be added here:
-                        // p: ({node, ...props}) => <p className="leading-relaxed mt-2 first:mt-0" {...props} />,
-                        // For now, let's rely on default markdown rendering for paragraphs
-                        // and ensure code blocks are styled.
+                        a: ({node, href, children, ...props}) => {
+                          const isValidationLink = href?.startsWith('validation://') || 
+                                                   href?.startsWith('val://') || 
+                                                   (href && href.includes('validation=') && (href.startsWith('http') || href.startsWith('/') || href.startsWith('.')));
+                          
+                          if (isValidationLink) {
+                            let valId = href.replace(/^(validation|val):\/\//, '');
+                            if (href.includes('validation=')) {
+                              const match = href.match(/[?&]validation=([^&]+)/);
+                              if (match) {
+                                valId = match[1];
+                              }
+                            }
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const event = new CustomEvent('select-validation', { detail: { id: valId } });
+                                  window.dispatchEvent(event);
+                                }}
+                                className="font-mono font-black text-primary hover:underline cursor-pointer bg-primary/5 px-1 py-0.5 rounded border border-primary/10 inline-flex items-center gap-0.5 transition-all text-[10px]"
+                                title={`Click to view validation: ${valId}`}
+                              >
+                                {children}
+                              </button>
+                            );
+                          }
+                          return (
+                            <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline" {...props}>
+                              {children}
+                            </a>
+                          );
+                        },
                         code: ({node, className, children, ...props}) => {
                           return <code className="bg-white/10 text-white/80 px-1 py-0.5 rounded font-mono text-[0.7rem]" {...props}>{children}</code>
                         }
                       }}
-                    >{msg.content}</ReactMarkdown>
+                    >{autolinkValidations(msg.content.replace(/`(\[.*?\]\(.*?\))`+/g, '$1'))}</ReactMarkdown>
                   </div>
                   
                   {msg.command && (

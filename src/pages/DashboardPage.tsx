@@ -54,7 +54,7 @@ export function DashboardPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [copiedValId, setCopiedValId] = useState<string | null>(null);
-  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [copiedInfo, setCopiedInfo] = useState<{ text: string; type: 'path' | 'command' } | null>(null);
   const [instructionsViewMode, setInstructionsViewMode] = useState<'MARKDOWN' | 'RAW'>('MARKDOWN');
 
   const handleCopyValId = (v: any) => {
@@ -64,9 +64,30 @@ export function DashboardPage() {
     setTimeout(() => setCopiedValId(null), 1500);
   };
 
-  const handleCopyPathNotification = (path: string) => {
-    setCopiedPath(path);
-    setTimeout(() => setCopiedPath(null), 2000);
+  const handleCopyNotification = (text: string, type: 'path' | 'command' | 'validation') => {
+    if (type === 'validation') {
+      fetch(`${API_URL}/api/validations`, { headers: { 'x-workspace-id': 'stillwater-suite' } })
+        .then(res => res.json())
+        .then(data => {
+          const found = data.find((v: any) => 
+            v.id === text || 
+            v.id.endsWith(text) || 
+            v.tag === text || 
+            v.tag.includes(text) ||
+            (v.instructions && v.instructions.includes(text))
+          );
+          if (found) {
+            setSelectedValidation(found);
+            setHighlightedValidationId(found.id);
+            const url = new URL(window.location.href);
+            url.searchParams.set('validation', text);
+            window.history.pushState({}, '', url.toString());
+          }
+        });
+    } else {
+      setCopiedInfo({ text, type });
+      setTimeout(() => setCopiedInfo(null), 2000);
+    }
   };
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     validation: any;
@@ -191,6 +212,59 @@ export function DashboardPage() {
       // Clean up the URL without reloading the page
       window.history.replaceState({}, '', window.location.pathname);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleSelectValidationEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      const text = customEvent.detail?.id;
+      if (text) {
+        fetch(`${API_URL}/api/validations`, { headers: { 'x-workspace-id': 'stillwater-suite' } })
+          .then(res => res.json())
+          .then(data => {
+            const found = data.find((v: any) => 
+              v.id === text || 
+              v.id.endsWith(text) || 
+              v.tag === text || 
+              v.tag.includes(text) ||
+              (v.instructions && v.instructions.includes(text))
+            );
+            if (found) {
+              setSelectedValidation(found);
+              setHighlightedValidationId(found.id);
+              setIsValidationOpen(true);
+              setDashboardMode('REGISTRY');
+              
+              const url = new URL(window.location.href);
+              url.searchParams.set('validation', text);
+              window.history.pushState({}, '', url.toString());
+            } else {
+              const syntheticVal = {
+                id: text,
+                title: `Unregistered Audit Point: ${text}`,
+                feature: 'External Context',
+                tag: 'UNREGISTERED',
+                status: 'PENDING',
+                instructions: `This validation tag (${text}) was referenced but has not been synchronized to the Sovereign backend.`,
+                expectedResult: 'Awaiting manual synchronization or backend ingestion.',
+                lastUpdated: new Date().toISOString(),
+                sequence: 0,
+                group: 'External Tracking'
+              };
+              setSelectedValidation(syntheticVal);
+              setHighlightedValidationId(text);
+              setIsValidationOpen(true);
+              setDashboardMode('REGISTRY');
+            }
+          })
+          .catch(console.error);
+      }
+    };
+
+    window.addEventListener('select-validation', handleSelectValidationEvent);
+    return () => {
+      window.removeEventListener('select-validation', handleSelectValidationEvent);
+    };
   }, []);
 
   useEffect(() => {
@@ -431,7 +505,7 @@ export function DashboardPage() {
       <div className="flex min-h-[calc(100vh-64px)]">
         {/* Pinned Validation Sidebar */}
         <AnimatePresence>
-          {isValidationOpen && dashboardMode === 'REGISTRY' && (
+          {isValidationOpen && (dashboardMode === 'REGISTRY' || (dashboardMode === 'VALIDATION' && selectedValidation)) && (
             <motion.aside
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 380, opacity: 1 }}
@@ -458,7 +532,10 @@ export function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => setIsValidationOpen(false)}
+                    onClick={() => {
+                      setIsValidationOpen(false);
+                      setSelectedValidation(null);
+                    }}
                     className="p-1.5 rounded-lg hover:bg-white/5 text-white/20 hover:text-white transition-all"
                   >
                     <X className="w-4 h-4" />
@@ -573,11 +650,11 @@ export function DashboardPage() {
                           </div>
                         </div>
                         <div className="p-4 rounded-xl bg-white/5 border border-white/10 border-l-4 border-l-primary leading-relaxed relative group overflow-hidden">
-                          {renderInstructions(selectedValidation.instructions, instructionsViewMode, handleCopyPathNotification)}
+                          {renderInstructions(selectedValidation.instructions, instructionsViewMode, handleCopyNotification)}
                           
-                          {/* Floating Notification for copied path */}
+                          {/* Floating Notification for copied path or command */}
                           <AnimatePresence>
-                            {copiedPath && (
+                            {copiedInfo && (
                               <motion.div 
                                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -585,7 +662,7 @@ export function DashboardPage() {
                                 className="absolute bottom-2 right-2 px-2.5 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30 text-[8px] font-black uppercase tracking-widest flex items-center gap-1 backdrop-blur-md shadow-lg"
                               >
                                 <Check className="w-2.5 h-2.5 text-green-400" />
-                                Copied Path!
+                                {copiedInfo.type === 'path' ? 'Copied Path!' : 'Copied Command!'}
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -727,7 +804,19 @@ export function DashboardPage() {
           <AnimatePresence mode="wait">
             {dashboardMode === 'VALIDATION' ? (
               <motion.div key="val" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                <ValidationConsole selectedId={selectedValidation?.id} onSelect={setSelectedValidation} refreshTrigger={refreshTrigger} />
+                <ValidationConsole 
+                  selectedId={selectedValidation?.id} 
+                  onSelect={(v) => {
+                    setSelectedValidation(v);
+                    if (v) {
+                      setHighlightedValidationId(v.id);
+                      setIsValidationOpen(true);
+                    } else {
+                      setIsValidationOpen(false);
+                    }
+                  }} 
+                  refreshTrigger={refreshTrigger} 
+                />
               </motion.div>
             ) : dashboardMode === 'SOVEREIGN' ? (
               <motion.div key="sov" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">

@@ -10,7 +10,8 @@ import {
   Check,
   Ban,
   Pause,
-  FileText
+  FileText,
+  Terminal
 } from 'lucide-react';
 import { API_URL } from '../../lib/api-config';
 import { cn } from '../../lib/utils';
@@ -33,16 +34,34 @@ interface ValidationDrawerProps {
   onUpdateStatus?: (id: string, status: 'PASS' | 'FAIL' | 'PARKED') => void;
 }
 
+export const autolinkValidations = (text: string): string => {
+  if (!text) return '';
+  return text.replace(/\b(VAL-[A-Z0-9-]+)\b/g, (match, valId, offset) => {
+    const before = text.substring(Math.max(0, offset - 15), offset);
+    if (before.includes('validation://') || before.includes('val://') || before.includes('validation=')) {
+      return match;
+    }
+    const after = text.substring(offset + match.length, offset + match.length + 15);
+    if (after.startsWith(')') || (after.startsWith(']') && after.includes('('))) {
+      return match;
+    }
+    return `[${valId}](validation://${valId})`;
+  });
+};
+
 export const renderInstructions = (
   text: string, 
   mode: 'MARKDOWN' | 'RAW',
-  onCopyPath?: (path: string) => void
+  onCopyPath?: (path: string, type: 'path' | 'command' | 'validation') => void
 ) => {
   if (mode === 'RAW') {
     return <pre className="whitespace-pre-wrap font-mono text-xs text-white/50">{text}</pre>;
   }
 
-  const lines = text.split('\n');
+  // Strip backticks from around markdown links to allow them to be parsed and rendered as active links
+  const cleanedText = text.replace(/`(\[.*?\]\(.*?\))`+/g, '$1');
+  const autolinkedText = autolinkValidations(cleanedText);
+  const lines = autolinkedText.split('\n');
   return (
     <div className="space-y-2 font-mono text-xs leading-relaxed text-white/70">
       {lines.map((line, idx) => {
@@ -81,6 +100,10 @@ export const renderInstructions = (
             const linkText = matchStr.substring(1, closeBracketIdx);
             const linkUrl = matchStr.substring(closeBracketIdx + 2, matchStr.length - 1);
             const isFileLink = linkUrl.startsWith('file://');
+            const isCommandLink = linkUrl.startsWith('command://') || linkUrl.startsWith('copy://');
+            const isValidationLink = linkUrl.startsWith('validation://') || 
+                                     linkUrl.startsWith('val://') || 
+                                     (linkUrl.includes('validation=') && (linkUrl.startsWith('http') || linkUrl.startsWith('/') || linkUrl.startsWith('.')));
             
             segments.push(
               <a 
@@ -93,18 +116,43 @@ export const renderInstructions = (
                     e.preventDefault();
                     const cleanPath = linkUrl.replace('file://', '');
                     navigator.clipboard.writeText(cleanPath);
-                    if (onCopyPath) onCopyPath(cleanPath);
+                    if (onCopyPath) onCopyPath(cleanPath, 'path');
+                  } else if (isCommandLink) {
+                    e.preventDefault();
+                    const cleanCmd = decodeURIComponent(linkUrl.replace(/^(command|copy):\/\//, ''));
+                    navigator.clipboard.writeText(cleanCmd);
+                    if (onCopyPath) onCopyPath(cleanCmd, 'command');
+                  } else if (isValidationLink) {
+                    e.preventDefault();
+                    let valId = linkUrl.replace(/^(validation|val):\/\//, '');
+                    if (linkUrl.includes('validation=')) {
+                      const match = linkUrl.match(/[?&]validation=([^&]+)/);
+                      if (match) {
+                        valId = match[1];
+                      }
+                    }
+                    if (onCopyPath) onCopyPath(valId, 'validation');
                   }
                 }}
                 className={cn(
                   "font-black transition-all hover:underline inline-flex items-center gap-0.5",
-                  isFileLink 
+                  (isFileLink || isCommandLink || isValidationLink)
                     ? "text-primary hover:text-primary/80 cursor-pointer" 
                     : "text-indigo-400 hover:text-indigo-300"
                 )}
-                title={isFileLink ? `Click to copy path: ${linkUrl.replace('file://', '')}` : linkUrl}
+                title={
+                  isFileLink 
+                    ? `Click to copy path: ${linkUrl.replace('file://', '')}` 
+                    : isCommandLink 
+                      ? `Click to copy command: ${decodeURIComponent(linkUrl.replace(/^(command|copy):\/\//, ''))}` 
+                      : isValidationLink
+                        ? `Click to view validation: ${linkUrl.replace(/^(validation|val):\/\//, '').split('?')[0]}`
+                        : linkUrl
+                }
               >
                 {isFileLink && <FileText className="w-3 h-3 text-primary/60 shrink-0" />}
+                {isCommandLink && <Terminal className="w-3 h-3 text-primary/60 shrink-0" />}
+                {isValidationLink && <ShieldCheck className="w-3 h-3 text-primary/60 shrink-0" />}
                 {linkText}
               </a>
             );
@@ -126,11 +174,16 @@ export const renderInstructions = (
 export default function ValidationDrawer({ validation, onClose, onUpdateStatus }: ValidationDrawerProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [viewMode, setViewMode] = useState<'MARKDOWN' | 'RAW'>('MARKDOWN');
-  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [copiedInfo, setCopiedInfo] = useState<{ text: string; type: 'path' | 'command' | 'validation' } | null>(null);
 
-  const handleCopyPathNotification = (path: string) => {
-    setCopiedPath(path);
-    setTimeout(() => setCopiedPath(null), 2000);
+  const handleCopyNotification = (text: string, type: 'path' | 'command' | 'validation') => {
+    if (type === 'validation') {
+      const event = new CustomEvent('select-validation', { detail: { id: text } });
+      window.dispatchEvent(event);
+    } else {
+      setCopiedInfo({ text, type });
+      setTimeout(() => setCopiedInfo(null), 2000);
+    }
   };
 
   const handleUpdate = async (status: 'PASS' | 'FAIL' | 'PARKED') => {
@@ -261,11 +314,11 @@ export default function ValidationDrawer({ validation, onClose, onUpdateStatus }
                   </div>
                 </div>
                 <div className="p-5 rounded-2xl bg-white/5 border border-white/10 border-l-4 border-l-primary leading-relaxed text-sm text-white/80 font-medium relative group">
-                  {renderInstructions(validation.instructions, viewMode, handleCopyPathNotification)}
+                  {renderInstructions(validation.instructions, viewMode, handleCopyNotification)}
                   
                   {/* Floating Notification for copied path */}
                   <AnimatePresence>
-                    {copiedPath && (
+                    {copiedInfo && (
                       <motion.div 
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -273,7 +326,7 @@ export default function ValidationDrawer({ validation, onClose, onUpdateStatus }
                         className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 backdrop-blur-md shadow-lg"
                       >
                         <Check className="w-3 h-3 text-green-400" />
-                        Copied Path!
+                        {copiedInfo.type === 'path' ? 'Copied Path!' : 'Copied Command!'}
                       </motion.div>
                     )}
                   </AnimatePresence>

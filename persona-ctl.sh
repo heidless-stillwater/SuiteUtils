@@ -15,8 +15,16 @@ case "$1" in
         fi
         cd $APP_DIR
         nohup env PORT=${PORT} ./scripts/start-persona.sh ${PORT} ${BRIDGE_PORT} > $LOG_FILE 2>&1 &
-        echo "⏳ ${APP_NAME} stack starting... (verifying in 8s)"
-        sleep 8
+        echo "⏳ ${APP_NAME} stack starting... (waiting up to 15s for dynamic verification)"
+        for i in {1..15}; do
+            UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
+            BRIDGE_UP=$(ss -lnt | grep -cE ":${BRIDGE_PORT}(\s|$)")
+            if [ "$UI_UP" -gt 0 ] && [ "$BRIDGE_UP" -gt 0 ]; then
+                break
+            fi
+            sleep 1
+        done
+
         UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
         BRIDGE_UP=$(ss -lnt | grep -cE ":${BRIDGE_PORT}(\s|$)")
         if [ "$UI_UP" -gt 0 ] && [ "$BRIDGE_UP" -gt 0 ]; then

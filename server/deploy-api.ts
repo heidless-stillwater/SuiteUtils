@@ -193,6 +193,7 @@ app.get('/api/validations', async (req, res) => {
       return item;
     }).filter(Boolean);
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.json(merged);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

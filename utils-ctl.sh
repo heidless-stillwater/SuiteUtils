@@ -15,8 +15,16 @@ case "$1" in
         fi
         cd $APP_DIR
         nohup npm run dev:all > $LOG_FILE 2>&1 &
-        echo "⏳ ${APP_NAME} stack starting... (verifying in 5s)"
-        sleep 5
+        echo "⏳ ${APP_NAME} stack starting... (waiting up to 15s for dynamic verification)"
+        for i in {1..15}; do
+            UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
+            API_UP=$(ss -lnt | grep -cE ":${API_PORT}(\s|$)")
+            if [ "$UI_UP" -gt 0 ] && [ "$API_UP" -gt 0 ]; then
+                break
+            fi
+            sleep 1
+        done
+
         UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
         API_UP=$(ss -lnt | grep -cE ":${API_PORT}(\s|$)")
         if [ "$UI_UP" -gt 0 ] && [ "$API_UP" -gt 0 ]; then
