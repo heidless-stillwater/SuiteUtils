@@ -144,6 +144,58 @@ export default function SovereignNeuralChat() {
     }
   };
 
+  const executeCommand = async (cmdText: string) => {
+    if (isSending) return;
+    setIsSending(true);
+    setNeuralSync('syncing');
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: cmdText,
+      timestamp: new Date().toISOString()
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+
+    try {
+      const response = await bridge.sendCommand(cmdText);
+      let content = 'Command executed successfully. 🛰️🚀🦾';
+      if (response.result) {
+        if (typeof response.result === 'string') {
+          content = response.result;
+        } else if (response.result.message) {
+          content = response.result.message;
+        }
+      } else if (response.error) {
+        content = response.error;
+      }
+
+      const assistantMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content,
+        timestamp: new Date().toISOString(),
+        status: response.success ? 'success' : 'error',
+        command: response.command
+      };
+
+      setMessages(prev => [...prev, assistantMsg]);
+      setNeuralSync('stable');
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 3008.',
+        timestamp: new Date().toISOString(),
+        status: 'error'
+      }]);
+      setNeuralSync('error');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -272,6 +324,8 @@ export default function SovereignNeuralChat() {
                                                    href?.startsWith('val://') || 
                                                    (href && href.includes('validation=') && (href.startsWith('http') || href.startsWith('/') || href.startsWith('.')));
                           
+                          const isCommandLink = href?.startsWith('command://');
+                          
                           if (isValidationLink) {
                             let valId = href.replace(/^(validation|val):\/\//, '');
                             if (href.includes('validation=')) {
@@ -294,6 +348,24 @@ export default function SovereignNeuralChat() {
                               </button>
                             );
                           }
+
+                          if (isCommandLink) {
+                            const cmdText = decodeURIComponent(href.replace(/^command:\/\//, ''));
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  executeCommand(cmdText);
+                                }}
+                                className="font-mono font-black text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 cursor-pointer bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/30 inline-flex items-center gap-1.5 transition-all text-[10px] my-0.5 shadow-sm select-none"
+                                title={`Click to execute command: ${cmdText}`}
+                              >
+                                <Zap size={10} className="text-indigo-400 animate-pulse" />
+                                {children}
+                              </button>
+                            );
+                          }
+
                           return (
                             <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline" {...props}>
                               {children}
@@ -301,7 +373,7 @@ export default function SovereignNeuralChat() {
                           );
                         },
                         code: ({node, className, children, ...props}) => {
-                          return <code className="bg-white/10 text-white/80 px-1 py-0.5 rounded font-mono text-[0.7rem]" {...props}>{children}</code>
+                          return <code className="bg-white/10 text-white/80 px-1 py-0.5 rounded font-mono text-xs" {...props}>{children}</code>
                         }
                       }}
                     >{autolinkValidations(msg.content.replace(/`(\[.*?\]\(.*?\))`+/g, '$1'))}</ReactMarkdown>

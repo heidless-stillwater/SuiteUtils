@@ -101,13 +101,10 @@ async function listBaselines() {
     const targetPaths = await getTargetPaths();
     const backupsDir = path.join(os.homedir(), '.baseline_backups');
     
-    console.log(`\n======================================================================`);
-    console.log(`🏰 STILLWATER SUITE: AVAILABLE BASELINE SNAPSHOTS`);
-    console.log(`======================================================================`);
+    console.log(`\n### **🏰 STILLWATER SUITE: AVAILABLE BASELINE SNAPSHOTS**\n`);
 
     if (!fs.existsSync(backupsDir)) {
         console.log(`No baselines found (backups directory does not exist).`);
-        console.log(`======================================================================`);
         return;
     }
 
@@ -181,7 +178,6 @@ async function listBaselines() {
 
     if (baselines.length === 0) {
         console.log(`No baseline snapshots found in the backups store.`);
-        console.log(`======================================================================`);
         return;
     }
 
@@ -189,28 +185,27 @@ async function listBaselines() {
     baselines.sort((a, b) => b.timestamp - a.timestamp);
 
     for (const b of baselines) {
-        console.log(`Label: ${b.label}`);
-        console.log(`  • Tag:       ${b.tag}`);
-        console.log(`  • Created:   ${b.dateStr}`);
-        
         const totalReposCount = b.activeRepos.length + b.missingRepos.length;
+        let statusIndicator = '⚪ Archived (Finalized)';
+        let isArchived = true;
+
         if (b.activeRepos.length === totalReposCount && totalReposCount > 0) {
-            console.log(`  • Status:    Active in all repositories (${b.activeRepos.length}/${totalReposCount})`);
+            statusIndicator = `🟢 Active (${b.activeRepos.length}/${totalReposCount} repos)`;
+            isArchived = false;
         } else if (b.activeRepos.length > 0) {
-            console.log(`  • Status:    Active in ${b.activeRepos.length}/${totalReposCount} repos (Present: ${b.activeRepos.join(', ')})`);
-        } else {
-            console.log(`  • Status:    Finalized / Archived (deleted from all repositories)`);
+            statusIndicator = `🟡 Partial (${b.activeRepos.length}/${totalReposCount} repos)`;
+            isArchived = false;
         }
 
-        if (b.envBackups.length > 0) {
-            console.log(`  • Envs:      ${b.envBackups.join(', ')}`);
+        console.log(`---`);
+        console.log(`**Label**: ${b.label} | **Created**: *${b.dateStr}* | **Status**: ${statusIndicator}`);
+        if (!isArchived) {
+            console.log(`⚡ **Restore Checkpoint**: [!alamo ${b.tag}](command://!alamo%20${b.tag})`);
         } else {
-            console.log(`  • Envs:      None backed up`);
+            console.log(`📦 **Archived Checkpoint**: ${b.tag}`);
         }
-        console.log(`  • Restore:   !alamo ${b.tag}`);
-        console.log(``);
     }
-    console.log(`======================================================================`);
+    console.log(`\n---\n`);
 }
 
 main().catch(err => {
