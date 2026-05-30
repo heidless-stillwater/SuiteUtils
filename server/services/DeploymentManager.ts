@@ -231,8 +231,9 @@ export class DeploymentManager extends EventEmitter {
             this.appendLog(jobId, `── Warning: Failed to create .env.deploy: ${err.message}`);
         }
 
+        const serviceName = appId === 'promptresources' ? 'ssrpromptresourcesv1' : appId;
         const deployArgs = [
-            'run', 'deploy', appId,
+            'run', 'deploy', serviceName,
             '--source', '.',
             '--platform', 'managed',
             '--region', 'us-central1',
@@ -260,7 +261,7 @@ export class DeploymentManager extends EventEmitter {
             deployArgs.push(`--set-env-vars=${criticalVars}`);
         }
 
-        this.appendLog(jobId, `── Executing Cloud Run Deploy: gcloud run deploy ${appId} --project ${firebaseProject} (with env injection)`);
+        this.appendLog(jobId, `── Executing Cloud Run Deploy: gcloud run deploy ${serviceName} --project ${firebaseProject} (with env injection)`);
 
         fs.appendFileSync(path.join(process.cwd(), 'logs/deploy_debug.log'), `[DEBUG] Spawning: gcloud ${deployArgs.join(' ')}\n`);
 
@@ -332,7 +333,7 @@ export class DeploymentManager extends EventEmitter {
 
         // Step 1: Use the project, Step 2: Deploy using the target name
         const target = hostingTarget || appId;
-        const fullCommand = `firebase use ${firebaseProject} && firebase deploy --only hosting:${target} --project ${firebaseProject} --force`;
+        const fullCommand = `npx firebase use ${firebaseProject} && npx firebase deploy --only hosting:${target} --project ${firebaseProject} --force`;
         
         this.appendLog(jobId, `── Identity Deploy: Pushing ${target} to ${firebaseProject}...`);
 
@@ -340,9 +341,20 @@ export class DeploymentManager extends EventEmitter {
           ? path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS) 
           : undefined;
 
+        const nodeBinDir = path.dirname(process.execPath);
+        const fallbackPath = [
+          nodeBinDir,
+          '/usr/local/sbin',
+          '/usr/local/bin',
+          '/usr/sbin',
+          '/usr/bin',
+          '/sbin',
+          '/bin'
+        ].join(':');
+
         const finalEnv: Record<string, string | undefined> = { 
           ...process.env, 
-          PATH: process.env.PATH,
+          PATH: process.env.PATH ? `${process.env.PATH}:${fallbackPath}` : fallbackPath,
           GOOGLE_CLOUD_PROJECT: firebaseProject,
           FIREBASE_PROJECT: firebaseProject
         };
@@ -370,6 +382,34 @@ export class DeploymentManager extends EventEmitter {
         });
     }
 
+    private getCanonicalUrl(appId: string, workspaceId: string): string | null {
+        const MAPPING: Record<string, string> = {
+            'promptresources': 'https://stillwater-prompt-resources.web.app',
+            'prompttool': 'https://stillwater-prompt-tool.web.app',
+            'suiteutils': 'https://stillwater-suite-utils.web.app',
+            'promptmasterspa': 'https://stillwater-prompt-master.web.app',
+            'promptaccreditation': 'https://stillwater-prompt-accreditation.web.app',
+            'plantune': 'https://plantune-v0.web.app',
+            'persona': 'https://persona-v0.web.app',
+            'urlshortener': 'https://stillwater-url-shortener.web.app',
+            'ag-video-system': 'https://heidless-video-system.web.app'
+        };
+
+        if (MAPPING[appId]) return MAPPING[appId];
+
+        try {
+            const ws = workspaceManager.getWorkspace(workspaceId);
+            const app = ws?.apps.find(a => a.id === appId);
+            if (app?.hostingTarget) {
+                return `https://${app.hostingTarget}.web.app`;
+            }
+        } catch {
+            // Ignore
+        }
+
+        return null;
+    }
+
     public appendLog(jobId: string, text: string, isError: boolean = false) {
         const job = this.activeJobs.get(jobId);
         if (job) {
@@ -378,7 +418,8 @@ export class DeploymentManager extends EventEmitter {
 
             const urlMatch = text.match(/https?:\/\/\S+\.(?:web\.app|run\.app)/);
             if (urlMatch) {
-                job.url = urlMatch[0];
+                const canonical = this.getCanonicalUrl(job.appId, job.workspaceId);
+                job.url = canonical || urlMatch[0];
             }
 
             if (job.logs.length > 2000) job.logs.shift();
@@ -406,6 +447,12 @@ export class DeploymentManager extends EventEmitter {
             if (job.status === 'live' || job.status === 'failed') return;
             job.status = 'live';
             job.duration = Math.floor((Date.now() - job.startedAt) / 1000);
+            
+            const canonical = this.getCanonicalUrl(job.appId, job.workspaceId);
+            if (canonical) {
+                job.url = canonical;
+            }
+            
             job.logs.push(`\n── Deployment successful and live!`);
             this.processes.delete(jobId);
             this.emit('update', job);

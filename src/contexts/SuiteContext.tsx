@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { useWorkspace } from './WorkspaceContext';
 import type { Suite, AppConfig, EnvironmentConfig } from '../lib/types';
-import { STILLWATER_APPS } from '../lib/types';
+import { STILLWATER_APPS, ADMIN_EMAILS } from '../lib/types';
 import { API_URL } from '../lib/api-config';
 import { sanitize } from '../lib/utils';
 
@@ -22,7 +22,7 @@ interface SuiteContextType {
 const SuiteContext = createContext<SuiteContextType | undefined>(undefined);
 
 export function SuiteProvider({ children }: { children: React.ReactNode }) {
-  const { user, setWorkspaceRole } = useAuth();
+  const { user, profile, setWorkspaceRole } = useAuth();
   const { activeWorkspaceId } = useWorkspace();
   const [suites, setSuites] = useState<Suite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,115 +33,141 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
 
   // Load all suites for the current user
   useEffect(() => {
-    if (!user) {
+    if (!user || !profile) {
       setSuites([]);
       setLoading(false);
       return;
     }
 
-    const unsub = onSnapshot(
-      collection(db, 'suites'),
-      (snap) => {
-        console.log(`[SuiteContext] Received snapshot with ${snap.size} suites`);
-        const loaded: Suite[] = [];
-        snap.forEach((docSnap) => {
-          try {
-            const data = docSnap.data() as Omit<Suite, 'id'>;
-            console.log(`[SuiteContext] Loading suite: ${data.name} (Owner: ${data.ownerId})`);
-            if (data.ownerId === user.uid) {
-              // Self-healing: Migrate legacy infrastructure to heidless-apps-2
-              let needsSync = false;
-              if (data.apps) {
-                Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
-                  // 1. Migrate/fix existing apps
-                  const app = data.apps[appId];
-                  if (app) {
-                    // Fix status for suiteutils if needed
-                    if (appId === 'suiteutils' && app.environments?.production && app.environments.production.status !== 'live') {
-                      app.environments.production.status = 'live';
-                      needsSync = true;
-                    }
-                    // Migrate hosting targets and deploy methods
-                    if (app.environments?.production) {
-                      const currentHosting = app.environments.production.hostingTarget;
-                      const targetHosting = config.defaultEnv.hostingTarget;
-                      const currentMethod = app.environments.production.deployMethod;
-                      const targetMethod = config.defaultEnv.deployMethod;
+    let unsub: (() => void) | null = null;
+    let retryTimeout: any = null;
+    let isActive = true;
 
-                      if (currentHosting !== targetHosting || currentMethod !== targetMethod) {
-                        app.environments.production.hostingTarget = targetHosting;
-                        app.environments.production.deployMethod = targetMethod;
+    const subscribe = (attempt = 1) => {
+      if (!isActive) return;
+
+      unsub = onSnapshot(
+        collection(db, 'suites'),
+        (snap) => {
+          console.log(`[SuiteContext] Received snapshot with ${snap.size} suites`);
+          const loaded: Suite[] = [];
+          snap.forEach((docSnap) => {
+            try {
+              const data = docSnap.data() as Omit<Suite, 'id'>;
+              console.log(`[SuiteContext] Loading suite: ${data.name} (Owner: ${data.ownerId})`);
+              const isAdmin = ADMIN_EMAILS.includes(user.email || '');
+              if (data.ownerId === user.uid || (docSnap.id === 'stillwater-suite' && isAdmin)) {
+                // Self-healing: Migrate legacy infrastructure to heidless-apps-2
+                let needsSync = false;
+                if (data.apps) {
+                  Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                    // 1. Migrate/fix existing apps
+                    const app = data.apps[appId];
+                    if (app) {
+                      // Fix status for suiteutils if needed
+                      if (appId === 'suiteutils' && app.environments?.production && app.environments.production.status !== 'live') {
+                        app.environments.production.status = 'live';
+                        needsSync = true;
+                      }
+                      // Migrate hosting targets and deploy methods
+                      if (app.environments?.production) {
+                        const currentHosting = app.environments.production.hostingTarget;
+                        const targetHosting = config.defaultEnv.hostingTarget;
+                        const currentMethod = app.environments.production.deployMethod;
+                        const targetMethod = config.defaultEnv.deployMethod;
+
+                        if (currentHosting !== targetHosting || currentMethod !== targetMethod) {
+                          app.environments.production.hostingTarget = targetHosting;
+                          app.environments.production.deployMethod = targetMethod;
+                          needsSync = true;
+                        }
+                      }
+                      // Ensure project is set and updated to sovereign GCP project
+                      if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
+                        app.project = 'stillwater-sovereign-01';
+                        needsSync = true;
+                      }
+                      // Ensure path is synced with the static registry (case casing self-healing)
+                      if (app.path !== config.path) {
+                        console.log(`[SuiteContext] Self-healing path casing for ${appId}: ${app.path} -> ${config.path}`);
+                        app.path = config.path;
                         needsSync = true;
                       }
                     }
-                    // Ensure project is set and updated to sovereign GCP project
-                    if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
-                      app.project = 'stillwater-sovereign-01';
+                  });
+
+                  // 2. Add missing apps from registry
+                  Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
+                    if (!data.apps[appId]) {
+                      console.log(`[SuiteContext] Found missing app in registry: ${appId}. Adding...`);
+                      data.apps[appId] = {
+                        displayName: config.displayName,
+                        path: config.path,
+                        database: config.database,
+                        project: config.project || 'stillwater-sovereign-01',
+                        environments: {
+                          production: { ...config.defaultEnv, lastDeployAt: null },
+                          staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
+                          dev: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
+                        },
+                      };
                       needsSync = true;
                     }
-                    // Ensure path is synced with the static registry (case casing self-healing)
-                    if (app.path !== config.path) {
-                      console.log(`[SuiteContext] Self-healing path casing for ${appId}: ${app.path} -> ${config.path}`);
-                      app.path = config.path;
-                      needsSync = true;
-                    }
-                  }
-                });
+                  });
+                }
 
-                // 2. Add missing apps from registry
-                Object.entries(STILLWATER_APPS).forEach(([appId, config]) => {
-                  if (!data.apps[appId]) {
-                    console.log(`[SuiteContext] Found missing app in registry: ${appId}. Adding...`);
-                    data.apps[appId] = {
-                      displayName: config.displayName,
-                      path: config.path,
-                      database: config.database,
-                      project: config.project || 'stillwater-sovereign-01',
-                      environments: {
-                        production: { ...config.defaultEnv, lastDeployAt: null },
-                        staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
-                        dev: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
-                      },
-                    };
-                    needsSync = true;
-                  }
-                });
+                if (needsSync) {
+                  console.log(`[SuiteContext] Syncing updated config for suite: ${data.name}`);
+                  setDoc(docSnap.ref, { apps: data.apps }, { merge: true }).catch((err: any) => {
+                    console.error('[SuiteContext] Failed to sync config:', err.message);
+                  });
+                }
+
+                loaded.push(sanitize({ ...data, id: docSnap.id } as Suite));
               }
-
-              if (needsSync) {
-                console.log(`[SuiteContext] Syncing updated config for suite: ${data.name}`);
-                setDoc(docSnap.ref, { apps: data.apps }, { merge: true }).catch((err: any) => {
-                  console.error('[SuiteContext] Failed to sync config:', err.message);
-                });
-              }
-
-              loaded.push(sanitize({ ...data, id: docSnap.id } as Suite));
+            } catch (err: any) {
+              console.error('[SuiteContext] Error parsing suite document:', docSnap.id, err.message);
             }
-          } catch (err: any) {
-            console.error('[SuiteContext] Error parsing suite document:', docSnap.id, err.message);
+          });
+          
+          console.log(`[SuiteContext] Found ${loaded.length} suites for user ${user.uid}`);
+          setSuites(loaded);
+
+          // Auto-seed "Stillwater" suite if none exist
+          if (loaded.length === 0) {
+            console.log('[SuiteContext] No suites found, seeding default Stillwater suite...');
+            seedDefaultSuite(user.uid);
           }
-        });
-        
-        console.log(`[SuiteContext] Found ${loaded.length} suites for user ${user.uid}`);
-        setSuites(loaded);
 
-        // Auto-seed "Stillwater" suite if none exist
-        if (loaded.length === 0) {
-          console.log('[SuiteContext] No suites found, seeding default Stillwater suite...');
-          seedDefaultSuite(user.uid);
+          setLoading(false);
+          setDbError(null);
+        },
+        (error) => {
+          console.warn(`[SuiteContext] Subscription attempt ${attempt} failed:`, error.message);
+          
+          // Retry on permission error if it might be an auth race condition
+          if (error.code === 'permission-denied' && attempt < 3) {
+            retryTimeout = setTimeout(() => {
+              console.log(`[SuiteContext] Retrying subscription (attempt ${attempt + 1})...`);
+              subscribe(attempt + 1);
+            }, 1000);
+          } else {
+            console.error('[SuiteContext] Firestore listener error:', error);
+            setDbError(error.message);
+            setLoading(false);
+          }
         }
+      );
+    };
 
-        setLoading(false);
-      },
-      (error) => {
-        console.error('[SuiteContext] Firestore listener error:', error);
-        setDbError(error.message);
-        setLoading(false);
-      }
-    );
+    subscribe();
 
-    return () => unsub();
-  }, [user]);
+    return () => {
+      isActive = false;
+      if (unsub) unsub();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [user, profile]);
 
   // Update role in AuthContext (Prioritize SaaS Invitation over Firestore Ownership)
   useEffect(() => {

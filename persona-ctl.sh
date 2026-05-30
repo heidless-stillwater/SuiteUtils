@@ -42,8 +42,8 @@ case "$1" in
         fuser -k ${PORT}/tcp > /dev/null 2>&1
         fuser -k ${BRIDGE_PORT}/tcp > /dev/null 2>&1
         
-        # Surgically terminate associated background sensors or distiller
-        for pid in $(pgrep -f "node.*(distiller|git-lineage|project-heartbeat|conversation-sensor)"); do
+        # Surgically terminate associated background sensors, distiller, or bridge server
+        for pid in $(pgrep -f "node.*(server\.js|distiller|git-lineage|project-heartbeat|conversation-sensor)"); do
             pwdx_res=$(pwdx $pid 2>/dev/null | grep -E "/projects/Persona(/|$)")
             if [ -n "$pwdx_res" ]; then
                 echo "💀 [Purge] Terminating background sensor PID $pid"

@@ -326,7 +326,7 @@ export default function SovereignNeuralChat() {
                           
                           const isCommandLink = href?.startsWith('command://');
                           
-                          if (isValidationLink) {
+                          if (href && isValidationLink) {
                             let valId = href.replace(/^(validation|val):\/\//, '');
                             if (href.includes('validation=')) {
                               const match = href.match(/[?&]validation=([^&]+)/);
@@ -349,7 +349,7 @@ export default function SovereignNeuralChat() {
                             );
                           }
 
-                          if (isCommandLink) {
+                          if (href && isCommandLink) {
                             const cmdText = decodeURIComponent(href.replace(/^command:\/\//, ''));
                             return (
                               <button

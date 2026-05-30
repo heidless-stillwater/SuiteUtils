@@ -234,6 +234,25 @@ function cmdInit(sessionIdOverride?: string): string {
   console.log(`    📄  Files       :  task_plan.md, progress.md, findings.md`);
   console.log(`    📌  .active_plan updated → ${sessionId}`);
 
+  // Cross-workspace sync (SuiteUtils <-> Persona)
+  try {
+    const parentDir = path.dirname(cwd);
+    const siblingName = path.basename(cwd) === 'SuiteUtils' ? 'Persona' : 'SuiteUtils';
+    const siblingRoot = path.join(parentDir, siblingName, '.planning');
+    
+    if (fs.existsSync(path.dirname(siblingRoot))) {
+      const siblingSessionDir = path.join(siblingRoot, sessionId);
+      fs.mkdirSync(siblingSessionDir, { recursive: true });
+      fs.writeFileSync(path.join(siblingSessionDir, 'task_plan.md'), SKELETON_TASK_PLAN, 'utf8');
+      fs.writeFileSync(path.join(siblingSessionDir, 'progress.md'), SKELETON_PROGRESS, 'utf8');
+      fs.writeFileSync(path.join(siblingSessionDir, 'findings.md'), SKELETON_FINDINGS, 'utf8');
+      fs.writeFileSync(path.join(siblingRoot, '.active_plan'), sessionId, 'utf8');
+      console.log(`    🔄  Cross-synced session to sibling workspace: ${siblingName}`);
+    }
+  } catch (err) {
+    // Ignore cross-sync failure if sibling doesn't exist
+  }
+
   return sessionId;
 }
 
@@ -242,16 +261,88 @@ function cmdInit(sessionIdOverride?: string): string {
 function resolveActiveSessionId(): string | undefined {
   const cwd = process.cwd();
   
-  // 1. Check .planning/.active_plan
+  // 1. Check process.env.CONVERSATION_ID first
+  if (process.env.CONVERSATION_ID) {
+    return process.env.CONVERSATION_ID;
+  }
+
+  // 2. Resolve the latest active conversation ID from Antigravity IDE brain directory
+  let latestConvId: string | undefined;
+  try {
+    const homedir = os.homedir();
+    const brainPaths = [
+      path.join(homedir, '.gemini', 'antigravity', 'brain'),
+      path.join(homedir, '.gemini', 'antigravity-ide', 'brain'),
+      '/mnt/c/Users/ADMIN/.gemini/antigravity-ide/brain'
+    ];
+    
+    let latestMtime = 0;
+    for (const bPath of brainPaths) {
+      if (fs.existsSync(bPath)) {
+        const subdirs = fs.readdirSync(bPath);
+        for (const dir of subdirs) {
+          if (dir.startsWith('.') || !/^[0-9a-f\-]+$/i.test(dir)) continue;
+          const fullPath = path.join(bPath, dir);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory() && stat.mtimeMs > latestMtime) {
+            latestMtime = stat.mtimeMs;
+            latestConvId = dir;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore error
+  }
+
+  // 3. Compare with the local .planning/.active_plan
   const activePlanPath = path.join(cwd, '.planning', '.active_plan');
+  let currentActive: string | undefined;
   if (fs.existsSync(activePlanPath)) {
-    const active = fs.readFileSync(activePlanPath, 'utf8').trim();
-    if (active && fs.existsSync(path.join(cwd, '.planning', active))) {
-      return active;
+    currentActive = fs.readFileSync(activePlanPath, 'utf8').trim();
+  }
+
+  // Read session mappings if they exist
+  let mappedSessionId: string | undefined;
+  const mappingsPath = path.join(cwd, '.planning', 'session_mappings.json');
+  if (latestConvId && fs.existsSync(mappingsPath)) {
+    try {
+      const mappings = JSON.parse(fs.readFileSync(mappingsPath, 'utf8'));
+      if (mappings[latestConvId]) {
+        mappedSessionId = mappings[latestConvId];
+      }
+    } catch {
+      // Ignore JSON error
     }
   }
 
-  // 2. Fall back to the newest directory inside .planning/
+  const targetSessionId = mappedSessionId || latestConvId;
+
+  if (targetSessionId) {
+    // If the target session ID does not match the local active plan:
+    if (targetSessionId !== currentActive) {
+      console.log(`\n🔍  Detected active session ID: ${targetSessionId}`);
+      console.log(`    Local active plan was: ${currentActive ?? '(none)'}`);
+      
+      if (mappedSessionId) {
+        // If it was mapped, we just update the active plan pointer without initializing templates
+        console.log(`    Resuming mapped session ${targetSessionId}...`);
+        fs.writeFileSync(activePlanPath, targetSessionId, 'utf8');
+      } else {
+        console.log(`    Auto-initializing session ${targetSessionId}...`);
+        // Auto-run init for the new session in the current workspace
+        cmdInit(targetSessionId);
+      }
+      return targetSessionId;
+    }
+  }
+
+  // 4. Fall back to standard active plan
+  if (currentActive && fs.existsSync(path.join(cwd, '.planning', currentActive))) {
+    return currentActive;
+  }
+
+  // 5. Fall back to the newest directory inside .planning/
   const planningRoot = path.join(cwd, '.planning');
   if (fs.existsSync(planningRoot)) {
     const dirs = fs
@@ -402,6 +493,34 @@ async function main() {
     args.push('--version', parsed.version);
   }
 
+  // Register session mapping on pull command
+  if (parsed.command === 'pull' && resolvedSessionId) {
+    try {
+      const brainConvId = resolveActiveConversationIdFromBrainOnly();
+      if (brainConvId && brainConvId !== resolvedSessionId) {
+        const mappingsPath = path.join(process.cwd(), '.planning', 'session_mappings.json');
+        let mappings: Record<string, string> = {};
+        if (fs.existsSync(mappingsPath)) {
+          try {
+            mappings = JSON.parse(fs.readFileSync(mappingsPath, 'utf8'));
+          } catch {}
+        }
+        mappings[brainConvId] = resolvedSessionId;
+        fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), 'utf8');
+        console.log(`\n🔗  Registered session mapping: ${brainConvId} → ${resolvedSessionId}`);
+        
+        // Also sync the mapping to the sibling workspace!
+        try {
+          const siblingName = path.basename(process.cwd()) === 'SuiteUtils' ? 'Persona' : 'SuiteUtils';
+          const siblingMappingsPath = path.join(path.dirname(process.cwd()), siblingName, '.planning', 'session_mappings.json');
+          fs.mkdirSync(path.dirname(siblingMappingsPath), { recursive: true });
+          fs.writeFileSync(siblingMappingsPath, JSON.stringify(mappings, null, 2), 'utf8');
+          console.log(`    🔄  Cross-synced session mapping to sibling workspace: ${siblingName}`);
+        } catch {}
+      }
+    } catch {}
+  }
+
   // Spawn sync execution child process
   const child = spawn('npx', ['tsx', ...args], {
     stdio: 'inherit'
@@ -422,3 +541,35 @@ main().catch((err) => {
   console.error('❌ Unexpected Error:', err);
   process.exit(1);
 });
+
+
+function resolveActiveConversationIdFromBrainOnly(): string | undefined {
+  try {
+    const homedir = require('os').homedir();
+    const brainPaths = [
+      require('path').join(homedir, '.gemini', 'antigravity', 'brain'),
+      require('path').join(homedir, '.gemini', 'antigravity-ide', 'brain'),
+      '/mnt/c/Users/ADMIN/.gemini/antigravity-ide/brain'
+    ];
+    
+    let latestMtime = 0;
+    let latestConvId: string | undefined;
+    for (const bPath of brainPaths) {
+      if (fs.existsSync(bPath)) {
+        const subdirs = fs.readdirSync(bPath);
+        for (const dir of subdirs) {
+          if (dir.startsWith('.') || !/^[0-9a-f\-]+$/i.test(dir)) continue;
+          const fullPath = require('path').join(bPath, dir);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory() && stat.mtimeMs > latestMtime) {
+            latestMtime = stat.mtimeMs;
+            latestConvId = dir;
+          }
+        }
+      }
+    }
+    return latestConvId;
+  } catch {
+    return undefined;
+  }
+}

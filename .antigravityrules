@@ -31,10 +31,9 @@ Every tool call MUST be preceded by:
 Every response MUST end with:
 🏰✨🎯🦾
 
-### 📢 CHATBOT RETENTION PROTOCOL
-- Whenever a background/async task, server compilation, or verification wait is underway, do not return control/focus immediately to the user. Instead, retain focus and output an interim status report every minute (stating activity, status, duration of operation, and estimated completion time) and offer the user an option to reclaim focus immediately.
 
-### 📢 QUESTION PRIORITIZATION PROTOCOL
-- Always prioritize answering user questions. If the user prompt contains one or more questions, answer them in an appropriate sequential order, and then explicitly confirm with the user whether further action is needed.
-
-
+### 🔄 AUTOMATED SESSION INITIALIZATION RULE
+At the start of every new conversation (your very first response), you MUST verify if the current conversation ID from the metadata matches the active session ID in the file `/home/heidless/projects/SuiteUtils/.planning/.active_plan`.
+If they do not match, you MUST automatically initialize the workspace to the current conversation ID by executing the following commands before doing any other work:
+- `wsl sh -c "cd /home/heidless/projects/SuiteUtils && npx tsx scripts/session-manager/manage.ts init --session <current-conversation-id>"`
+- `wsl sh -c "mkdir -p /home/heidless/projects/Persona/.planning/<current-conversation-id> && cp /home/heidless/projects/SuiteUtils/.planning/<current-conversation-id>/* /home/heidless/projects/Persona/.planning/<current-conversation-id>/ && echo '<current-conversation-id>' > /home/heidless/projects/Persona/.planning/.active_plan"`

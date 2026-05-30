@@ -26,7 +26,8 @@
         "name": "PromptResources v1.0",
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
-        "hostingTarget": "stillwater-prompt-resources"
+        "hostingTarget": "stillwater-prompt-resources",
+        "deployMethod": "cloud-build"
       },
       {
         "id": "promptmasterspa",
