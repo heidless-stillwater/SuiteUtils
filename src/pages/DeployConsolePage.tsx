@@ -92,6 +92,7 @@ export function DeployConsolePage() {
   const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [deployHistory, setDeployHistory] = useState<DeploymentRecord[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
+  const [gridCols, setGridCols] = useState<2 | 3 | 4 | 5>(4);
 
   // Modal State
   const [modalConfig, setModalConfig] = useState<{
@@ -896,29 +897,50 @@ export function DeployConsolePage() {
           </button>
 
           {/* View Mode Switches */}
-          <div className="flex items-center bg-black/40 border border-white/10 rounded-xl p-0.5">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-all ${
-                viewMode === 'list' 
-                  ? 'bg-white/10 text-white font-bold' 
-                  : 'text-white/40 hover:text-white/90'
-              }`}
-              title="List View"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-all ${
-                viewMode === 'grid' 
-                  ? 'bg-white/10 text-white font-bold' 
-                  : 'text-white/40 hover:text-white/90'
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center bg-black/40 border border-white/10 rounded-xl p-0.5">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'list' 
+                    ? 'bg-white/10 text-white font-bold' 
+                    : 'text-white/40 hover:text-white/90'
+                }`}
+                title="List View"
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'grid' 
+                    ? 'bg-white/10 text-white font-bold' 
+                    : 'text-white/40 hover:text-white/90'
+                }`}
+                title="Grid View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {viewMode === 'grid' && (
+              <div className="flex items-center bg-black/40 border border-white/10 rounded-xl p-0.5">
+                {[2, 3, 4, 5].map((cols) => (
+                  <button
+                    key={cols}
+                    onClick={() => setGridCols(cols as any)}
+                    className={`px-2 py-1 rounded-lg transition-all text-[10px] font-bold ${
+                      gridCols === cols 
+                        ? 'bg-white/10 text-white' 
+                        : 'text-white/40 hover:text-white/90'
+                    }`}
+                    title={`${cols} Columns`}
+                  >
+                    {cols}C
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="w-[1px] h-6 bg-white/10 mx-1 hidden sm:block" />
@@ -1238,7 +1260,14 @@ export function DeployConsolePage() {
           })}
           </Reorder.Group>
         ) : (
-          <div className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} grid grid-cols-1 ${isHistoryCollapsed ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+          <div className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} grid grid-cols-1 ${
+            isHistoryCollapsed 
+              ? (gridCols === 2 ? 'md:grid-cols-2 lg:grid-cols-2' 
+                : gridCols === 3 ? 'md:grid-cols-2 lg:grid-cols-3' 
+                : gridCols === 4 ? 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+                : 'md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5') 
+              : 'md:grid-cols-2 lg:grid-cols-3'
+          } gap-4 transition-all duration-500`}>
             {sortedApps.map((app) => {
               const isExpanded = expandedLog === app.appId;
               const isSelected = selectedAppIds.has(app.appId);

@@ -200,6 +200,18 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     project: 'stillwater-sovereign-01',
     defaultEnv: { hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', status: 'live' },
   },
+  'tokenmarket': {
+    displayName: 'TokenMarket v1.0',
+    path: '~/projects/TokenMarket',
+    database: 'tokenmarket-db-0',
+    project: 'stillwater-sovereign-01',
+    defaultEnv: { 
+      hostingTarget: 'stillwater-token-market', 
+      deployMethod: 'firebase', 
+      status: 'live',
+      deployUrl: 'https://stillwater-token-market.web.app/'
+    },
+  },
 };
 
 // ============================================================

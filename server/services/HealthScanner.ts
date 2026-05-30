@@ -117,7 +117,8 @@ export class HealthScanner {
       'plantune': 3004,
       'persona': 3005,
       'suiteutils': 5185,
-      'urlshortener': 3006
+      'urlshortener': 3006,
+      'tokenmarket': 3007
     };
 
     const port = portMap[id];

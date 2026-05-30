@@ -333,7 +333,7 @@ export class DeploymentManager extends EventEmitter {
 
         // Step 1: Use the project, Step 2: Deploy using the target name
         const target = hostingTarget || appId;
-        const fullCommand = `npx firebase use ${firebaseProject} && npx firebase deploy --only hosting:${target} --project ${firebaseProject} --force`;
+        const fullCommand = `npx -p firebase-tools firebase use ${firebaseProject} && npx -p firebase-tools firebase deploy --only hosting:${target} --project ${firebaseProject} --force`;
         
         this.appendLog(jobId, `── Identity Deploy: Pushing ${target} to ${firebaseProject}...`);
 
