@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   ShieldCheck,
   RefreshCw,
   Search,
@@ -92,7 +93,7 @@ export function DeployConsolePage() {
   const logRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [deployHistory, setDeployHistory] = useState<DeploymentRecord[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
-  const [gridCols, setGridCols] = useState<2 | 3 | 4 | 5>(4);
+  const [gridCols, setGridCols] = useState<2 | 3 | 4 | 5>(5);
 
   // Modal State
   const [modalConfig, setModalConfig] = useState<{
@@ -976,24 +977,17 @@ export function DeployConsolePage() {
       <div className={`grid grid-cols-1 ${isHistoryCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'} gap-6 transition-all duration-500`}>
         {/* App List */}
         {viewMode === 'list' ? (
-          <Reorder.Group 
-            axis="y" 
-            values={appOrder} 
-            onReorder={setAppOrder}
-            className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}
-          >
-          {sortedApps.map((app) => {
+          <div className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}>
+          {sortedApps.map((app, index) => {
             const isExpanded = expandedLog === app.appId;
             const isSelected = selectedAppIds.has(app.appId);
             const estimate = getEstimate(app.appId, app.deployMethod || 'firebase', deployHistory);
             const progress = estimate ? Math.min(98, (app.elapsed / estimate.estimatedDuration) * 100) : 0;
 
             return (
-              <Reorder.Item 
-                value={app.appId}
+              <motion.div 
+                layout
                 key={app.appId}
-                dragListener={sortBy === 'custom'}
-                dragSnapToOrigin
                 className={`relative overflow-hidden bg-white/5 border transition-all cursor-default ${
                   isSelected ? 'border-primary/50 bg-primary/5 shadow-lg shadow-primary/5' : 'border-white/10'
                 } rounded-2xl ${
@@ -1002,11 +996,36 @@ export function DeployConsolePage() {
               >
                 <div className="p-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4 flex-1">
-                    {/* Select Checkbox & Drag Handle */}
+                    {/* Select Checkbox & Shift Handle */}
                     <div className="flex items-center gap-2">
                       {sortBy === 'custom' && (
-                        <div className="cursor-grab active:cursor-grabbing p-1 text-white/20 hover:text-white/60 transition-colors">
-                          <GripVertical className="w-4 h-4" />
+                        <div className="flex flex-col gap-0.5">
+                          {index > 0 ? (
+                            <div className="relative group/btn">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleShiftApp(app.appId, 'left'); }}
+                                className="p-0.5 rounded bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5 flex items-center justify-center"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <div className="absolute top-1/2 left-full -translate-y-1/2 ml-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
+                                Shift Earlier
+                              </div>
+                            </div>
+                          ) : <div className="h-4 w-4" />}
+                          {index < sortedApps.length - 1 ? (
+                            <div className="relative group/btn">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleShiftApp(app.appId, 'right'); }}
+                                className="p-0.5 rounded bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5 flex items-center justify-center"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                              <div className="absolute top-1/2 left-full -translate-y-1/2 ml-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
+                                Shift Later
+                              </div>
+                            </div>
+                          ) : <div className="h-4 w-4" />}
                         </div>
                       )}
                       <button
@@ -1255,10 +1274,10 @@ export function DeployConsolePage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </Reorder.Item>
+              </motion.div>
             );
           })}
-          </Reorder.Group>
+          </div>
         ) : (
           <div className={`${isHistoryCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'} grid grid-cols-1 ${
             isHistoryCollapsed 

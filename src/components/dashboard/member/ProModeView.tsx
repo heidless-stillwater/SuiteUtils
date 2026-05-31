@@ -16,7 +16,9 @@ import {
   Play,
   Square,
   RotateCcw,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -56,6 +58,53 @@ export default function ProModeView({
     setCardsPerRow(cols);
     if (typeof window !== 'undefined') {
       localStorage.setItem('hive-cards-per-row', cols.toString());
+    }
+  };
+
+  const [appOrder, setAppOrder] = React.useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hive-app-order');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {}
+      }
+    }
+    return apps.map(([id]) => id);
+  });
+
+  React.useEffect(() => {
+    const currentIds = apps.map(([id]) => id);
+    setAppOrder(prev => {
+      const filtered = prev.filter(id => currentIds.includes(id));
+      const missing = currentIds.filter(id => !filtered.includes(id));
+      const merged = [...filtered, ...missing];
+      if (JSON.stringify(prev) !== JSON.stringify(merged)) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('hive-app-order', JSON.stringify(merged));
+        }
+        return merged;
+      }
+      return prev;
+    });
+  }, [apps]);
+
+  const handleShiftApp = (appId: string, direction: 'left' | 'right') => {
+    const index = appOrder.indexOf(appId);
+    if (index === -1) return;
+    
+    let newIndex = index;
+    if (direction === 'left' && index > 0) newIndex = index - 1;
+    else if (direction === 'right' && index < appOrder.length - 1) newIndex = index + 1;
+    
+    if (newIndex !== index) {
+      const newOrder = [...appOrder];
+      newOrder[index] = newOrder[newIndex];
+      newOrder[newIndex] = appId;
+      setAppOrder(newOrder);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hive-app-order', JSON.stringify(newOrder));
+      }
     }
   };
 
@@ -257,7 +306,10 @@ export default function ProModeView({
 
       {/* High-Density Service Grid */}
       <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4`}>
-        {apps.map(([appId, config]) => {
+        {appOrder.map((appId, index) => {
+          const appEntry = apps.find(([id]) => id === appId);
+          if (!appEntry) return null;
+          const [_, config] = appEntry;
           const health = getHealth(appId);
           const isUp = health?.status === 'UP' || appId.toLowerCase() === 'suiteutils';
           const isSelected = selectedIds.includes(appId);
@@ -328,6 +380,36 @@ export default function ProModeView({
                 }`}>
                   {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
                 </div>
+              </div>
+
+              {/* Shift Controls Overlay */}
+              <div className="absolute top-0 right-0 p-3 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {index > 0 && (
+                  <div className="relative group/btn">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleShiftApp(appId, 'left'); }}
+                      className="p-1 rounded-md bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="absolute top-full right-0 mt-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
+                      Shift Earlier
+                    </div>
+                  </div>
+                )}
+                {index < appOrder.length - 1 && (
+                  <div className="relative group/btn">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleShiftApp(appId, 'right'); }}
+                      className="p-1 rounded-md bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="absolute top-full right-0 mt-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
+                      Shift Later
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between mb-4">

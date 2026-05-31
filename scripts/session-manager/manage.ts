@@ -23,12 +23,13 @@ const CORE_SYNC_SCRIPT = '/home/heidless/projects/Persona/scripts/session-sync.t
 // ── 1. Arg Parsing (Hybrid: Positional + Named Flags) ────────────────────────
 
 interface CLIArgs {
-  command: 'push' | 'pull' | 'init' | 'history' | 'rollback' | 'view-version' | 'update-version' | 'delete-version';
+  command: 'push' | 'pull' | 'init' | 'history' | 'rollback' | 'view-version' | 'update-version' | 'delete-version' | 'activate' | 'status';
   session?: string;
   user?: string;
   project?: string;
   name?: string;
   version?: string;
+  conversation?: string;
 }
 
 function parseCommandLine(): CLIArgs {
@@ -38,7 +39,7 @@ function parseCommandLine(): CLIArgs {
   }
 
   const cmd = argv[0].toLowerCase();
-  const validCommands = ['push', 'pull', 'init', 'list', 'history', 'rollback', 'view-version', 'update-version', 'delete-version'];
+  const validCommands = ['push', 'pull', 'init', 'list', 'history', 'rollback', 'view-version', 'update-version', 'delete-version', 'activate', 'status'];
   if (!validCommands.includes(cmd)) {
     console.error(`❌ Unknown command: "${argv[0]}"`);
     printUsageAndExit();
@@ -69,6 +70,7 @@ function parseCommandLine(): CLIArgs {
     project: flags['project'] || posProject,
     name: flags['name'],
     version: flags['version'],
+    conversation: flags['conversation'],
   };
 }
 
@@ -85,8 +87,10 @@ Commands:
                   Use this at the start of a new Antigravity conversation to bridge
                   conversation identity to a unique session. The agent will auto-run
                   this when it detects a new conversation without a linked session.
+  status          Show the current active session and whether this conversation is mapped to it
+  activate        Link the current conversation/chat to an existing session (updates mappings and .active_plan)
   push            Push local .planning files to Firestore (creates new version)
-  pull            Pull session to local .planning/ (latest by default, or --version N for a specific snapshot)
+  pull            Pull session to local .planning/ (latest by default, or --version N for a specific snapshot) + auto-activates
   history         Show version history for a session
   rollback        Roll back a session to a previous version (creates a new version in Firestore)
   view-version    Inspect file metadata of a specific version
@@ -94,11 +98,12 @@ Commands:
   delete-version  Surgically deletes a version from database
 
 Options:
-  --session <id>    UUID/Session ID override (for init: reuse a specific ID instead of generating one)
-  --user    <uid>   Firebase owner user UID override
-  --project <slug>  Project slug override (defaults to current folder name)
-  --name    <name>  Display name override (for push/rollback/update-version)
-  --version <n>     Version number (optional for pull, required for rollback/view-version/update-version/delete-version)
+  --session <id>     UUID/Session ID override (for init/activate/push/pull commands)
+  --user    <uid>    Firebase owner user UID override
+  --project <slug>   Project slug override (defaults to current folder name)
+  --name    <name>   Display name override (for push/rollback/update-version)
+  --version <n>      Version number (optional for pull, required for rollback/view-version/update-version/delete-version)
+  --conversation <id> Current conversation/chat ID override (for activate command)
 
 Conversation ↔ Session Bridging:
   Each new Antigravity conversation should map to its own session.
@@ -109,6 +114,7 @@ Conversation ↔ Session Bridging:
 Examples:
   npx tsx scripts/session-manager/manage.ts init
   npx tsx scripts/session-manager/manage.ts init --session <existing-uuid>
+  npx tsx scripts/session-manager/manage.ts activate --session <existing-uuid>
   npx tsx scripts/session-manager/manage.ts push
   npx tsx scripts/session-manager/manage.ts pull
   npx tsx scripts/session-manager/manage.ts pull --version 3
@@ -254,6 +260,110 @@ function cmdInit(sessionIdOverride?: string): string {
   }
 
   return sessionId;
+}
+
+function cmdActivate(sessionId: string, conversationIdOverride?: string) {
+  const cwd = process.cwd();
+  const planningRoot = path.join(cwd, '.planning');
+  
+  // Resolve conversation ID
+  const conversationId = conversationIdOverride || resolveActiveConversationIdFromBrainOnly();
+  if (!conversationId) {
+    console.error('❌ Error: Could not dynamically resolve the current active Conversation ID.');
+    console.error('   Please specify it explicitly using --conversation <id>');
+    process.exit(1);
+  }
+
+  // Update session_mappings.json
+  const mappingsPath = path.join(planningRoot, 'session_mappings.json');
+  let mappings: Record<string, string> = {};
+  if (fs.existsSync(mappingsPath)) {
+    try {
+      mappings = JSON.parse(fs.readFileSync(mappingsPath, 'utf8'));
+    } catch {}
+  }
+  mappings[conversationId] = sessionId;
+  fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), 'utf8');
+
+  // Update .active_plan pointer
+  fs.writeFileSync(path.join(planningRoot, '.active_plan'), sessionId, 'utf8');
+
+  console.log(`\n🔗  Session activated in current chat`);
+  console.log(`    🆔  Session ID      :  ${sessionId}`);
+  console.log(`    💬  Conversation ID :  ${conversationId}`);
+  console.log(`    📌  .active_plan updated → ${sessionId}`);
+
+  // Cross-workspace sync (SuiteUtils <-> Persona)
+  try {
+    const parentDir = path.dirname(cwd);
+    const siblingName = path.basename(cwd) === 'SuiteUtils' ? 'Persona' : 'SuiteUtils';
+    const siblingRoot = path.join(parentDir, siblingName, '.planning');
+    
+    if (fs.existsSync(siblingRoot)) {
+      // Sync mappings
+      const siblingMappingsPath = path.join(siblingRoot, 'session_mappings.json');
+      let siblingMappings: Record<string, string> = {};
+      if (fs.existsSync(siblingMappingsPath)) {
+        try {
+          siblingMappings = JSON.parse(fs.readFileSync(siblingMappingsPath, 'utf8'));
+        } catch {}
+      }
+      siblingMappings[conversationId] = sessionId;
+      fs.writeFileSync(siblingMappingsPath, JSON.stringify(siblingMappings, null, 2), 'utf8');
+
+      // Sync active plan pointer
+      fs.writeFileSync(path.join(siblingRoot, '.active_plan'), sessionId, 'utf8');
+      console.log(`    🔄  Cross-synced mapping and .active_plan to sibling workspace: ${siblingName}`);
+    }
+  } catch (err) {
+    // Ignore cross-sync failure
+  }
+}
+
+function cmdStatus(conversationIdOverride?: string) {
+  const cwd = process.cwd();
+  const planningRoot = path.join(cwd, '.planning');
+
+  const conversationId = conversationIdOverride || resolveActiveConversationIdFromBrainOnly();
+
+  // Read .active_plan
+  const activePlanPath = path.join(planningRoot, '.active_plan');
+  const activePlan = fs.existsSync(activePlanPath)
+    ? fs.readFileSync(activePlanPath, 'utf8').trim()
+    : undefined;
+
+  // Read session_mappings.json
+  const mappingsPath = path.join(planningRoot, 'session_mappings.json');
+  let mappedSession: string | undefined;
+  if (conversationId && fs.existsSync(mappingsPath)) {
+    try {
+      const mappings = JSON.parse(fs.readFileSync(mappingsPath, 'utf8'));
+      mappedSession = mappings[conversationId];
+    } catch {}
+  }
+
+  const isLinked = !!mappedSession;
+  const isActive = mappedSession === activePlan;
+
+  console.log(`\n🏰  Stillwater Session Manager — Status`);
+  console.log(`────────────────────────────────────────────────────────`);
+  console.log(`📂  Workspace      :  ${cwd}`);
+  console.log(`💬  Conversation   :  ${conversationId ?? '(unknown)'}`);
+  console.log(`📌  Active Plan    :  ${activePlan ?? '(none)'}`);
+  console.log(`🔗  Mapped Session :  ${mappedSession ?? '(none — not activated)'}`);
+
+  if (!conversationId) {
+    console.log(`\n⚠️   Could not detect current Conversation ID from IDE brain directory.`);
+  } else if (!isLinked) {
+    console.log(`\n❌  This conversation is NOT linked to any session.`);
+    console.log(`   → Run: npx tsx scripts/session-manager/manage.ts pull --session <id>`);
+  } else if (!isActive) {
+    console.log(`\n⚠️   Mapped session (${mappedSession}) differs from active plan (${activePlan}).`);
+    console.log(`   → Run: npx tsx scripts/session-manager/manage.ts activate --session ${mappedSession}`);
+  } else {
+    console.log(`\n✅  Session is active and linked to this conversation.`);
+  }
+  console.log(`────────────────────────────────────────────────────────\n`);
 }
 
 // ── 3. Dynamic Parameters Resolution ────────────────────────────────────────
@@ -435,6 +545,31 @@ async function main() {
     console.log(`\n🚀  Session Manager Operation Completed Successfully.\n`);
     return;
   }
+
+  // ── Handle `status` locally (no Firestore needed) ────────────────────────
+  if (parsed.command === 'status') {
+    cmdStatus(parsed.conversation);
+    return;
+  }
+
+  // ── Handle `activate` locally (no Firestore needed) ───────────────────────
+  if (parsed.command === 'activate') {
+    console.log(`\n🏰  Stillwater Session Manager Command Suite`);
+    console.log(`────────────────────────────────────────────────────────`);
+    console.log(`👉  Executing Command:  ACTIVATE`);
+    console.log(`📂  Target Workspace :  ${process.cwd()}`);
+    console.log(`────────────────────────────────────────────────────────`);
+    
+    const targetSessionId = parsed.session || resolveActiveSessionId();
+    if (!targetSessionId) {
+      console.error('❌ Error: Please specify the Session ID to activate using --session <id>');
+      process.exit(1);
+    }
+    
+    cmdActivate(targetSessionId, parsed.conversation);
+    console.log(`\n🚀  Session Manager Operation Completed Successfully.\n`);
+    return;
+  }
   
   // Resolve parameters
   const resolvedSessionId = parsed.session || resolveActiveSessionId();
@@ -493,34 +628,6 @@ async function main() {
     args.push('--version', parsed.version);
   }
 
-  // Register session mapping on pull command
-  if (parsed.command === 'pull' && resolvedSessionId) {
-    try {
-      const brainConvId = resolveActiveConversationIdFromBrainOnly();
-      if (brainConvId && brainConvId !== resolvedSessionId) {
-        const mappingsPath = path.join(process.cwd(), '.planning', 'session_mappings.json');
-        let mappings: Record<string, string> = {};
-        if (fs.existsSync(mappingsPath)) {
-          try {
-            mappings = JSON.parse(fs.readFileSync(mappingsPath, 'utf8'));
-          } catch {}
-        }
-        mappings[brainConvId] = resolvedSessionId;
-        fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), 'utf8');
-        console.log(`\n🔗  Registered session mapping: ${brainConvId} → ${resolvedSessionId}`);
-        
-        // Also sync the mapping to the sibling workspace!
-        try {
-          const siblingName = path.basename(process.cwd()) === 'SuiteUtils' ? 'Persona' : 'SuiteUtils';
-          const siblingMappingsPath = path.join(path.dirname(process.cwd()), siblingName, '.planning', 'session_mappings.json');
-          fs.mkdirSync(path.dirname(siblingMappingsPath), { recursive: true });
-          fs.writeFileSync(siblingMappingsPath, JSON.stringify(mappings, null, 2), 'utf8');
-          console.log(`    🔄  Cross-synced session mapping to sibling workspace: ${siblingName}`);
-        } catch {}
-      }
-    } catch {}
-  }
-
   // Spawn sync execution child process
   const child = spawn('npx', ['tsx', ...args], {
     stdio: 'inherit'
@@ -528,6 +635,10 @@ async function main() {
 
   child.on('close', (code) => {
     if (code === 0) {
+      // Automatically run the activation logic immediately after a successful Firestore pull
+      if (parsed.command === 'pull' && resolvedSessionId) {
+        cmdActivate(resolvedSessionId, parsed.conversation);
+      }
       console.log(`\n🚀  Session Manager Operation Completed Successfully.\n`);
       process.exit(0);
     } else {
@@ -545,10 +656,10 @@ main().catch((err) => {
 
 function resolveActiveConversationIdFromBrainOnly(): string | undefined {
   try {
-    const homedir = require('os').homedir();
+    const homedir = os.homedir();
     const brainPaths = [
-      require('path').join(homedir, '.gemini', 'antigravity', 'brain'),
-      require('path').join(homedir, '.gemini', 'antigravity-ide', 'brain'),
+      path.join(homedir, '.gemini', 'antigravity', 'brain'),
+      path.join(homedir, '.gemini', 'antigravity-ide', 'brain'),
       '/mnt/c/Users/ADMIN/.gemini/antigravity-ide/brain'
     ];
     
@@ -559,7 +670,7 @@ function resolveActiveConversationIdFromBrainOnly(): string | undefined {
         const subdirs = fs.readdirSync(bPath);
         for (const dir of subdirs) {
           if (dir.startsWith('.') || !/^[0-9a-f\-]+$/i.test(dir)) continue;
-          const fullPath = require('path').join(bPath, dir);
+          const fullPath = path.join(bPath, dir);
           const stat = fs.statSync(fullPath);
           if (stat.isDirectory() && stat.mtimeMs > latestMtime) {
             latestMtime = stat.mtimeMs;

@@ -395,16 +395,18 @@ export class DeploymentManager extends EventEmitter {
             'ag-video-system': 'https://heidless-video-system.web.app'
         };
 
-        if (MAPPING[appId]) return MAPPING[appId];
-
         try {
             const ws = workspaceManager.getWorkspace(workspaceId);
-            const app = ws?.apps.find(a => a.id === appId);
+            const app = ws?.apps.find((a: any) => a.id === appId);
+            if (app?.deployUrl) {
+                return app.deployUrl;
+            }
+            if (MAPPING[appId]) return MAPPING[appId];
             if (app?.hostingTarget) {
                 return `https://${app.hostingTarget}.web.app`;
             }
         } catch {
-            // Ignore
+            if (MAPPING[appId]) return MAPPING[appId];
         }
 
         return null;

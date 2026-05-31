@@ -19,7 +19,8 @@
         "name": "PromptTool v1.0",
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
-        "hostingTarget": "stillwater-prompt-tool"
+        "hostingTarget": "stillwater-prompt-tool",
+        "deployMethod": "cloud-build"
       },
       {
         "id": "promptresources",
@@ -41,7 +42,8 @@
         "name": "PromptAccreditation v1.0",
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
-        "hostingTarget": "stillwater-prompt-accreditation"
+        "hostingTarget": "stillwater-prompt-accreditation",
+        "deployMethod": "cloud-build"
       },
       {
         "id": "plantune",

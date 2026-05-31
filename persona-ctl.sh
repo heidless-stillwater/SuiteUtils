@@ -29,6 +29,20 @@ case "$1" in
         BRIDGE_UP=$(ss -lnt | grep -cE ":${BRIDGE_PORT}(\s|$)")
         if [ "$UI_UP" -gt 0 ] && [ "$BRIDGE_UP" -gt 0 ]; then
             echo "✅ ${APP_NAME} is FULLY UP (UI: ${PORT} | Bridge: ${BRIDGE_PORT})"
+            
+            # Auto-Sync Handshake on Startup
+            CONV_ID=${CONVERSATION_ID:-""}
+            UT_DIR="/home/heidless/projects/SuiteUtils"
+            if [ -z "$CONV_ID" ] && [ -f "$UT_DIR/.planning/.active_plan" ]; then
+                CONV_ID=$(cat "$UT_DIR/.planning/.active_plan" | tr -d '[:space:]')
+            fi
+            
+            if [ -n "$CONV_ID" ]; then
+                echo "🛰️ [Auto-Sync] Triggering autonomous sync to 'architect' archetype for session $CONV_ID..."
+                curl -s -X POST http://localhost:${BRIDGE_PORT}/command \
+                    -H "Content-Type: application/json" \
+                    -d "{\"text\": \"!sync architect\", \"conversationId\": \"$CONV_ID\", \"source\": \"auto-ignition\"}" > /dev/null &
+            fi
         elif [ "$UI_UP" -gt 0 ] || [ "$BRIDGE_UP" -gt 0 ]; then
             echo "⚠️ ${APP_NAME} is DEGRADED (UI: $([ "$UI_UP" -gt 0 ] && echo UP || echo DOWN) | Bridge: $([ "$BRIDGE_UP" -gt 0 ] && echo UP || echo DOWN)). Last log:"
             tail -n 10 $LOG_FILE 2>/dev/null

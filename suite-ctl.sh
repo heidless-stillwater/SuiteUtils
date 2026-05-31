@@ -4,7 +4,7 @@ COMMAND=$1
 OPTION=$2
 
 if [ -z "$COMMAND" ]; then
-    echo "Usage: $0 {start|stop|restart|status} [all]"
+    echo "Usage: $0 {start|stop|restart|status|minimal} [all]"
     exit 1
 fi
 
@@ -27,6 +27,59 @@ ensure_session() {
 # Always ensure session exists before any command
 ensure_session
 
+if [ "$COMMAND" == "minimal" ] || [ "$COMMAND" == "mimimal" ]; then
+    echo "⚖️ Switching to MINIMAL mode (SuiteUtils & Persona only)..."
+    
+    # 0. Terminate Watchdog first to prevent resurrection during transition
+    WATCHDOG_PID_FILE="/tmp/suite-watchdog.pid"
+    if [ -f "$WATCHDOG_PID_FILE" ]; then
+        echo "🐕 Stopping Resurrection Watchdog..."
+        kill $(cat "$WATCHDOG_PID_FILE") 2>/dev/null
+        rm -f "$WATCHDOG_PID_FILE"
+    fi
+    
+    # 1. Update config file using node
+    node -e '
+        const fs = require("fs");
+        const file = "'"$CONFIG_FILE"'";
+        const config = JSON.parse(fs.readFileSync(file, "utf8"));
+        config.modules.forEach(m => {
+            m.enabled = (m.name === "utils" || m.name === "persona");
+        });
+        fs.writeFileSync(file, JSON.stringify(config, null, 2), "utf8");
+    '
+    
+    # 2. Stop all modules (using the complete list)
+    ALL_SCRIPTS=$(grep -oP '"script": "\K[^"]+' "$CONFIG_FILE")
+    for script in $ALL_SCRIPTS; do
+        if [ -f "/home/heidless/projects/SuiteUtils/$script" ]; then
+            echo "--- Stopping $script ---"
+            /home/heidless/projects/SuiteUtils/$script stop
+        fi
+    done
+    
+    # 3. Start only Persona and SuiteUtils (in that order: persona first, then utils)
+    TARGET_SCRIPTS=$(node -e 'const config = require("'"$CONFIG_FILE"'"); console.log(config.modules.filter(m => m.enabled).map(m => m.script).join(" "));')
+    for script in $TARGET_SCRIPTS; do
+        if [ -f "/home/heidless/projects/SuiteUtils/$script" ]; then
+            echo "--- Starting $script ---"
+            /home/heidless/projects/SuiteUtils/$script start
+        fi
+    done
+    
+    # 4. Launch Watchdog
+    echo "--- Launching Watchdog ---"
+    nohup /home/heidless/projects/SuiteUtils/suite-watchdog.sh > /dev/null 2>&1 &
+    
+    # 5. Notify Dashboard of state changes
+    if [ -f /tmp/suite-dashboard.pid ]; then
+        kill -USR1 $(cat /tmp/suite-dashboard.pid) 2>/dev/null
+    fi
+    
+    exit 0
+fi
+
+
 # Phase 1: Selective Targeting
 if [[ "$OPTION" =~ ^[1-9]$ ]]; then
     # Target specific slot (e.g., stop 6 -> Persona)
@@ -34,7 +87,7 @@ if [[ "$OPTION" =~ ^[1-9]$ ]]; then
 
 elif [ "$COMMAND" == "start" ] && [ "$OPTION" != "all" ]; then
     # Start only enabled modules
-    TARGET_SCRIPTS=$(grep -oP '"script": "\K[^"]+(?=".*"enabled": true)' "$CONFIG_FILE")
+    TARGET_SCRIPTS=$(node -e 'const config = require("'"$CONFIG_FILE"'"); console.log(config.modules.filter(m => m.enabled).map(m => m.script).join(" "));')
 elif [ "$COMMAND" == "restart" ] && [ "$OPTION" != "all" ]; then
     # Restart all (but start selectively)
     TARGET_SCRIPTS=$(grep -oP '"script": "\K[^"]+' "$CONFIG_FILE")
