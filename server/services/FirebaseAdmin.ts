@@ -19,6 +19,7 @@ function getEnsuredApp(): App {
     console.log('[Firebase Admin] Target Project ID:', projectId);
     console.log('[Firebase Admin] GOOGLE_CLOUD_PROJECT:', process.env.GOOGLE_CLOUD_PROJECT);
     console.log('[Firebase Admin] GCLOUD_PROJECT:', process.env.GCLOUD_PROJECT);
+    console.log('[Firebase Admin] GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
 
     try {
         if (privateKey && clientEmail && projectId) {
@@ -31,15 +32,21 @@ function getEnsuredApp(): App {
         } 
         
         // Fallback: Check for local service account file (dev only, excluded via .gitignore)
-        const localSaPath = path.join(process.cwd(), 'server', 'config', 'service-account.json');
-        if (fs.existsSync(localSaPath)) {
-            console.log(`[Firebase Admin] Branch: Local SA File (Path: ${localSaPath})`);
-            const sa = JSON.parse(fs.readFileSync(localSaPath, 'utf8'));
-            console.log(`[Firebase Admin] SA File Project ID: ${sa.project_id}`);
-            return initializeApp({
-                credential: cert(localSaPath),
-                projectId
-            });
+        const conventionPaths = [
+            path.join(process.cwd(), 'server', 'config', 'service-account.json'),
+            path.join(process.cwd(), 'suite-admin-sovereign.json')
+        ];
+
+        for (const localSaPath of conventionPaths) {
+            if (fs.existsSync(localSaPath)) {
+                console.log(`[Firebase Admin] Branch: Local SA File (Path: ${localSaPath})`);
+                const sa = JSON.parse(fs.readFileSync(localSaPath, 'utf8'));
+                console.log(`[Firebase Admin] SA File Project ID: ${sa.project_id}`);
+                return initializeApp({
+                    credential: cert(localSaPath),
+                    projectId: sa.project_id || projectId
+                });
+            }
         }
 
         console.log(`[Firebase Admin] Branch: ADC (Project: ${projectId})`);

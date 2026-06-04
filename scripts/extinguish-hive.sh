@@ -22,8 +22,8 @@ for pid in $(pgrep -f "node|vite|tsx|next-server"); do
     # Get the FULL command line and binary path
     cmd=$(ps -p $pid -o cmd= 2>/dev/null)
     
-    # SHIELD: Never touch Antigravity (strictly check the binary path)
-    if [[ "$cmd" == *".antigravity-server"* ]]; then
+    # SHIELD: Never touch the IDE server (strictly check the binary path)
+    if [[ "$cmd" == *".vscode-server"* || "$cmd" == *".antigravity-server"* ]]; then
         continue
     fi
     

@@ -37,7 +37,7 @@ export class RollbackManager {
   private projectId: string;
   private localRestoreRoot: string;
 
-  constructor(storageProvider: IStorageProvider, projectId: string = 'heidless-apps-0') {
+  constructor(storageProvider: IStorageProvider, projectId: string = 'stillwater-sovereign-01') {
     this.storageProvider = storageProvider;
     this.projectId = projectId;
     this.localRestoreRoot = path.join(process.cwd(), 'BACKUPS/temp_restore');
@@ -52,7 +52,7 @@ export class RollbackManager {
       
       // If we are targeting stillwater-sovereign-01, use the specific service account key if it exists
       if (this.projectId === 'stillwater-sovereign-01') {
-        const targetKeyPath = path.join(process.cwd(), 'server/config/service-account-target.json');
+        const targetKeyPath = path.join(process.cwd(), 'suite-admin-sovereign.json');
         if (fs.existsSync(targetKeyPath)) {
           console.log(`[RollbackManager] Loading target service account for ${this.projectId}`);
           credential = cert(targetKeyPath);

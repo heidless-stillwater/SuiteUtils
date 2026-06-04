@@ -74,7 +74,7 @@ export class MigrationManager {
     const targetWorkspace = workspaceManager.getWorkspace(targetWorkspaceId);
     if (!targetWorkspace) throw new Error(`Target workspace ${targetWorkspaceId} not found`);
 
-    const targetProjectId = targetWorkspace.gcpProjectId || 'heidless-apps-0';
+    const targetProjectId = targetWorkspace.gcpProjectId || 'stillwater-sovereign-01';
     const appIds = targetWorkspace.apps.map(a => a.id);
     const sendProgress = (msg: string, step: 'info' | 'success' | 'error' = 'info', percent?: number) => 
       onProgress?.({ message: msg, step, percent });
@@ -101,27 +101,43 @@ export class MigrationManager {
     for (const app of targetWorkspace.apps) {
       const dbStatus = await targetRollback.getDatabaseStatus(app.dbId);
       if (dbStatus === 'MISSING') {
-        sendProgress(`🛠️ Provisioning missing database: ${app.dbId}...`, 'info', 7);
         try {
-          let cmd = `gcloud firestore databases create --project=${targetProjectId} --database=${app.dbId} --location=nam5 --type=firestore-native --quiet`;
-          
+        sendProgress(`🛠️ Provisioning missing database: ${app.dbId}...`, 'info', 7);
           // Cross-account support: If targeting heidless-apps-2, use the specific service account key
-          if (targetProjectId === 'heidless-apps-2') {
-            const targetKeyPath = path.join(process.cwd(), 'server/config/service-account-target.json');
-            if (fs.existsSync(targetKeyPath)) {
-              const configDir = path.join(process.cwd(), '.gcloud-target');
-              await fs.ensureDir(configDir);
-              cmd = `export CLOUDSDK_CONFIG="${configDir}" && gcloud auth activate-service-account --key-file="${targetKeyPath}" --quiet && ${cmd}`;
-            }
+          const gcloudCommand = `gcloud firestore databases create --project=${targetProjectId} --database=${app.dbId} --location=nam5 --type=firestore-native --quiet`;
+          
+          const execOptions: { env: NodeJS.ProcessEnv, cwd?: string } = { env: { ...process.env } };
+
+          // Robust Service Account Activation for gcloud (Fixes: error fetching project)
+          let targetKeyPath = '';
+          if (targetProjectId === 'stillwater-sovereign-01') {
+            targetKeyPath = path.join(process.cwd(), 'suite-admin-sovereign.json');
           }
 
-          await execAsync(cmd);
+          if (targetKeyPath && fs.existsSync(targetKeyPath)) {
+            const configDir = path.join(process.cwd(), `.gcloud-${targetProjectId}`);
+            await fs.ensureDir(configDir);
+            
+            // Set environment variables for the gcloud command
+            execOptions.env.PATH = process.env.PATH; // Ensure PATH is preserved
+            execOptions.env.CLOUDSDK_CONFIG = configDir;
+            execOptions.env.GOOGLE_APPLICATION_CREDENTIALS = targetKeyPath;
+            execOptions.env.CLOUDSDK_CORE_PROJECT = targetProjectId;
+            execOptions.env.CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK = 'true';
+            execOptions.env.CLOUDSDK_CORE_CHECK_GCP_CONTROL_PLANE = 'false'; // This is the key setting
+          }
+
+          // Execute the gcloud command
+          const { stdout, stderr } = await execAsync(gcloudCommand, execOptions);
+          if (stdout) console.log(`[gcloud stdout]: ${stdout}`);
+          if (stderr) console.error(`[gcloud stderr]: ${stderr}`);
+
           sendProgress(`✅ Database ${app.dbId} provisioned.`, 'success', 8);
         } catch (err: any) {
           console.error(`[Migration] Failed to create database ${app.dbId}:`, err);
-          const isPermissionError = err.message.includes('permission') || err.message.includes('not authorized');
+          const isPermissionError = err.message.includes('permission') || err.message.includes('not authorized') || err.message.includes('fetching project');
           const errorMsg = isPermissionError 
-            ? `🚨 Permission Denied: Your gcloud account lacks 'datastore.owner' on ${targetProjectId}.`
+            ? `🚨 Project Access Error: gcloud cannot fetch metadata for ${targetProjectId}. Ensure the project exists and your account has access.`
             : `⚠️ Auto-provisioning failed for ${app.dbId}: ${err.message}`;
           sendProgress(errorMsg, 'error', 8);
           throw new Error(errorMsg); // Stop the entire migration on infrastructure failure
@@ -149,7 +165,7 @@ export class MigrationManager {
 
     // Step 2: Auth Migration
     sendProgress('🔑 Initiating Firebase Auth migration...', 'info', 85);
-    await this.migrateAuth('heidless-apps-0', targetProjectId, sendProgress);
+    await this.migrateAuth(targetProjectId, targetProjectId, sendProgress);
 
 
     sendProgress('✨ Migration finalization complete.', 'success', 100);
@@ -202,8 +218,8 @@ export class MigrationManager {
       
       if (!targetApp) {
         let credential = applicationDefault();
-        if (targetProjectId === 'heidless-apps-2') {
-          const targetKeyPath = path.join(process.cwd(), 'server/config/service-account-target.json');
+        if (targetProjectId === 'stillwater-sovereign-01') {
+          const targetKeyPath = path.join(process.cwd(), 'suite-admin-sovereign.json');
           if (fs.existsSync(targetKeyPath)) {
             credential = cert(targetKeyPath);
           }

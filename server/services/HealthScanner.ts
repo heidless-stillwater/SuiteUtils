@@ -1,3 +1,4 @@
+import fetch from 'node-fetch';
 import { appRegistry } from './AppRegistry.js';
 import path from 'path';
 import os from 'os';

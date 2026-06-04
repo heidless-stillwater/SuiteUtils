@@ -14,7 +14,7 @@ case "$1" in
             exit 1
         fi
         cd $APP_DIR
-        nohup npm run dev:all > $LOG_FILE 2>&1 &
+        nohup env GOOGLE_APPLICATION_CREDENTIALS="/home/heidless/projects/SuiteUtils/suite-admin-sovereign.json" npm run dev:all > $LOG_FILE 2>&1 &
         echo "⏳ ${APP_NAME} stack starting... (waiting up to 15s for dynamic verification)"
         for i in {1..15}; do
             UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")

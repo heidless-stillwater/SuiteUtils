@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as readline from 'readline';
 import { spawn } from 'child_process';
 
 const DEFAULT_SUPERUSER_UID = 'stqIDYHVcLRxjclsqaksiKMvSXz2';
@@ -262,12 +263,26 @@ function cmdInit(sessionIdOverride?: string): string {
   return sessionId;
 }
 
+async function askConfirmation(query: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(query, (ans) => {
+      rl.close();
+      resolve(ans.toLowerCase() === 'y' || ans.toLowerCase() === 'yes');
+    });
+  });
+}
+
 function cmdActivate(sessionId: string, conversationIdOverride?: string) {
   const cwd = process.cwd();
   const planningRoot = path.join(cwd, '.planning');
   
   // Resolve conversation ID
-  const conversationId = conversationIdOverride || resolveActiveConversationIdFromBrainOnly();
+  const conversationId = conversationIdOverride || resolveActiveConversationId();
   if (!conversationId) {
     console.error('❌ Error: Could not dynamically resolve the current active Conversation ID.');
     console.error('   Please specify it explicitly using --conversation <id>');
@@ -324,7 +339,7 @@ function cmdStatus(conversationIdOverride?: string) {
   const cwd = process.cwd();
   const planningRoot = path.join(cwd, '.planning');
 
-  const conversationId = conversationIdOverride || resolveActiveConversationIdFromBrainOnly();
+  const conversationId = conversationIdOverride || resolveActiveConversationId();
 
   // Read .active_plan
   const activePlanPath = path.join(planningRoot, '.active_plan');
@@ -368,42 +383,10 @@ function cmdStatus(conversationIdOverride?: string) {
 
 // ── 3. Dynamic Parameters Resolution ────────────────────────────────────────
 
-function resolveActiveSessionId(): string | undefined {
+function resolveActiveSessionId(convId?: string): string | undefined {
   const cwd = process.cwd();
   
-  // 1. Check process.env.CONVERSATION_ID first
-  if (process.env.CONVERSATION_ID) {
-    return process.env.CONVERSATION_ID;
-  }
-
-  // 2. Resolve the latest active conversation ID from Antigravity IDE brain directory
-  let latestConvId: string | undefined;
-  try {
-    const homedir = os.homedir();
-    const brainPaths = [
-      path.join(homedir, '.gemini', 'antigravity', 'brain'),
-      path.join(homedir, '.gemini', 'antigravity-ide', 'brain'),
-      '/mnt/c/Users/ADMIN/.gemini/antigravity-ide/brain'
-    ];
-    
-    let latestMtime = 0;
-    for (const bPath of brainPaths) {
-      if (fs.existsSync(bPath)) {
-        const subdirs = fs.readdirSync(bPath);
-        for (const dir of subdirs) {
-          if (dir.startsWith('.') || !/^[0-9a-f\-]+$/i.test(dir)) continue;
-          const fullPath = path.join(bPath, dir);
-          const stat = fs.statSync(fullPath);
-          if (stat.isDirectory() && stat.mtimeMs > latestMtime) {
-            latestMtime = stat.mtimeMs;
-            latestConvId = dir;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    // Ignore error
-  }
+  const latestConvId = convId || resolveActiveConversationId();
 
   // 3. Compare with the local .planning/.active_plan
   const activePlanPath = path.join(cwd, '.planning', '.active_plan');
@@ -474,6 +457,14 @@ function resolveActiveProjectSlug(): string {
 }
 
 function resolveActiveOwnerUid(): { uid: string; source: string } {
+  // Layer 0: Environment Variable (Priority for IDE terminals)
+  if (process.env.USER_UID) {
+    return { uid: process.env.USER_UID, source: 'Environment Variable (USER_UID)' };
+  }
+  if (process.env.FIREBASE_UID) {
+    return { uid: process.env.FIREBASE_UID, source: 'Environment Variable (FIREBASE_UID)' };
+  }
+
   // Layer 1: Check live watcher process CMDLINE via PID file
   const cwd = process.cwd();
   const watcherPidPath = path.join(cwd, '.planning', '.watcher.pid');
@@ -502,8 +493,9 @@ function resolveActiveOwnerUid(): { uid: string; source: string } {
   if (fs.existsSync(profilePath)) {
     try {
       const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
-      if (profile.userId) {
-        return { uid: profile.userId, source: `Persona Configuration File (${profilePath})` };
+      const uid = profile.userId || profile.uid || profile.id;
+      if (uid) {
+        return { uid, source: `Persona Configuration File (${profilePath})` };
       }
     } catch {
       // JSON syntax error or permission issue; continue to next layer
@@ -534,6 +526,13 @@ function resolveActiveDisplayName(): string {
 async function main() {
   const parsed = parseCommandLine();
 
+  // Resolve parameters early for use in command preview and activation
+  let resolvedConversationId = parsed.conversation || resolveActiveConversationId();
+
+  // Resolve session and project details
+  const resolvedSessionId = parsed.session || resolveActiveSessionId(resolvedConversationId);
+  const resolvedProjectSlug = parsed.project || resolveActiveProjectSlug();
+
   // ── Handle `init` locally (no Firestore needed) ────────────────────────────
   if (parsed.command === 'init') {
     console.log(`\n🏰  Stillwater Session Manager Command Suite`);
@@ -548,7 +547,11 @@ async function main() {
 
   // ── Handle `status` locally (no Firestore needed) ────────────────────────
   if (parsed.command === 'status') {
-    cmdStatus(parsed.conversation);
+    // If still missing, try one last resolution now that we have session context
+    if (!resolvedConversationId && resolvedSessionId) {
+      resolvedConversationId = resolveActiveConversationId(resolvedSessionId);
+    }
+    cmdStatus(resolvedConversationId || resolvedSessionId);
     return;
   }
 
@@ -560,20 +563,39 @@ async function main() {
     console.log(`📂  Target Workspace :  ${process.cwd()}`);
     console.log(`────────────────────────────────────────────────────────`);
     
-    const targetSessionId = parsed.session || resolveActiveSessionId();
+    const targetSessionId = parsed.session || resolveActiveSessionId(resolvedConversationId);
     if (!targetSessionId) {
       console.error('❌ Error: Please specify the Session ID to activate using --session <id>');
       process.exit(1);
     }
+
+    // Attempt resolution before activation
+    if (!resolvedConversationId) {
+      resolvedConversationId = resolveActiveConversationId(targetSessionId);
+    }
     
-    cmdActivate(targetSessionId, parsed.conversation);
+    cmdActivate(targetSessionId, resolvedConversationId || targetSessionId);
     console.log(`\n🚀  Session Manager Operation Completed Successfully.\n`);
     return;
   }
   
-  // Resolve parameters
-  const resolvedSessionId = parsed.session || resolveActiveSessionId();
-  const resolvedProjectSlug = parsed.project || resolveActiveProjectSlug();
+  // ── Final resolution and validation for data-dependent commands ───────────
+
+  // Fallback default: If conversation ID is missing, try to resolve it from the session ID mapping
+  // or default to the session ID itself to prevent the script from failing.
+  if (!resolvedConversationId && resolvedSessionId) {
+    resolvedConversationId = resolveActiveConversationId(resolvedSessionId);
+    if (!resolvedConversationId) {
+      console.log(`⚠️  Current Conversation ID not found. Using Session ID as default: ${resolvedSessionId}`);
+      resolvedConversationId = resolvedSessionId;
+    }
+  }
+
+  if ((parsed.command === 'pull' || parsed.command === 'activate') && !resolvedConversationId) {
+    console.error('❌ Error: Could not dynamically resolve the current active Conversation ID.');
+    console.error('   Please specify it explicitly using --conversation <id>');
+    process.exit(1);
+  }
   
   const resolvedUidData = parsed.user 
     ? { uid: parsed.user, source: 'Explicit CLI Parameter' }
@@ -603,6 +625,9 @@ async function main() {
   console.log(`🆔  Session ID       :  ${resolvedSessionId}`);
   console.log(`🏷️   Project Slug     :  ${resolvedProjectSlug}`);
   console.log(`👤  User UID         :  ${resolvedUidData.uid} (Source: ${resolvedUidData.source})`);
+  if (resolvedConversationId) {
+    console.log(`💬  Conversation ID  :  ${resolvedConversationId}`);
+  }
   if (parsed.version) {
     console.log(`🔢  Version          :  ${parsed.version}`);
   }
@@ -628,6 +653,22 @@ async function main() {
     args.push('--version', parsed.version);
   }
 
+  // Add conversation ID to expanded command arguments
+  if (resolvedConversationId) {
+    args.push('--conversation', resolvedConversationId);
+  }
+
+  // ── Display expanded command and ask for permission ────────────────────────
+  const expandedCommand = `npx tsx ${args.map(a => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
+  console.log(`👉  Expanded Command :  ${expandedCommand}`);
+  console.log(`────────────────────────────────────────────────────────`);
+
+  const proceed = await askConfirmation('Do you want to proceed with this command? (y/N): ');
+  if (!proceed) {
+    console.log('\n🛑  Operation cancelled by user.\n');
+    process.exit(0);
+  }
+
   // Spawn sync execution child process
   const child = spawn('npx', ['tsx', ...args], {
     stdio: 'inherit'
@@ -637,7 +678,7 @@ async function main() {
     if (code === 0) {
       // Automatically run the activation logic immediately after a successful Firestore pull
       if (parsed.command === 'pull' && resolvedSessionId) {
-        cmdActivate(resolvedSessionId, parsed.conversation);
+        cmdActivate(resolvedSessionId, resolvedConversationId);
       }
       console.log(`\n🚀  Session Manager Operation Completed Successfully.\n`);
       process.exit(0);
@@ -653,34 +694,84 @@ main().catch((err) => {
   process.exit(1);
 });
 
+/**
+ * Resolves the current active Conversation ID.
+ * Priority: 1. Environment variable, 2. Latest modified directory in brain folder.
+ */
+function resolveActiveConversationId(sessionIdHint?: string): string | undefined {
+  if (process.env.CONVERSATION_ID) {
+    return process.env.CONVERSATION_ID;
+  }
 
-function resolveActiveConversationIdFromBrainOnly(): string | undefined {
   try {
+    const cwd = process.cwd();
+
+    // Try reverse lookup in session_mappings.json if we have a session ID hint
+    if (sessionIdHint) {
+      const mappingsPath = path.join(cwd, '.planning', 'session_mappings.json');
+      if (fs.existsSync(mappingsPath)) {
+        try {
+          const mappings = JSON.parse(fs.readFileSync(mappingsPath, 'utf8'));
+          const foundConvId = Object.keys(mappings).find(
+            (convId) => mappings[convId] === sessionIdHint
+          );
+          if (foundConvId) {
+            console.log(`✅ Automatically resolved Conversation ID from local session mapping: ${foundConvId}`);
+            return foundConvId;
+          }
+        } catch {}
+      }
+    }
+
     const homedir = os.homedir();
-    const brainPaths = [
-      path.join(homedir, '.gemini', 'antigravity', 'brain'),
+    const scanPaths = [
+      // Legacy Antigravity IDE paths (may be stale after migration)
+      path.join(homedir, '.gemini', 'antigravity-ide', 'conversations'),
       path.join(homedir, '.gemini', 'antigravity-ide', 'brain'),
-      '/mnt/c/Users/ADMIN/.gemini/antigravity-ide/brain'
+      path.join(homedir, '.gemini', 'antigravity', 'brain'), // Older Antigravity brain path
+      // Potential VS Code Remote Development paths for Gemini extension data
+      path.join(homedir, '.vscode-server', 'data', 'User', 'globalStorage', 'google.gemini-code-assist', 'conversations'),
+      // Standard VS Code on Linux Desktop
+      path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'google.gemini-code-assist', 'conversations'),
+      path.join(homedir, '.config', 'Code - Insiders', 'User', 'globalStorage', 'google.gemini-code-assist', 'conversations'),
     ];
     
     let latestMtime = 0;
     let latestConvId: string | undefined;
-    for (const bPath of brainPaths) {
-      if (fs.existsSync(bPath)) {
-        const subdirs = fs.readdirSync(bPath);
-        for (const dir of subdirs) {
-          if (dir.startsWith('.') || !/^[0-9a-f\-]+$/i.test(dir)) continue;
-          const fullPath = path.join(bPath, dir);
+    for (const p of scanPaths) {
+      if (!fs.existsSync(p)) {
+        // Silent skip for non-existent paths to keep output clean, 
+        // or uncomment below for deep debugging
+        // console.log(`🚫 Path does not exist: ${p}`);
+        continue;
+      }
+
+      console.log(`🔍 Scanning path: ${p}`);
+      const items = fs.readdirSync(p);
+      if (items.length === 0) console.log(`   (Directory is empty)`);
+      
+      for (const item of items) {
+        // Strip .db extension for conversation files to get the ID
+        const id = item.endsWith('.db') ? item.slice(0, -3) : item;
+        if (id.startsWith('.') || !/^[0-9a-f\-]{36}$/i.test(id)) continue;
+
+        try {
+          const fullPath = path.join(p, item);
           const stat = fs.statSync(fullPath);
-          if (stat.isDirectory() && stat.mtimeMs > latestMtime) {
+          console.log(`   ✨ Found valid session: ${id} (last modified: ${new Date(stat.mtimeMs).toLocaleString()})`);
+          if (stat.mtimeMs > latestMtime) {
             latestMtime = stat.mtimeMs;
-            latestConvId = dir;
+            latestConvId = id;
           }
+        } catch (e) {
+          console.log(`   ⚠️  Could not stat ${item}: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
       }
     }
+    if (latestConvId) console.log(`✅ Resolved latest ID: ${latestConvId}`);
     return latestConvId;
-  } catch {
+  } catch (err) {
+    console.error('❌ Error in dynamic resolution:', err);
     return undefined;
   }
 }

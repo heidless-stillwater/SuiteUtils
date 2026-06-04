@@ -6,6 +6,11 @@ export interface AppSettings {
   autoRetryBackups: boolean;
   retentionDays: number;
   activeStorageProvider: 'gcs' | 'google-drive';
+  models: {
+    chat: string;
+    image: string;
+    video: string;
+  };
 }
 
 export class SettingsManager {
@@ -14,7 +19,12 @@ export class SettingsManager {
     strictMode: false,
     autoRetryBackups: true,
     retentionDays: 30,
-    activeStorageProvider: 'gcs'
+    activeStorageProvider: 'gcs',
+    models: {
+      chat: 'gemini-1.5-flash-latest',
+      image: 'imagen-3.0-generate-002',
+      video: 'veo-2.0-generate-001'
+    }
   };
 
   constructor() {

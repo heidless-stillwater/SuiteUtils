@@ -14,8 +14,8 @@ for pid in $(pgrep -f "node|vite|tsx|next-server"); do
     # Get the FULL command line and binary path
     cmd=$(ps -p $pid -o cmd= 2>/dev/null)
     
-    # SHIELD: Never touch Antigravity (strictly check the binary path)
-    if [[ "$cmd" == *".antigravity-server"* ]]; then
+    # SHIELD: Never touch the IDE server (strictly check the binary path)
+    if [[ "$cmd" == *".vscode-server"* || "$cmd" == *".antigravity-server"* ]]; then
         continue
     fi
     
@@ -35,7 +35,7 @@ PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$PROJECT_ROOT"
 # Start in background, redirect logs
 mkdir -p logs
-npm run dev:all -- --port 5180 > logs/ignition.log 2>&1 &
+env GOOGLE_APPLICATION_CREDENTIALS="$PROJECT_ROOT/suite-admin-sovereign.json" nohup npm run dev:all -- --port 5180 > logs/ignition.log 2>&1 &
 ORCH_PID=$!
 
 # 3. POLL FOR READINESS
