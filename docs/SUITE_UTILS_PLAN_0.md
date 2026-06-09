@@ -8,7 +8,7 @@ Generate a plan in "./docs/" called "SUITE_UTILS_PLAN_0" to achieve the followin
 1. STILLWATER ECOSYSTEM REGISTRY
 ═══════════════════════════════════════════════════════════════
 
-The complete Stillwater App Suite consists of SEVEN applications.
+The complete Stillwater App Suite consists of TEN applications.
 Remember these apps, locations, databases, hosting targets, and
 deployment methods at all times:
 
@@ -22,9 +22,12 @@ deployment methods at all times:
   │ PromptAccreditation │ ~/projects/PromptAccreditation   │ promptaccreditation-db-0│ promptaccreditation-v0   │ Firebase       │
   │ PlanTune            │ ~/projects/PlanTune              │ plantune-db-0          │ Cloud Run (us-central1)   │ Cloud Build    │
   │ SuiteUtils (NEW)    │ ~/projects/SuiteUtils            │ suiteutils-db-0        │ TBD                       │ TBD            │
+  │ URLShorteners       │ ~/projects/URLShorteners         │ urlshortener-db-0      │ TBD                       │ TBD            │
+  │ TokenMarket         │ ~/projects/TokenMarket           │ tokenmarket-db-0       │ TBD                       │ TBD            │
+  │ Persona             │ ~/projects/Persona               │ persona-db-0           │ TBD                       │ TBD            │
   └─────────────────────┴──────────────────────────────────┴────────────────────────┴───────────────────────────┴────────────────┘
 
-  All apps share GCP project: heidless-apps-0
+  All apps share GCP project: stillwater-sovereign-01
   DO NOT use the "(default)" Firestore database for SuiteUtils — use "suiteutils-db-0" exclusively.
 
 

@@ -4,7 +4,7 @@ import { getFirestore, collection, getDocs, doc, updateDoc } from 'firebase/fire
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
   authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'heidless-apps-0',
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'stillwater-sovereign-01',
   storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.VITE_FIREBASE_APP_ID,

@@ -3,11 +3,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 initializeApp({
   credential: applicationDefault(),
-  projectId: 'heidless-apps-0'
+  projectId: 'stillwater-sovereign-01'
 });
 
-const db = getFirestore();
-db.settings({ databaseId: 'suiteutils-db-0' });
+const db = getFirestore('suiteutils-db-0');
 
 async function run() {
   const snap = await db.collection('suites').get();

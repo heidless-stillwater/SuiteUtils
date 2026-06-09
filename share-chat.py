@@ -105,20 +105,19 @@ def parse_transcript(conv_id):
     Returns: (messages, last_mtime)
     messages is a list of dicts: {role, content, actions, timestamp}
     """
-    # Find the brain path from the IDE roots registry
-    brain_path = None
+    transcript_path = os.path.join(BRAIN_DIR, conv_id, ".system_generated/logs/transcript.jsonl")
+    if not os.path.exists(transcript_path):
+    # Find the brain path from the IDE roots
+    transcript_path = None
     for root in IDE_ROOTS:
-        p = os.path.join(root, "brain", conv_id)
+        p = os.path.join(root, "brain", conv_id, ".system_generated/logs/transcript.jsonl")
         if os.path.exists(p):
-            brain_path = p
+            transcript_path = p
             break
 
-    if not brain_path:
+    if not transcript_path:
         return [], None
-
-    transcript_path = os.path.join(brain_path, ".system_generated/logs/transcript.jsonl")
-    if not os.path.exists(transcript_path):
-        return [], None
+        
     messages = []
     current_actions = []
     
@@ -202,6 +201,7 @@ def cmd_status(args):
         return
         
     conv_id = active["conv_id"]
+    messages, _ = parse_transcript(conv_id, active["brain_path"])
     messages, _ = parse_transcript(conv_id)
     
     print(f"\n{C_CYAN}{C_BOLD}========== ACTIVE ANTIGRAVITY SESSION =========={C_RESET}")
@@ -241,6 +241,7 @@ def cmd_list(args):
     
     for c in convs:
         conv_id = c["conv_id"]
+        messages, _ = parse_transcript(conv_id, c["brain_path"])
         messages, _ = parse_transcript(conv_id)
         
         status_str = f"{C_GREEN}{C_BOLD}ACTIVE{C_RESET}" if c["is_active"] else f"{C_WHITE}idle{C_RESET}"
@@ -284,6 +285,8 @@ def cmd_activate(args):
     
     now = time.time()
     
+    # Touch SQLite database files
+    db_file = choice["db_path"]
     # Touch SQLite database files in conversations/
     db_file = os.path.join(CONVS_DIR, f"{conv_id}.db")
     for ext in ["", "-wal", "-shm"]:
@@ -292,6 +295,7 @@ def cmd_activate(args):
             os.utime(p, (now, now))
             
     # Touch all files inside the brain directory
+    brain_path = choice["brain_path"]
     brain_path = os.path.join(BRAIN_DIR, conv_id)
     if os.path.exists(brain_path):
         os.utime(brain_path, (now, now))
@@ -302,6 +306,7 @@ def cmd_activate(args):
                 os.utime(os.path.join(root, f), (now, now))
                 
     print(f"{C_GREEN}{C_BOLD}Success! Conversation {conv_id} is now set as the active session.{C_RESET}")
+    print(f"{C_WHITE}Switching accounts or reloading your VS Code window will load this thread.{C_RESET}\n")
     print(f"{C_WHITE}Switching accounts or reopening the Antigravity chat panel will load this thread.{C_RESET}\n")
 
 def cmd_export(args):
