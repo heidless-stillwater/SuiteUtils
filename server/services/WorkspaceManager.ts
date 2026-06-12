@@ -1,5 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { adminApp } from './FirebaseAdmin.js';
 
 export interface AppConfig {
   id: string;
@@ -69,7 +70,11 @@ export class WorkspaceManager {
   }
 
   getWorkspaces(): Workspace[] {
-    return Array.from(this.workspaces.values());
+    const list = Array.from(this.workspaces.values());
+    return list.map(w => ({
+      ...w,
+      gcpProjectId: adminApp?.options?.projectId || w.gcpProjectId || 'stillwater-sovereign-01'
+    }));
   }
 
   getWorkspace(id: string): Workspace | undefined {
@@ -102,6 +107,12 @@ export class WorkspaceManager {
       this.save();
     }
     
+    if (ws) {
+      return {
+        ...ws,
+        gcpProjectId: adminApp?.options?.projectId || ws.gcpProjectId || 'stillwater-sovereign-01'
+      };
+    }
     return ws;
   }
 

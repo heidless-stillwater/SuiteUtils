@@ -1,4 +1,7 @@
 #!/bin/bash
+# Unset leaked environment project variables to force loading from active config (.env)
+unset GOOGLE_CLOUD_PROJECT
+unset CLOUDSDK_CORE_PROJECT
 APP_NAME="Video"
 APP_DIR="/home/heidless/projects/ag-video-system"
 TMUX_SESSION="stillwater"

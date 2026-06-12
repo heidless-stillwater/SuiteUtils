@@ -804,7 +804,7 @@ app.post('/api/rollback', async (req, res) => {
 
   const workspaceId = (req as any).workspaceId || 'stillwater-suite';
   const workspace = workspaceManager.getWorkspace(workspaceId);
-  const firebaseProject = workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
+  const firebaseProject = firebaseApp.options.projectId || workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
   console.log(`\n[Rollback] ${hostingTarget} → ${versionName} (Workspace: ${workspaceId}, Project: ${firebaseProject})`);
 
   // SSE setup
@@ -1020,7 +1020,7 @@ app.post('/api/deploy', async (req, res) => {
     resolvedHostingTarget = hostingTarget || envData?.hostingTarget || workspaceApp.hostingTarget || null;
   }
 
-  firebaseProject = workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
+  firebaseProject = firebaseApp.options.projectId || workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
 
   // 3. GLOBAL FAIL-SAFE: If this is PlanTune and we still resolved to apps-0, 
   // try to find the 'Target: New GCP Server' workspace globally (Local or Firestore)

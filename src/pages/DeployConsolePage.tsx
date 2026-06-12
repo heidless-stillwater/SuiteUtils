@@ -1283,8 +1283,8 @@ export function DeployConsolePage() {
             isHistoryCollapsed 
               ? (gridCols === 2 ? 'md:grid-cols-2 lg:grid-cols-2' 
                 : gridCols === 3 ? 'md:grid-cols-2 lg:grid-cols-3' 
-                : gridCols === 4 ? 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
-                : 'md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5') 
+                : gridCols === 4 ? 'md:grid-cols-2 lg:grid-cols-4' 
+                : 'md:grid-cols-2 lg:grid-cols-5') 
               : 'md:grid-cols-2 lg:grid-cols-3'
           } gap-4 transition-all duration-500`}>
             {sortedApps.map((app) => {

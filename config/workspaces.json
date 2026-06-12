@@ -12,7 +12,7 @@
         "name": "Video System v1.0",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "stillwater-sovereign-01"
+        "hostingTarget": "stillwater-video-system"
       },
       {
         "id": "prompttool",

@@ -26,16 +26,16 @@ This utility manages the high-level "consciousness" of the agent, ensuring that 
 
 **Path:** \`npx tsx scripts/session-manager/manage.ts <command> [options]\`
 
-| Command | Parameter(s) | Description |
+| Command | Execution Syntax | Description |
 | :--- | :--- | :--- |
-| **\`init\`** | \`[session_id]\` | **Bootstrap a new session.** Generates a UUID, creates skeleton planning files (\`task_plan.md\`, \`findings.md\`), and updates the local \`.active_plan\` pointer. |
-| **\`status\`** | N/A | **Audit current state.** Displays detected VS Code Conversation ID, Active Plan ID, and verifies if the mapping is correctly linked to the cloud. |
-| **\`activate\`** | \`--session <id>\` | **Rebind Identity.** Links the current local IDE chat ID to a specific persistent Session ID. |
-| **\`push\`** | N/A | **Snapshot to Cloud.** Reads local \`.planning/\` files and pushes them as a new version to Firestore. |
-| **\`pull\`** | \`[--version n]\` | **Retrieve from Cloud.** Fetches state from Firestore and automatically runs \`activate\`. |
-| **\`history\`** | N/A | **View Timeline.** Lists all available versions stored in Firestore for the active session. |
-| **\`rollback\`** | \`--version n\` | **Revert State.** Sets the session state to a previous version number in the cloud. |
-| **\`sync-guide\`** | N/A | **Force-push documentation.** Injects this grouped reference into the Persona App's internal guide. |
+| **\`init\`** | \`npx tsx scripts/session-manager/manage.ts init [session_id]\` | **Bootstrap a new session.** Generates a UUID, creates skeleton planning files (\`task_plan.md\`, \`findings.md\`), and updates the local \`.active_plan\` pointer. |
+| **\`status\`** | \`npx tsx scripts/session-manager/manage.ts status\` | **Audit current state.** Displays detected VS Code Conversation ID, Active Plan ID, and verifies if the mapping is correctly linked to the cloud. |
+| **\`activate\`** | \`npx tsx scripts/session-manager/manage.ts activate --session <id>\` | **Rebind Identity.** Links the current local IDE chat ID to a specific persistent Session ID. |
+| **\`push\`** | \`echo "y" \\| npx tsx scripts/session-manager/manage.ts push\` | **Snapshot to Cloud.** Reads local \`.planning/\` files and pushes them as a new version to Firestore. |
+| **\`pull\`** | \`npx tsx scripts/session-manager/manage.ts pull [--version n]\` | **Retrieve from Cloud.** Fetches state from Firestore and automatically runs \`activate\`. |
+| **\`history\`** | \`npx tsx scripts/session-manager/manage.ts history\` | **View Timeline.** Lists all available versions stored in Firestore for the active session. |
+| **\`rollback\`** | \`npx tsx scripts/session-manager/manage.ts rollback --version n\` | **Revert State.** Sets the session state to a previous version number in the cloud. |
+| **\`sync-guide\`** | \`npx tsx scripts/session-manager/manage.ts sync-guide\` | **Force-push documentation.** Injects this grouped reference into the Persona App's internal guide. |
 
 **Key Options:**
 *   **\`--session <uuid>\`**: Overrides the automatically detected Session ID.
@@ -50,14 +50,14 @@ This utility interacts directly with the IDE's internal SQLite databases to mana
 
 **Path:** \`./share-chat <command> [arguments]\`
 
-| Command | Parameter(s) | Description |
+| Command | Execution Syntax | Description |
 | :--- | :--- | :--- |
-| **\`status\`** | N/A | **Session Preview.** Displays current conversation metadata and a preview of the last 3 turns of the chat. |
-| **\`list\`** | N/A | **Inventory.** Lists all VS Code chat databases found on disk associated with the current workspace. |
-| **\`activate\`** | \`<id-prefix>\` | **Hot-Swap History.** Updates filesystem timestamps. *Requires VS Code window reload.* |
-| **\`share\`** | \`[email] [prefix]\` | **Cross-Account Bind.** Modifies the SQLite database in-place to grant access to other profiles without duplicating files. |
-| **\`export\`** | \`[id-prefix]\` | **Markdown Generator.** Converts binary SQLite history into a high-fidelity Markdown in \`docs/shared-chats/\`. |
-| **\`inspect\`** | \`<id-prefix>\` | **Internal Audit.** Dumps SQLite tables and scans metadata for identity markers (Emails/UIDs). |
+| **\`status\`** | \`./share-chat status\` | **Session Preview.** Displays current conversation metadata and a preview of the last 3 turns of the chat. |
+| **\`list\`** | \`./share-chat list\` | **Inventory.** Lists all VS Code chat databases found on disk associated with the current workspace. |
+| **\`activate\`** | \`./share-chat activate <id-prefix>\` | **Hot-Swap History.** Updates filesystem timestamps. *Requires VS Code window reload.* |
+| **\`share\`** | \`./share-chat share [email] [prefix]\` | **Cross-Account Bind.** Modifies the SQLite database in-place to grant access to other profiles without duplicating files. |
+| **\`export\`** | \`./share-chat export [id-prefix]\` | **Markdown Generator.** Converts binary SQLite history into a high-fidelity Markdown in \`docs/shared-chats/\`. |
+| **\`inspect\`** | \`./share-chat inspect <id-prefix>\` | **Internal Audit.** Dumps SQLite tables and scans metadata for identity markers (Emails/UIDs). |
 `;
 
 /**
@@ -388,7 +388,10 @@ async function main() {
     const expandedCommand = 'npx tsx ' + args.map(a => (a.includes(' ') ? `"${a}"` : a)).join(' ');
     console.log(`👉  Expanded Command :  ${expandedCommand}`);
 
-    spawn('npx', ['tsx', ...args], { stdio: 'inherit' }).on('close', (code) => {
+    spawn('npx', ['tsx', ...args], { 
+      stdio: 'inherit',
+      env: { ...process.env, FIRESTORE_DATABASE_ID: 'persona-db-0' }
+    }).on('close', (code) => {
       if (code === 0 && parsed.command === 'pull') cmdActivate(resolvedSessionId!, resolvedConversationId);
       process.exit(code ?? 0);
     });

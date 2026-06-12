@@ -1,4 +1,7 @@
 #!/bin/bash
+# Unset leaked environment project variables to force loading from active config (.env)
+unset GOOGLE_CLOUD_PROJECT
+unset CLOUDSDK_CORE_PROJECT
 # Stillwater Suite - Persistent Observability & Resurrection Watchdog v5
 # Fixes: stale PID on reboot, STATE_CHANGED lost in subshell, boot resilience.
 

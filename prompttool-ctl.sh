@@ -1,4 +1,7 @@
 #!/bin/bash
+# Unset leaked environment project variables to force loading from active config (.env)
+unset GOOGLE_CLOUD_PROJECT
+unset CLOUDSDK_CORE_PROJECT
 APP_NAME="PromptTool"
 APP_DIR="/home/heidless/projects/PromptTool"
 TMUX_SESSION="stillwater"
