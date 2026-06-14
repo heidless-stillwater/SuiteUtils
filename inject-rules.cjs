@@ -4,7 +4,7 @@ const serviceAccount = require('./suite-admin-sovereign.json');
 
 const app = initializeApp({
   credential: cert(serviceAccount),
-  projectId: 'stillwater-sovereign-01'
+  projectId: serviceAccount.project_id || 'stillwater-sovereign-02'
 });
 
 const rulesContent = `
@@ -23,7 +23,8 @@ async function inject() {
   const databases = [
     'persona-db-0', 'prompttool-db-0', 'promptresources-db-0', 
     'promptmaster-spa-db-0', 'promptaccreditation-db-0', 
-    'plantune-db-0', 'suiteutils-db-0', 'autovideo-db-0', '(default)'
+    'plantune-db-0', 'suiteutils-db-0', 'autovideo-db-0', 
+    'tokenmarket-db-0', '(default)'
   ];
 
   console.log('--- Sovereign Rule Injection ---');

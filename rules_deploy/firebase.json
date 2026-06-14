@@ -7,6 +7,7 @@
     { "database": "promptaccreditation-db-0", "rules": "firestore.rules" },
     { "database": "plantune-db-0", "rules": "firestore.rules" },
     { "database": "suiteutils-db-0", "rules": "firestore.rules" },
-    { "database": "autovideo-db-0", "rules": "firestore.rules" }
+    { "database": "autovideo-db-0", "rules": "firestore.rules" },
+    { "database": "tokenmarket-db-0", "rules": "firestore.rules" }
   ]
 }

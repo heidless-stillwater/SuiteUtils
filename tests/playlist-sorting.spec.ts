@@ -40,11 +40,11 @@ test('playlist catalog sorting options test', async ({ page }) => {
   await page.goto('http://localhost:3002/playlists');
 
   // Verify the sort dropdown selector is visible
-  const sortSelect = page.locator('select').first();
+  const sortSelect = page.locator('select').last();
   await expect(sortSelect).toBeVisible();
   
-  // Verify default value is "updatedAt_desc"
-  await expect(sortSelect).toHaveValue('updatedAt_desc');
+  // Verify default value is "ranking_desc"
+  await expect(sortSelect).toHaveValue('ranking_desc');
 
   // 2. Select "Title (A-Z)" (title_asc)
   await sortSelect.selectOption('title_asc');

@@ -26,5 +26,15 @@
     "id": "yn59eo",
     "status": "paused",
     "lastRun": "2026-05-18T14:31:51.591Z"
+  },
+  {
+    "id": "tm-indexer-hourly",
+    "name": "Hourly TokenMarket AI Indexer",
+    "cronExpression": "0 * * * *",
+    "scope": "TokenMarketIndexer",
+    "includeStorage": false,
+    "status": "active",
+    "jobType": "tokenmarket-indexer",
+    "lastRun": "2026-06-14T15:00:01.273Z"
   }
 ]

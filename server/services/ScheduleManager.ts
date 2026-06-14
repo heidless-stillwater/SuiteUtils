@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
 import { BackupOrchestrator } from './BackupOrchestrator.js';
+import { TokenMarketIndexer } from './TokenMarketIndexer.js';
 import { GCSStorageProvider } from './GCSStorageProvider.js';
 import { auditLogger } from './AuditLogger.js';
 import { operationMonitor } from './OperationMonitor.js';
@@ -16,6 +17,7 @@ export interface BackupSchedule {
   lastRun?: string;
   nextRun?: string;
   status: 'active' | 'paused';
+  jobType?: 'backup' | 'tokenmarket-indexer';
 }
 
 export class ScheduleManager {
@@ -42,6 +44,24 @@ export class ScheduleManager {
 
   async init() {
     const schedules = await this.getSchedules();
+    
+    // Automatically register hourly tokenmarket indexer if not present
+    const hasIndexer = schedules.some(s => s.jobType === 'tokenmarket-indexer');
+    if (!hasIndexer) {
+      console.log('[Scheduler] Registering default hourly TokenMarket indexer...');
+      const newIndexerSchedule: BackupSchedule = {
+        id: 'tm-indexer-hourly',
+        name: 'Hourly TokenMarket AI Indexer',
+        cronExpression: '0 * * * *',
+        scope: 'TokenMarketIndexer',
+        includeStorage: false,
+        status: 'active',
+        jobType: 'tokenmarket-indexer'
+      };
+      schedules.push(newIndexerSchedule);
+      await fs.writeJson(this.configPath, schedules, { spaces: 2 });
+    }
+
     console.log(`[Scheduler] Initializing ${schedules.length} schedules...`);
     schedules.forEach(s => {
       if (s.status === 'active') {
@@ -150,6 +170,24 @@ export class ScheduleManager {
     }
 
     const job = cron.schedule(s.cronExpression, async () => {
+      if (s.jobType === 'tokenmarket-indexer') {
+        console.log(`[Scheduler] Running scheduled TokenMarket indexer: ${s.id}`);
+        try {
+          await TokenMarketIndexer.runHourlyIndex();
+          
+          // Update last run time
+          const schedules = await this.getSchedules();
+          const idx = schedules.findIndex(item => item.id === s.id);
+          if (idx !== -1) {
+            schedules[idx].lastRun = new Date().toISOString();
+            await fs.writeJson(this.configPath, schedules, { spaces: 2 });
+          }
+        } catch (err: any) {
+          console.error(`[Scheduler] Scheduled TokenMarket indexer failed: ${err.message}`);
+        }
+        return;
+      }
+
       const metadata = { 
         scope: s.scope, 
         name: s.name, 

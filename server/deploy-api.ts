@@ -31,6 +31,7 @@ import { MigrationService } from './services/MigrationService.js';
 import { healthScanner } from './services/HealthScanner.js';
 import { auditLogger } from './services/AuditLogger.js';
 import { scheduleManager } from './services/ScheduleManager.js';
+import { TokenMarketIndexer } from './services/TokenMarketIndexer.js';
 import { operationMonitor } from './services/OperationMonitor.js';
 import { notificationManager } from './services/NotificationManager.js';
 import { settingsManager } from './services/SettingsManager.js';
@@ -470,6 +471,15 @@ app.delete('/api/audit-logs/:id', async (req, res) => {
     const { id } = req.params;
     await auditLogger.deleteLog(id);
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tokenmarket/trigger-index', async (req, res) => {
+  try {
+    const record = await TokenMarketIndexer.runHourlyIndex();
+    res.json({ success: true, record });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
