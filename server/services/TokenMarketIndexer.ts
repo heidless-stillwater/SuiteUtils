@@ -15,6 +15,14 @@ export interface TokenMarketData {
   weight: number;
 }
 
+export interface ModelCostDetail {
+  id: string;
+  name: string;
+  promptPrice: number;     // per 1M tokens
+  completionPrice: number; // per 1M tokens
+  blendedCost: number;     // per 1M tokens
+}
+
 export interface IndexRecord {
   indexValue: number;
   timestamp: string;
@@ -26,6 +34,7 @@ export interface IndexRecord {
   speculativePercentage: number;
   openRouterMockCost: number;
   tokens: TokenMarketData[];
+  modelCosts?: ModelCostDetail[];
 }
 
 export class TokenMarketIndexer {
@@ -126,8 +135,89 @@ export class TokenMarketIndexer {
       // Sort by weight descending
       tokensData.sort((a, b) => b.weight - a.weight);
 
-      // Mock OpenRouter Compute cost per 1M tokens (varies slightly around $0.15 for realism)
-      const openRouterMockCost = parseFloat((0.15 + (Math.random() - 0.5) * 0.02).toFixed(4));
+      // Dynamic OpenRouter Compute cost per 1M tokens (average of popular models)
+      let openRouterMockCost = 0.3925; // Default fallback average
+      const modelCosts: ModelCostDetail[] = [];
+
+      // Standard fallback prices per token (USD)
+      const fallbackPricing: Record<string, { name: string; prompt: number; completion: number }> = {
+        'openai/gpt-4o-mini': { name: 'OpenAI: GPT-4o-mini', prompt: 0.15e-6, completion: 0.60e-6 },
+        'google/gemini-2.5-flash': { name: 'Google: Gemini 2.5 Flash', prompt: 0.30e-6, completion: 2.50e-6 },
+        'anthropic/claude-3-haiku': { name: 'Anthropic: Claude 3 Haiku', prompt: 0.25e-6, completion: 1.25e-6 },
+        'meta-llama/llama-3-8b-instruct': { name: 'Meta: Llama 3 8B Instruct', prompt: 0.14e-6, completion: 0.14e-6 }
+      };
+
+      const targetModelIds = Object.keys(fallbackPricing);
+
+      try {
+        const orResponse = await fetch('https://openrouter.ai/api/v1/models', {
+          headers: {
+            'User-Agent': 'SuiteUtilsIndexer/1.0',
+            'Accept': 'application/json'
+          },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (orResponse.ok) {
+          const orData = await orResponse.json() as any;
+          if (orData && Array.isArray(orData.data)) {
+            let totalBlendedCost = 0;
+            let count = 0;
+
+            for (const modelId of targetModelIds) {
+              const model = orData.data.find((m: any) => m.id === modelId);
+              let promptPrice = fallbackPricing[modelId].prompt;
+              let completionPrice = fallbackPricing[modelId].completion;
+              const modelName = model ? model.name : fallbackPricing[modelId].name;
+
+              if (model && model.pricing) {
+                const p = parseFloat(model.pricing.prompt);
+                const c = parseFloat(model.pricing.completion);
+                if (!isNaN(p) && p >= 0) promptPrice = p;
+                if (!isNaN(c) && c >= 0) completionPrice = c;
+              }
+
+              // Compute price per 1M tokens based on 4:1 prompt/completion ratio (80% / 20%)
+              const modelBlendedCost1M = (promptPrice * 0.8 + completionPrice * 0.2) * 1000000;
+              totalBlendedCost += modelBlendedCost1M;
+              count++;
+
+              modelCosts.push({
+                id: modelId,
+                name: modelName,
+                promptPrice: promptPrice * 1000000,
+                completionPrice: completionPrice * 1000000,
+                blendedCost: modelBlendedCost1M
+              });
+            }
+
+            if (count > 0) {
+              openRouterMockCost = parseFloat((totalBlendedCost / count).toFixed(4));
+              console.log(`[TokenMarketIndexer] Successfully computed dynamic LLM pricing index from OpenRouter: $${openRouterMockCost} / 1M tokens`);
+            }
+          } else {
+            throw new Error('Response data is not an array.');
+          }
+        } else {
+          throw new Error(`HTTP ${orResponse.status}`);
+        }
+      } catch (err: any) {
+        console.warn(`[TokenMarketIndexer] Failed to fetch live OpenRouter prices: ${err.message}. Using fallback average.`);
+        modelCosts.length = 0;
+        let totalBlendedCost = 0;
+        for (const modelId of targetModelIds) {
+          const fallback = fallbackPricing[modelId];
+          const modelBlendedCost1M = (fallback.prompt * 0.8 + fallback.completion * 0.2) * 1000000;
+          totalBlendedCost += modelBlendedCost1M;
+          modelCosts.push({
+            id: modelId,
+            name: fallback.name,
+            promptPrice: fallback.prompt * 1000000,
+            completionPrice: fallback.completion * 1000000,
+            blendedCost: modelBlendedCost1M
+          });
+        }
+        openRouterMockCost = parseFloat((totalBlendedCost / targetModelIds.length).toFixed(4));
+      }
 
       const record: IndexRecord = {
         indexValue,
@@ -139,7 +229,8 @@ export class TokenMarketIndexer {
         utilityPercentage,
         speculativePercentage,
         openRouterMockCost,
-        tokens: tokensData
+        tokens: tokensData,
+        modelCosts
       };
 
       // 5. Persist to Firestore history
