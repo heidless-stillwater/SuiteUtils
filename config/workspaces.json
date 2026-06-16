@@ -12,7 +12,9 @@
         "name": "Video System v1.0",
         "dbId": "autovideo-db-0",
         "projectPath": "~/projects/ag-video-system",
-        "hostingTarget": "stillwater-video-system"
+        "hostingTarget": "stillwater-video-system",
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://stillwater-video-system-02.web.app"
       },
       {
         "id": "prompttool",
@@ -20,7 +22,8 @@
         "dbId": "prompttool-db-0",
         "projectPath": "~/projects/PromptTool",
         "hostingTarget": "stillwater-prompt-tool",
-        "deployMethod": "cloud-build"
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://stillwater-prompt-tool-02.web.app"
       },
       {
         "id": "promptresources",
@@ -28,14 +31,17 @@
         "dbId": "promptresources-db-0",
         "projectPath": "~/projects/PromptResources",
         "hostingTarget": "stillwater-prompt-resources",
-        "deployMethod": "cloud-build"
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://stillwater-prompt-resources-02.web.app"
       },
       {
         "id": "promptmasterspa",
         "name": "PromptMaster v1.1",
         "dbId": "promptmaster-spa-db-0",
         "projectPath": "~/projects/PromptMasterSPA",
-        "hostingTarget": "stillwater-prompt-master"
+        "hostingTarget": "stillwater-prompt-master",
+        "deployMethod": "firebase",
+        "deployUrl": "https://stillwater-prompt-master-02.web.app"
       },
       {
         "id": "promptaccreditation",
@@ -43,15 +49,17 @@
         "dbId": "promptaccreditation-db-0",
         "projectPath": "~/projects/PromptAccreditation",
         "hostingTarget": "stillwater-prompt-accreditation",
-        "deployMethod": "cloud-build"
+        "deployMethod": "cloud-build",
+        "deployUrl": "https://stillwater-prompt-accreditation-02.web.app"
       },
       {
         "id": "plantune",
         "name": "PlanTune v1.0",
         "dbId": "plantune-db-0",
         "projectPath": "~/projects/PlanTune",
+        "hostingTarget": "stillwater-plan-tune",
         "deployMethod": "cloud-build",
-        "deployUrl": "https://plantune-850624280491.us-central1.run.app"
+        "deployUrl": "https://stillwater-plan-tune-02.web.app"
       },
       {
         "id": "suiteutils",
@@ -67,7 +75,7 @@
         "projectPath": "~/projects/Persona",
         "hostingTarget": "stillwater-persona",
         "deployMethod": "cloud-build",
-        "deployUrl": "https://persona-850624280491.us-central1.run.app"
+        "deployUrl": "https://stillwater-persona-02.web.app"
       },
       {
         "id": "urlshortener",
@@ -76,7 +84,7 @@
         "projectPath": "~/projects/URLShortener",
         "hostingTarget": "stillwater-url-shortener",
         "deployMethod": "cloud-build",
-        "deployUrl": "https://urlshortener-850624280491.us-central1.run.app"
+        "deployUrl": "https://stillwater-url-shortener-02.web.app"
       },
       {
         "id": "tokenmarket",
@@ -85,7 +93,7 @@
         "projectPath": "~/projects/TokenMarket",
         "hostingTarget": "stillwater-token-market",
         "deployMethod": "firebase",
-        "deployUrl": "https://stillwater-token-market.web.app/"
+        "deployUrl": "https://stillwater-token-market-02.web.app"
       }
     ]
   },

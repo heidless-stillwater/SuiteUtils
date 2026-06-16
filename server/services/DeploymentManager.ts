@@ -70,6 +70,7 @@ export class DeploymentManager extends EventEmitter {
                 // Automate cache-purging to avoid build conflicts
                 const nextCachePath = path.join(resolvedPath, '.next');
                 const viteCachePath = path.join(resolvedPath, 'dist');
+                const nodeModulesCache = path.join(resolvedPath, 'node_modules', '.cache');
                 if (fs.existsSync(nextCachePath)) {
                     this.appendLog(jobId, `── Purging stale Next.js cache directory (.next)...`);
                     fs.rmSync(nextCachePath, { recursive: true, force: true });
@@ -77,6 +78,10 @@ export class DeploymentManager extends EventEmitter {
                 if (fs.existsSync(viteCachePath)) {
                     this.appendLog(jobId, `── Purging stale build output directory (dist)...`);
                     fs.rmSync(viteCachePath, { recursive: true, force: true });
+                }
+                if (fs.existsSync(nodeModulesCache)) {
+                    this.appendLog(jobId, `── Purging stale dependencies cache (node_modules/.cache)...`);
+                    fs.rmSync(nodeModulesCache, { recursive: true, force: true });
                 }
 
                 // Load environment variables for build-time injection
@@ -179,7 +184,7 @@ export class DeploymentManager extends EventEmitter {
                         appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] Local build SUCCESS for ${appId}. Proceeding to ${deployMethod} phase.\n`);
 
                         if (deployMethod === 'cloud-build' || deployMethod === 'cloud-run') {
-                            this.runCloudRunDeploy(jobId, appId, projectPath, firebaseProject);
+                            this.runCloudRunDeploy(jobId, appId, projectPath, hostingTarget, firebaseProject);
                         } else {
                             this.runFirebaseDeploy(jobId, appId, projectPath, hostingTarget, firebaseProject);
                         }
@@ -194,7 +199,7 @@ export class DeploymentManager extends EventEmitter {
         runBuild();
     }
 
-    private runCloudRunDeploy(jobId: string, appId: string, projectPath: string, firebaseProject: string) {
+    private runCloudRunDeploy(jobId: string, appId: string, projectPath: string, hostingTarget: string | null, firebaseProject: string) {
         appendFileSync(DEBUG_LOG_PATH, `[${new Date().toISOString()}] Entering runCloudRunDeploy for ${appId} (Job: ${jobId})\n`);
         const job = this.activeJobs.get(jobId);
         if (!job) {
@@ -313,8 +318,73 @@ export class DeploymentManager extends EventEmitter {
             } else {
                 const job = this.activeJobs.get(jobId);
                 if (job) {
+                    if (hostingTarget) {
+                        this.runHostingDeployAfterCloudRun(jobId, appId, projectPath, hostingTarget, firebaseProject);
+                    } else {
+                        job.status = 'verifying';
+                        job.logs.push(`\n── Cloud Run deploy command finished (Exit Code: 0).`);
+                        job.logs.push(`── Entering verification phase...`);
+                        this.emit('update', job);
+                        this.processes.delete(jobId);
+                    }
+                }
+            }
+        });
+    }
+
+    private runHostingDeployAfterCloudRun(jobId: string, appId: string, projectPath: string, hostingTarget: string, firebaseProject: string) {
+        const job = this.activeJobs.get(jobId);
+        if (!job) return;
+
+        this.appendLog(jobId, `\n── Starting Firebase Hosting deploy for target: ${hostingTarget}...`);
+        
+        const fullCommand = `npx -p firebase-tools firebase use ${firebaseProject} && npx -p firebase-tools firebase deploy --only hosting:${hostingTarget} --project ${firebaseProject} --force`;
+        
+        const saPath = process.env.GOOGLE_APPLICATION_CREDENTIALS 
+          ? path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS) 
+          : undefined;
+
+        const nodeBinDir = path.dirname(process.execPath);
+        const fallbackPath = [
+          nodeBinDir,
+          '/usr/local/sbin',
+          '/usr/local/bin',
+          '/usr/sbin',
+          '/usr/bin',
+          '/sbin',
+          '/bin'
+        ].join(':');
+
+        const finalEnv: Record<string, string | undefined> = { 
+          ...process.env, 
+          PATH: process.env.PATH ? `${process.env.PATH}:${fallbackPath}` : fallbackPath,
+          GOOGLE_CLOUD_PROJECT: firebaseProject,
+          FIREBASE_PROJECT: firebaseProject
+        };
+
+        if (saPath) {
+          finalEnv.GOOGLE_APPLICATION_CREDENTIALS = saPath;
+        }
+
+        const deployProc = spawn('sh', ['-c', fullCommand], {
+            cwd: resolvePath(projectPath),
+            env: finalEnv
+        });
+
+        this.processes.set(jobId, deployProc);
+
+        deployProc.stdout.on('data', (chunk) => this.appendLog(jobId, chunk.toString()));
+        deployProc.stderr.on('data', (chunk) => this.appendLog(jobId, chunk.toString(), true));
+
+        deployProc.on('close', (code) => {
+            if (code !== 0) {
+                this.failJob(jobId, `Firebase hosting deploy failed with exit code ${code}`);
+            } else {
+                this.appendLog(jobId, `── Firebase Hosting deploy successful (Code 0)`);
+                const job = this.activeJobs.get(jobId);
+                if (job) {
                     job.status = 'verifying';
-                    job.logs.push(`\n── Cloud Run deploy command finished (Exit Code: 0).`);
+                    job.logs.push(`\n── Cloud Run and Hosting deploy finished successfully.`);
                     job.logs.push(`── Entering verification phase...`);
                     this.emit('update', job);
                     this.processes.delete(jobId);
@@ -384,15 +454,16 @@ export class DeploymentManager extends EventEmitter {
 
     private getCanonicalUrl(appId: string, workspaceId: string): string | null {
         const MAPPING: Record<string, string> = {
-            'promptresources': 'https://stillwater-prompt-resources.web.app',
-            'prompttool': 'https://stillwater-prompt-tool.web.app',
+            'promptresources': 'https://stillwater-prompt-resources-02.web.app',
+            'prompttool': 'https://stillwater-prompt-tool-02.web.app',
+            'tokenmarket': 'https://stillwater-token-market-02.web.app',
             'suiteutils': 'https://stillwater-suite-utils.web.app',
-            'promptmasterspa': 'https://stillwater-prompt-master.web.app',
-            'promptaccreditation': 'https://stillwater-prompt-accreditation.web.app',
-            'plantune': 'https://plantune-v0.web.app',
-            'persona': 'https://persona-v0.web.app',
-            'urlshortener': 'https://stillwater-url-shortener.web.app',
-            'ag-video-system': 'https://heidless-video-system.web.app'
+            'promptmasterspa': 'https://stillwater-prompt-master-02.web.app',
+            'promptaccreditation': 'https://stillwater-prompt-accreditation-02.web.app',
+            'plantune': 'https://stillwater-plan-tune-02.web.app',
+            'persona': 'https://stillwater-persona-02.web.app',
+            'urlshortener': 'https://stillwater-url-shortener-02.web.app',
+            'ag-video-system': 'https://stillwater-video-system-02.web.app'
         };
 
         try {

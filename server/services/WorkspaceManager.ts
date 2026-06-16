@@ -45,16 +45,16 @@ export class WorkspaceManager {
           description: 'Production Hub for Stillwater Core Apps',
           createdAt: new Date().toISOString(),
           apps: [
-            { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'videosystem-v0' },
+            { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'stillwater-video-system', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-video-system-02.web.app' },
             { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'prompttool-v0' },
             { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'promptresources-v0' },
-            { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'promptmaster-v1' },
-            { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'promptaccreditation-v0' },
-            { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'plantune-v0' },
+            { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'stillwater-prompt-master', deployMethod: 'firebase', deployUrl: 'https://stillwater-prompt-master-02.web.app' },
+            { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'stillwater-prompt-accreditation', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-prompt-accreditation-02.web.app' },
+            { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'stillwater-plan-tune', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-plan-tune-02.web.app' },
             { id: 'suiteutils', name: 'SuiteUtils', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suiteutils-v0' },
-            { id: 'persona', name: 'persona v1.0', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'persona-v0' },
-            { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build' },
-            { id: 'tokenmarket', name: 'TokenMarket v1.0', dbId: 'tokenmarket-db-0', projectPath: '~/projects/TokenMarket', hostingTarget: 'stillwater-token-market', deployMethod: 'firebase', deployUrl: 'https://stillwater-token-market.web.app/' }
+            { id: 'persona', name: 'persona v1.0', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'stillwater-persona', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-persona-02.web.app' },
+            { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-url-shortener-02.web.app' },
+            { id: 'tokenmarket', name: 'TokenMarket v1.0', dbId: 'tokenmarket-db-0', projectPath: '~/projects/TokenMarket', hostingTarget: 'stillwater-token-market', deployMethod: 'firebase', deployUrl: 'https://stillwater-token-market-02.web.app' }
           ]
         };
         this.workspaces.set(defaultWorkspace.id, defaultWorkspace);
@@ -91,16 +91,16 @@ export class WorkspaceManager {
         description: 'Primary Production Hub',
         createdAt: new Date().toISOString(),
         apps: [
-          { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'videosystem-v0' },
-          { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'heidless-prompt-tool' },
-          { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'heidless-prompt-resources' },
-          { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'heidless-prompt-master' },
-          { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'heidless-prompt-accreditation' },
-          { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'heidless-plan-tune' },
+          { id: 'ag-video-system', name: 'Video System', dbId: 'autovideo-db-0', projectPath: '~/projects/ag-video-system', hostingTarget: 'stillwater-video-system', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-video-system-02.web.app' },
+          { id: 'prompttool', name: 'PromptTool', dbId: 'prompttool-db-0', projectPath: '~/projects/PromptTool', hostingTarget: 'stillwater-prompt-tool' },
+          { id: 'promptresources', name: 'PromptResources', dbId: 'promptresources-db-0', projectPath: '~/projects/PromptResources', hostingTarget: 'stillwater-prompt-resources' },
+          { id: 'promptmasterspa', name: 'PromptMaster v1', dbId: 'promptmaster-spa-db-0', projectPath: '~/projects/PromptMasterSPA', hostingTarget: 'stillwater-prompt-master', deployMethod: 'firebase', deployUrl: 'https://stillwater-prompt-master-02.web.app' },
+          { id: 'promptaccreditation', name: 'PromptAccreditation', dbId: 'promptaccreditation-db-0', projectPath: '~/projects/PromptAccreditation', hostingTarget: 'stillwater-prompt-accreditation', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-prompt-accreditation-02.web.app' },
+          { id: 'plantune', name: 'PlanTune', dbId: 'plantune-db-0', projectPath: '~/projects/PlanTune', hostingTarget: 'stillwater-plan-tune', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-plan-tune-02.web.app' },
           { id: 'suiteutils', name: 'SuiteUtils', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suite-utils' },
-          { id: 'persona', name: 'Persona', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'persona-v0' },
-          { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build' },
-          { id: 'tokenmarket', name: 'TokenMarket v1.0', dbId: 'tokenmarket-db-0', projectPath: '~/projects/TokenMarket', hostingTarget: 'stillwater-token-market', deployMethod: 'firebase', deployUrl: 'https://stillwater-token-market.web.app/' }
+          { id: 'persona', name: 'Persona', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'stillwater-persona', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-persona-02.web.app' },
+          { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-url-shortener-02.web.app' },
+          { id: 'tokenmarket', name: 'TokenMarket v1.0', dbId: 'tokenmarket-db-0', projectPath: '~/projects/TokenMarket', hostingTarget: 'stillwater-token-market', deployMethod: 'firebase', deployUrl: 'https://stillwater-token-market-02.web.app' }
         ]
       };
       this.workspaces.set(id, ws);

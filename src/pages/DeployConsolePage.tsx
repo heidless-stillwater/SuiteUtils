@@ -398,7 +398,11 @@ export function DeployConsolePage() {
   // Real deploy via SSE
   const deployApp = useCallback((app: AppDeployState) => {
     return new Promise<void>((resolve) => {
-      setExpandedLog(app.appId);
+      if (activeLogModalAppId === app.appId) {
+        setExpandedLog(null);
+      } else {
+        setExpandedLog(app.appId);
+      }
       setDeployStates((prev) =>
         prev.map((s) =>
           s.appId === app.appId
@@ -545,7 +549,7 @@ export function DeployConsolePage() {
           resolve();
         });
     });
-  }, [currentSuite?.id, targetProject, targetEmail]);
+  }, [currentSuite?.id, targetProject, targetEmail, activeLogModalAppId]);
 
   const rollbackApp = async (app: AppDeployState) => {
     setRollbackStates(prev => ({ 
@@ -704,6 +708,16 @@ export function DeployConsolePage() {
       modalLogRef.current.scrollTop = modalLogRef.current.scrollHeight;
     }
   }, [deployStates, autoScrollLogs, activeLogModalAppId]);
+
+  // Close inline logs if the logs modal is opened for an app that is currently deploying
+  useEffect(() => {
+    if (activeLogModalAppId && expandedLog === activeLogModalAppId) {
+      const app = deployStates.find(s => s.appId === activeLogModalAppId);
+      if (app && (app.status === 'building' || app.status === 'deploying' || app.status === 'verifying')) {
+        setExpandedLog(null);
+      }
+    }
+  }, [activeLogModalAppId, expandedLog, deployStates]);
 
   const filteredApps = React.useMemo(() => {
     return deployStates.filter(app => 

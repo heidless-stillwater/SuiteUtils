@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User Profiles Collection
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      
+      // Allow profile creation if email matches uid.
+      // Bootstrap heidlessemail18@gmail.com as admin, otherwise role must be 'user'.
+      allow create: if request.auth != null && request.auth.uid == userId
+        && (
+          (request.resource.data.email == 'heidlessemail18@gmail.com' && request.resource.data.role == 'admin')
+          || (request.resource.data.email != 'heidlessemail18@gmail.com' && request.resource.data.role == 'user')
+        );
+      
+      // Allow updates to own profile, but cannot change role.
+      // Allow existing admins to update any profile.
+      allow update: if request.auth != null && (
+        (request.auth.uid == userId && request.resource.data.role == resource.data.role)
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+      
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // CMS Content Rules
+    match /market_content/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // General Wildcard (excluding users and market_content)
+    match /{document=**} {
+      allow read, write: if true && !(request.path[3] == 'market_content' || request.path[3] == 'users');
+    }
+  }
+}

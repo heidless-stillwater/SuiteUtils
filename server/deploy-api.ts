@@ -485,6 +485,108 @@ app.post('/api/tokenmarket/trigger-index', async (req, res) => {
   }
 });
 
+// TOKENMARKET PUBLIC DEVELOPER APIS
+const tokenMarketDb = getFirestore(firebaseApp, 'tokenmarket-db-0');
+
+// 1. [Sector Index] Latest calculations & weights
+app.get('/api/tokenmarket/index/latest', async (req, res) => {
+  try {
+    const snapshot = await tokenMarketDb.collection('market_index_history')
+      .orderBy('timestamp', 'desc')
+      .limit(1)
+      .get();
+    if (snapshot.empty) {
+      return res.status(404).json({ error: 'No index record found' });
+    }
+    const record = snapshot.docs[0].data();
+    // Inject cmrRatio for backwards compatibility / utility docs
+    const cmr = record.openRouterMockCost > 0 ? (record.indexValue / record.openRouterMockCost) : 0;
+    res.json({
+      ...record,
+      cmrRatio: parseFloat(cmr.toFixed(4))
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. [Sector Index] Historical calculations over time
+app.get('/api/tokenmarket/index/history', async (req, res) => {
+  try {
+    const { timeframe } = req.query;
+    let limitCount = 24;
+    if (timeframe === '7d') limitCount = 168;
+    else if (timeframe === '30d') limitCount = 720;
+
+    const snapshot = await tokenMarketDb.collection('market_index_history')
+      .orderBy('timestamp', 'desc')
+      .limit(limitCount)
+      .get();
+
+    const records = snapshot.docs.map(doc => {
+      const data = doc.data();
+      const cmr = data.openRouterMockCost > 0 ? (data.indexValue / data.openRouterMockCost) : 0;
+      return {
+        timestamp: data.timestamp,
+        indexValue: data.indexValue,
+        cmrValue: parseFloat(cmr.toFixed(4)),
+        totalMarketCap: data.totalMarketCap,
+        totalVolume24h: data.totalVolume24h
+      };
+    });
+    res.json(records.reverse()); // Chronological order
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. [Live Market] Live token ticker prices
+app.get('/api/tokenmarket/live/prices', async (req, res) => {
+  try {
+    const snapshot = await tokenMarketDb.collection('tokens').get();
+    const tokens = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    // Sort stably by market volume desc matching app logic
+    tokens.sort((a: any, b: any) => (b.marketVolume || 0) - (a.marketVolume || 0));
+    res.json(tokens);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. [Live Market] Live aggregates summary
+app.get('/api/tokenmarket/live/summary', async (req, res) => {
+  try {
+    const snapshot = await tokenMarketDb.collection('tokens').get();
+    const tokens = snapshot.docs.map(doc => doc.data() as any);
+    if (tokens.length === 0) {
+      return res.json({ totalMarketCap: 0, totalVolume24h: 0, overallTrend: 0, activeTickersCount: 0 });
+    }
+    let totalMarketCap = 0;
+    let totalVolume24h = 0;
+    let trendAgg = 0;
+    
+    tokens.forEach(t => {
+      const mockSupply = (t.marketVolume || 0) * 100;
+      totalMarketCap += (t.priceUSD || 0) * mockSupply;
+      totalVolume24h += (t.marketVolume || 0) * (t.priceUSD || 0);
+      trendAgg += (t.change24h || 0);
+    });
+
+    res.json({
+      totalMarketCap: parseFloat(totalMarketCap.toFixed(2)),
+      totalVolume24h: parseFloat(totalVolume24h.toFixed(2)),
+      overallTrend: parseFloat((trendAgg / tokens.length).toFixed(4)),
+      activeTickersCount: tokens.length,
+      lastUpdate: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/schedules', async (req, res) => {
   const schedules = await scheduleManager.getSchedules();
   res.json(schedules);

@@ -147,37 +147,57 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     displayName: 'Video System v1.0',
     path: '~/projects/ag-video-system',
     database: 'autovideo-db-0',
-    defaultEnv: { hostingTarget: 'heidless-video-system', deployMethod: 'firebase', status: 'live' },
+    defaultEnv: { 
+      hostingTarget: 'stillwater-video-system', 
+      deployMethod: 'cloud-build', 
+      status: 'live',
+      deployUrl: 'https://stillwater-video-system-02.web.app'
+    },
   },
   'prompttool': {
     displayName: 'PromptTool v1.0',
     path: '~/projects/PromptTool',
     database: 'prompttool-db-0',
-    defaultEnv: { hostingTarget: 'heidless-prompt-tool', deployMethod: 'firebase', status: 'live' },
+    defaultEnv: { hostingTarget: 'stillwater-prompt-tool', deployMethod: 'firebase', status: 'live' },
   },
   'promptresources': {
     displayName: 'PromptResources v1.0',
     path: '~/projects/PromptResources',
     database: 'promptresources-db-0',
-    defaultEnv: { hostingTarget: 'heidless-prompt-resources', deployMethod: 'firebase', status: 'live' },
+    defaultEnv: { hostingTarget: 'stillwater-prompt-resources', deployMethod: 'firebase', status: 'live' },
   },
   'promptmasterspa': {
     displayName: 'PromptMaster v1.1',
     path: '~/projects/PromptMasterSPA',
     database: 'promptmaster-spa-db-0',
-    defaultEnv: { hostingTarget: 'heidless-prompt-master', deployMethod: 'firebase', status: 'live' },
+    defaultEnv: { 
+      hostingTarget: 'stillwater-prompt-master', 
+      deployMethod: 'firebase', 
+      status: 'live',
+      deployUrl: 'https://stillwater-prompt-master-02.web.app'
+    },
   },
   'promptaccreditation': {
     displayName: 'PromptAccreditation v1.0',
     path: '~/projects/PromptAccreditation',
     database: 'promptaccreditation-db-0',
-    defaultEnv: { hostingTarget: 'heidless-prompt-accreditation', deployMethod: 'firebase', status: 'live' },
+    defaultEnv: { 
+      hostingTarget: 'stillwater-prompt-accreditation', 
+      deployMethod: 'cloud-build', 
+      status: 'live',
+      deployUrl: 'https://stillwater-prompt-accreditation-02.web.app'
+    },
   },
   'plantune': {
     displayName: 'PlanTune v1.0',
     path: '~/projects/PlanTune',
     database: 'plantune-db-0',
-    defaultEnv: { hostingTarget: 'heidless-plan-tune', deployMethod: 'cloud-build', status: 'live' },
+    defaultEnv: { 
+      hostingTarget: 'stillwater-plan-tune', 
+      deployMethod: 'cloud-build', 
+      status: 'live',
+      deployUrl: 'https://stillwater-plan-tune-02.web.app'
+    },
   },
   'suiteutils': {
     displayName: 'SuiteUtils v1.0',
@@ -191,14 +211,23 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     path: '~/projects/Persona',
     database: 'persona-db-0',
     project: 'stillwater-sovereign-01',
-    defaultEnv: { hostingTarget: null, deployMethod: 'cloud-build', status: 'stopped' },
+    defaultEnv: { 
+      hostingTarget: 'stillwater-persona', 
+      deployMethod: 'cloud-build', 
+      status: 'live',
+      deployUrl: 'https://stillwater-persona-02.web.app'
+    },
   },
   'urlshortener': {
     displayName: 'URLShortener v1.0',
     path: '~/projects/URLShortener',
     database: 'urlshortener-db-0',
-    project: 'stillwater-sovereign-01',
-    defaultEnv: { hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', status: 'live' },
+    defaultEnv: { 
+      hostingTarget: 'stillwater-url-shortener', 
+      deployMethod: 'cloud-build', 
+      status: 'live',
+      deployUrl: 'https://stillwater-url-shortener-02.web.app'
+    },
   },
   'tokenmarket': {
     displayName: 'TokenMarket v1.0',
@@ -209,7 +238,7 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
       hostingTarget: 'stillwater-token-market', 
       deployMethod: 'firebase', 
       status: 'live',
-      deployUrl: 'https://stillwater-token-market.web.app/'
+      deployUrl: 'https://stillwater-token-market-02.web.app'
     },
   },
 };

@@ -13,33 +13,41 @@ async function main() {
   }
 
   const data = doc.data();
-  const apps = { ...data?.apps };
+  const apps = JSON.parse(JSON.stringify(data?.apps || {}));
 
   // Update promptresources
   if (apps.promptresources) {
     apps.promptresources.environments.production.hostingTarget = 'stillwater-prompt-resources';
-    apps.promptresources.environments.production.deployUrl = 'https://stillwater-prompt-resources.web.app';
+    apps.promptresources.environments.production.deployUrl = 'https://stillwater-prompt-resources-02.web.app';
     console.log("Updated promptresources in memory.");
   }
 
   // Update prompttool
   if (apps.prompttool) {
     apps.prompttool.environments.production.hostingTarget = 'stillwater-prompt-tool';
-    apps.prompttool.environments.production.deployUrl = 'https://stillwater-prompt-tool.web.app';
+    apps.prompttool.environments.production.deployUrl = 'https://stillwater-prompt-tool-02.web.app';
     console.log("Updated prompttool in memory.");
+  }
+
+  // Update ag-video-system
+  if (apps['ag-video-system']) {
+    apps['ag-video-system'].environments.production.hostingTarget = 'stillwater-video-system';
+    apps['ag-video-system'].environments.production.deployUrl = 'https://stillwater-video-system-02.web.app';
+    apps['ag-video-system'].environments.production.deployMethod = 'cloud-build';
+    console.log("Updated ag-video-system in memory.");
   }
 
   // Update promptmasterspa
   if (apps.promptmasterspa) {
     apps.promptmasterspa.environments.production.hostingTarget = 'stillwater-prompt-master';
-    apps.promptmasterspa.environments.production.deployUrl = 'https://stillwater-prompt-master.web.app';
+    apps.promptmasterspa.environments.production.deployUrl = 'https://stillwater-prompt-master-02.web.app';
     console.log("Updated promptmasterspa in memory.");
   }
 
   // Update promptaccreditation
   if (apps.promptaccreditation) {
     apps.promptaccreditation.environments.production.hostingTarget = 'stillwater-prompt-accreditation';
-    apps.promptaccreditation.environments.production.deployUrl = 'https://stillwater-prompt-accreditation.web.app';
+    apps.promptaccreditation.environments.production.deployUrl = 'https://stillwater-prompt-accreditation-02.web.app';
     console.log("Updated promptaccreditation in memory.");
   }
 
@@ -53,14 +61,14 @@ async function main() {
   // Update persona
   if (apps.persona) {
     apps.persona.environments.production.hostingTarget = 'stillwater-persona';
-    apps.persona.environments.production.deployUrl = 'https://stillwater-persona.web.app';
+    apps.persona.environments.production.deployUrl = 'https://stillwater-persona-02.web.app';
     console.log("Updated persona in memory.");
   }
 
   // Update plantune
   if (apps.plantune) {
-    apps.plantune.environments.production.hostingTarget = null;
-    apps.plantune.environments.production.deployUrl = 'https://plantune-850624280491.us-central1.run.app';
+    apps.plantune.environments.production.hostingTarget = 'stillwater-plan-tune';
+    apps.plantune.environments.production.deployUrl = 'https://stillwater-plan-tune-02.web.app';
     console.log("Updated plantune in memory.");
   }
 
@@ -89,7 +97,7 @@ async function main() {
           status: "live",
           deployMethod: "cloud-build",
           hostingTarget: "stillwater-url-shortener",
-          deployUrl: "https://urlshortener-850624280491.us-central1.run.app"
+          deployUrl: "https://stillwater-url-shortener-02.web.app"
         }
       }
     };
@@ -97,9 +105,19 @@ async function main() {
     if (!apps.urlshortener.environments) apps.urlshortener.environments = {};
     if (!apps.urlshortener.environments.production) apps.urlshortener.environments.production = {};
     apps.urlshortener.environments.production.hostingTarget = 'stillwater-url-shortener';
-    apps.urlshortener.environments.production.deployUrl = 'https://urlshortener-850624280491.us-central1.run.app';
+    apps.urlshortener.environments.production.deployUrl = 'https://stillwater-url-shortener-02.web.app';
+    apps.urlshortener.environments.production.status = 'live';
   }
   console.log("Updated urlshortener in memory.");
+
+  // Update tokenmarket
+  if (apps.tokenmarket) {
+    if (!apps.tokenmarket.environments) apps.tokenmarket.environments = {};
+    if (!apps.tokenmarket.environments.production) apps.tokenmarket.environments.production = {};
+    apps.tokenmarket.environments.production.hostingTarget = 'stillwater-token-market';
+    apps.tokenmarket.environments.production.deployUrl = 'https://stillwater-token-market-02.web.app';
+    console.log("Updated tokenmarket in memory.");
+  }
 
   // Update Firestore
   await suiteRef.update({ apps });
