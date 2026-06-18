@@ -488,8 +488,19 @@ app.post('/api/tokenmarket/trigger-index', async (req, res) => {
 // TOKENMARKET PUBLIC DEVELOPER APIS
 const tokenMarketDb = getFirestore(firebaseApp, 'tokenmarket-db-0');
 
+// ── Helper: attach SEO / discoverability headers to public TokenMarket responses ──
+function setPublicApiHeaders(res: any) {
+  res.setHeader('X-Robots-Tag', 'index, follow');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Link', '<https://fundingcloud.com/api-docs.html>; rel="describedby"');
+  res.setHeader('X-API-Version', '1.0');
+  res.setHeader('X-Powered-By', 'TokenMarket / fundingcloud.com');
+}
+
 // 1. [Sector Index] Latest calculations & weights
 app.get('/api/tokenmarket/index/latest', async (req, res) => {
+  setPublicApiHeaders(res);
   try {
     const snapshot = await tokenMarketDb.collection('market_index_history')
       .orderBy('timestamp', 'desc')
@@ -512,6 +523,7 @@ app.get('/api/tokenmarket/index/latest', async (req, res) => {
 
 // 2. [Sector Index] Historical calculations over time
 app.get('/api/tokenmarket/index/history', async (req, res) => {
+  setPublicApiHeaders(res);
   try {
     const { timeframe } = req.query;
     let limitCount = 24;
@@ -542,6 +554,7 @@ app.get('/api/tokenmarket/index/history', async (req, res) => {
 
 // 3. [Live Market] Live token ticker prices
 app.get('/api/tokenmarket/live/prices', async (req, res) => {
+  setPublicApiHeaders(res);
   try {
     const snapshot = await tokenMarketDb.collection('tokens').get();
     const tokens = snapshot.docs.map(doc => ({
@@ -558,6 +571,7 @@ app.get('/api/tokenmarket/live/prices', async (req, res) => {
 
 // 4. [Live Market] Live aggregates summary
 app.get('/api/tokenmarket/live/summary', async (req, res) => {
+  setPublicApiHeaders(res);
   try {
     const snapshot = await tokenMarketDb.collection('tokens').get();
     const tokens = snapshot.docs.map(doc => doc.data() as any);

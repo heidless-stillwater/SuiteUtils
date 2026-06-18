@@ -1,37 +1,71 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User Profiles Collection
+
+    // Helper: check if the authenticated user has the 'admin' role.
+    function isAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ─── User Profiles ────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if request.auth != null;
-      
-      // Allow profile creation if email matches uid.
-      // Bootstrap heidlessemail18@gmail.com as admin, otherwise role must be 'user'.
+
+      // Profile creation: bootstrap heidlessemail18@gmail.com as admin;
+      // all other signups get role 'user'.
       allow create: if request.auth != null && request.auth.uid == userId
         && (
           (request.resource.data.email == 'heidlessemail18@gmail.com' && request.resource.data.role == 'admin')
           || (request.resource.data.email != 'heidlessemail18@gmail.com' && request.resource.data.role == 'user')
         );
-      
-      // Allow updates to own profile, but cannot change role.
-      // Allow existing admins to update any profile.
+
+      // Users may update their own profile but cannot change their role.
+      // Admins may update any profile.
       allow update: if request.auth != null && (
         (request.auth.uid == userId && request.resource.data.role == resource.data.role)
-        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        || isAdmin()
       );
-      
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      allow delete: if isAdmin();
     }
 
-    // CMS Content Rules
+    // ─── CMS / Market Content ─────────────────────────────────────────────────
+    // Public read; admin write.
     match /market_content/{document=**} {
       allow read: if true;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isAdmin();
     }
 
-    // General Wildcard (excluding users and market_content)
+    // ─── Market Index History ─────────────────────────────────────────────────
+    // Public read (market index data is not sensitive); admin write.
+    match /market_index_history/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── Ads Configuration ───────────────────────────────────────────────────
+    // Public read (needed by AdConfigService before sign-in); admin write.
+    match /ads_config/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── App Settings ─────────────────────────────────────────────────────────
+    // Authenticated read; admin write.
+    match /settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // ─── Insights (CMS subtype) ───────────────────────────────────────────────
+    // Covered by market_content above, but listed explicitly for clarity.
+    // (No additional rule needed — market_content/{document=**} already matches.)
+
+    // ─── Deny-by-default catch-all ────────────────────────────────────────────
+    // Any collection not explicitly listed above is denied.
     match /{document=**} {
-      allow read, write: if true && !(request.path[3] == 'market_content' || request.path[3] == 'users');
+      allow read, write: if false;
     }
   }
 }

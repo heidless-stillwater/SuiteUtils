@@ -11,6 +11,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# docs
+docs/conversations
+
+
 # Environment and Secrets
 .env
 .env.*
