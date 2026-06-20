@@ -30,6 +30,7 @@ docs/conversations
 service-account*.json
 
 # Local persistence and targets
+.planning/
 .gcloud-target/
 scratch/
 BACKUPS/
