@@ -62,6 +62,13 @@ service cloud.firestore {
     // Covered by market_content above, but listed explicitly for clarity.
     // (No additional rule needed — market_content/{document=**} already matches.)
 
+    // ─── Stack Models ─────────────────────────────────────────────────────────
+    // Public read; admin write.
+    match /stack_models/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ─── Deny-by-default catch-all ────────────────────────────────────────────
     // Any collection not explicitly listed above is denied.
     match /{document=**} {

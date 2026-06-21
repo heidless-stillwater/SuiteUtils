@@ -97,76 +97,58 @@ This plan is automatically updated by the Persona Bridge when the Custom Interfa
 ### [Sovereign Sync] Neural Sync and Architect Profile Config
 - [ ] **Verification**: [VAL-SYS-076](http://localhost:5180/?validation=VAL-SYS-076) - Verify that running the `[!sync architect](command://!sync%20architect)` command merges the operating principles and correctly updates profile.json and the Firestore configuration.
 
-### [IDE Chat] Auto-detected from IDE chat
-- [ ] **Verification**: [VAL-TM-111](http://localhost:5180/?validation=VAL-TM-111) - - [ ] **Verification (VAL-TM-111)**: Manually run `npx tsx server/scripts/trigger-indexer.ts` inside the `SuiteUtils` workspace. Confirm that the script *(Auto-registered from conversation-sensor)*
+### [TokenMarket] AdSense Visual Sandbox Integration & Layout Validation
+- [ ] **Verification**: [VAL-TM-113](http://localhost:5180/?validation=VAL-TM-113) - Verify that the localhost mockup card rendering functions correctly in the visual sandbox.
 
+### [TokenMarket] Skip Local AdSense Push Queue Processing Plan
+- [ ] **Verification**: [VAL-TM-114](http://localhost:5180/?validation=VAL-TM-114) - Confirm zero local push calls and clear console outputs on `localhost`.
 
-### [IDE Chat] Auto-detected from IDE chat
-- [ ] **Verification**: [VAL-TM-112](http://localhost:5180/?validation=VAL-TM-112) - - [ ] **Verification (VAL-TM-112)**: Open your browser and navigate to `http://localhost:5173/`. Click on the new **Sector Index** icon button (Trending *(Auto-registered from conversation-sensor)*
+### [TokenMarket] Dashboard Chart Grid Alignment & Layout Plan
+- [ ] **Verification**: [VAL-TM-115](http://localhost:5180/?validation=VAL-TM-115) - Verify that the Dashboard chart renders cleanly and matches the grid layout.
 
+### [TokenMarket] Dedicated Security Rules Configuration
+- [ ] **Verification**: [VAL-TM-116](http://localhost:5180/?validation=VAL-TM-116) - Verify security rules compilation and deployment via Firebase CLI.
 
-### [TokenMarket] Sector Index Backend Calculation & Firestore Log
-- [ ] **Verification**: [VAL-TM-111](http://localhost:5180/?validation=VAL-TM-111): Manually run `npx tsx server/scripts/trigger-indexer.ts` inside the `SuiteUtils` workspace. Confirm that the script exits with `0`, outputs the established baseline, and logs a new index record to the `market_index_history` collection of `tokenmarket-db-0`.
+### [TokenMarket] CMS Frontend & Seeding Configurations
+- [ ] **Verification**: [VAL-TM-117](http://localhost:5180/?validation=VAL-TM-117) - Run TypeScript verification and check baseline data seeding.
 
-### [TokenMarket] React Sector Index Dashboard Display
-- [ ] **Verification**: [VAL-TM-112](http://localhost:5180/?validation=VAL-TM-112): Open your browser and navigate to `http://localhost:5173/`. Click on the new **Sector Index** icon button (TrendingUp) in the sidebar. Verify that:
-  - The Headline Index value loads (~1000.00).
-  - The Speculative vs. Utility Weight bar is rendered with proper percentages.
-  - The Archetype Component Weights table correctly lists NEAR, TAO, RENDER, FET, and VIRTUAL with their prices, weights, and 24h trends.
+### [TokenMarket] Architectural Code Refactoring Plan
+- [ ] **Verification**: [VAL-TM-118](http://localhost:5180/?validation=VAL-TM-118) - Verify clean compilation and local execution check of the Google Sign-in flow.
 
-### [IDE Chat] AdSense Visual Sandbox Integration & Layout Validation
-- [ ] **Verification**: [VAL-TM-113](http://localhost:5180/?validation=VAL-TM-113) - **VALIDATION_STRATEGY**: [VAL-TM-113] - Localhost mockup card rendering verification. *(Auto-registered from conversation-sensor)*
+### [TokenMarket] Google Sign-In & Role Management Refactoring
+- [ ] **Verification**: [VAL-AUTH-001](http://localhost:5180/?validation=VAL-AUTH-001) - Confirm dynamic user role assignment and clean build output.
 
+### [TokenMarket] Google User Avatar Referrer Restrictions & Dynamic Database Syncing
+- [ ] **Verification**: [VAL-AVATAR-002](http://localhost:5180/?validation=VAL-AVATAR-002) - Verify referrer policy injection and check avatar image loading.
 
-### [IDE Chat] Skip Local AdSense Push Queue Processing Plan
-- [ ] **Verification**: [VAL-TM-114](http://localhost:5180/?validation=VAL-TM-114) - **VALIDATION_STRATEGY**: [VAL-TM-114] - Confirm zero local push calls and clear console outputs on `localhost`. *(Auto-registered from conversation-sensor)*
+### [TokenMarket] Google AdSense Trust & Compliance Adjustments
+- [ ] **Verification**: [VAL-ADSENSE-003](http://localhost:5180/?validation=VAL-ADSENSE-003) - Verify trust policies, sitemap metadata, and compliance checks.
 
+### [TokenMarket] Deployment of dynamic Knowledge Base and Contextual Toggles
+- [ ] **Verification**: [VAL-KB-004](http://localhost:5180/?validation=VAL-KB-004) - Verify dynamic KB content loading and admin panel configuration checks.
 
-### [IDE Chat] Dashboard Chart Grid Alignment & Layout Plan
-- [ ] **Verification**: [VAL-TM-115](http://localhost:5180/?validation=VAL-TM-115) - **VALIDATION_STRATEGY**: [VAL-TM-115] - Verify that the Dashboard chart renders cleanly and matches the grid layout. *(Auto-registered from conversation-sensor)*
+### [TokenMarket] Manual Test Plan - Cases 1 & 2 Validation
+- [ ] **Verification**: [VAL-TM-001](http://localhost:5180/?validation=VAL-TM-001) - Verify user details and manual test cases defined in the test plan.
 
+### [TokenMarket] Manual Test Plan - Cases 3 & 4 Validation
+- [ ] **Verification**: [VAL-TM-002](http://localhost:5180/?validation=VAL-TM-002) - Verify ad suppressions and subscription levels defined in the test plan.
 
-### [IDE Chat] Execution Phase - Step 1: Dedicated Security Rules Configuration
-- [ ] **Verification**: [VAL-TM-116](http://localhost:5180/?validation=VAL-TM-116) - **VALIDATION_STRATEGY**: [VAL-TM-116] - Deploy rules using Firebase CLI and verify rules compilation. *(Auto-registered from conversation-sensor)*
+### [TokenMarket] Manual Test Plan - Cases 5 & 6 Validation
+- [ ] **Verification**: [VAL-TM-003](http://localhost:5180/?validation=VAL-TM-003) - Verify A/B experiments and variant views defined in the test plan.
 
+### [TokenMarket] Manual Test Plan - Cases 7 & 8 Validation
+- [ ] **Verification**: [VAL-TM-004](http://localhost:5180/?validation=VAL-TM-004) - Verify viewport simulator scales correctly as defined in the test plan.
 
-### [IDE Chat] Execution Phase - Step 2: CMS Frontend & Seeding Configurations
-- [ ] **Verification**: [VAL-TM-117](http://localhost:5180/?validation=VAL-TM-117) - **VALIDATION_STRATEGY**: [VAL-TM-117] - Run TypeScript verification and seeding checks. *(Auto-registered from conversation-sensor)*
+### [InferenceGateway] Base Scaffolding & Configuration
+- [x] **Verification**: [VAL-SYS-078](http://localhost:5180/?validation=VAL-SYS-078) - Verify that the newly created InferenceGateway application compiled correctly, started on port 3009, and successfully loaded its frontend configuration parameters.
 
+### [SuiteUtils] Central App Registry Registration
+- [x] **Verification**: [VAL-SYS-079](http://localhost:5180/?validation=VAL-SYS-079) - Verify that the updated STILLWATER_APPS central app registry compiles cleanly and successfully updates the user suite configuration mapping.
 
-### [IDE Chat] Execution Phase - Step 1: Architectural Code Refactoring Plan
-- [ ] **Verification**: [VAL-TM-118](http://localhost:5180/?validation=VAL-TM-118) - **VALIDATION_STRATEGY**: [VAL-TM-118] - Compilation and local execution test of Google Sign-in flow. *(Auto-registered from conversation-sensor)*
+### [InferenceGateway] Suite Service Orchestration
+- [x] **Verification**: [VAL-SYS-080](http://localhost:5180/?validation=VAL-SYS-080) - Verify that the start and stop operations for InferenceGateway complete with status code 200 OK on Port 5185 and successfully toggle process state.
 
-
-### [IDE Chat] Execution of Dynamic Google Sign-In & Role Management Refactoring
-- [ ] **Verification**: [VAL-AUTH-001](http://localhost:5180/?validation=VAL-AUTH-001) - [VAL-AUTH-001] - Dynamic role verification and clean compilation check. *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Resolution of Google User Avatar Referrer Restrictions & Dynamic Database Syncing
-- [ ] **Verification**: [VAL-AVATAR-002](http://localhost:5180/?validation=VAL-AVATAR-002) - [VAL-AVATAR-002] - Referrer policy injection and compilation type check verification. *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Execution of Google AdSense Trust & Compliance Adjustments
-- [ ] **Verification**: [VAL-ADSENSE-003](http://localhost:5180/?validation=VAL-ADSENSE-003) - [VAL-ADSENSE-003] - Trust policy compliance verification and sitemap integration sanity check. *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Deployment of dynamic Knowledge Base and Contextual Toggles
-- [ ] **Verification**: [VAL-KB-004](http://localhost:5180/?validation=VAL-KB-004) - [VAL-KB-004] - Dynamic knowledge base routing and admin content evolution checks. *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Auto-detected from IDE chat
-- [ ] **Verification**: [VAL-TM-001](http://localhost:5180/?validation=VAL-TM-001) - ENABLED - [VAL-TM-001](file:///home/heidless/projects/SuiteUtils/docs/validation-plans/PLAN_VALIDATE.md) *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Auto-detected from IDE chat
-- [ ] **Verification**: [VAL-TM-002](http://localhost:5180/?validation=VAL-TM-002) - ENABLED - [VAL-TM-002](file:///home/heidless/projects/SuiteUtils/docs/validation-plans/PLAN_VALIDATE.md) *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Auto-detected from IDE chat
-- [ ] **Verification**: [VAL-TM-003](http://localhost:5180/?validation=VAL-TM-003) - ENABLED - [VAL-TM-003](file:///home/heidless/projects/SuiteUtils/docs/validation-plans/PLAN_VALIDATE.md) *(Auto-registered from conversation-sensor)*
-
-
-### [IDE Chat] Auto-detected from IDE chat
-- [ ] **Verification**: [VAL-TM-004](http://localhost:5180/?validation=VAL-TM-004) - ENABLED - [VAL-TM-004](file:///home/heidless/projects/SuiteUtils/docs/validation-plans/PLAN_VALIDATE.md) *(Auto-registered from conversation-sensor)*
+### [InferenceGateway] Local Ollama Sandbox Routing & Fallback Verification
+- [x] **Verification**: [VAL-SYS-081](http://localhost:5180/?validation=VAL-SYS-081) - Verify that selecting Llama 3 in the playground routes queries directly to the local Ollama API on Port 11434 with zero-cost billing logs, and automatically falls back to Gemini 2.5 Flash with warning banners when the daemon is offline.
 
 <!-- AUTOGENERATED END -->

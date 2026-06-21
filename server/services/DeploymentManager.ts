@@ -562,7 +562,8 @@ export class DeploymentManager extends EventEmitter {
         'plantune': 'plantune',
         'suiteutils': 'utils',
         'persona': 'persona',
-        'urlshortener': 'urlshortener'
+        'urlshortener': 'urlshortener',
+        'inferencegateway': 'inferencegateway'
     };
 
     public async startLocalApp(appId: string, workspaceId: string = 'stillwater-suite'): Promise<void> {

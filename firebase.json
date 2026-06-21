@@ -10,6 +10,7 @@
     { "database": "autovideo-db-0", "rules": "sovereign.rules" },
     { "database": "urlshortener-db-0", "rules": "sovereign.rules" },
     { "database": "tokenmarket-db-0", "rules": "tokenmarket.rules" },
+    { "database": "inferencegateway-db-0", "rules": "sovereign.rules" },
     { "database": "(default)", "rules": "firestore.rules" }
   ],
   "hosting": {

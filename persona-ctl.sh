@@ -9,6 +9,9 @@ PORT=3005
 BRIDGE_PORT=3008
 LOG_FILE="/home/heidless/projects/SuiteUtils/persona.log"
 
+CONFIG_FILE="/home/heidless/projects/SuiteUtils/suite.config.json"
+LIGHT_MODE=$(node -e 'const fs=require("fs"); const c=JSON.parse(fs.readFileSync("'"$CONFIG_FILE"'", "utf8")); console.log(c.lightMode || false);' 2>/dev/null || echo "false")
+
 case "$1" in
     start)
         echo "🚀 Starting ${APP_NAME} Stack (UI:${PORT}, Bridge:${BRIDGE_PORT})..."
@@ -17,7 +20,7 @@ case "$1" in
             exit 1
         fi
         cd $APP_DIR
-        nohup env PORT=${PORT} ./scripts/start-persona.sh ${PORT} ${BRIDGE_PORT} > $LOG_FILE 2>&1 &
+        nohup env PORT=${PORT} LIGHT_MODE=${LIGHT_MODE} ./scripts/start-persona.sh ${PORT} ${BRIDGE_PORT} > $LOG_FILE 2>&1 &
         echo "⏳ ${APP_NAME} stack starting... (waiting up to 15s for dynamic verification)"
         for i in {1..15}; do
             UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")

@@ -241,6 +241,18 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
       deployUrl: 'https://stillwater-token-market-02.web.app'
     },
   },
+  'inferencegateway': {
+    displayName: 'InferenceGateway v1.0',
+    path: '~/projects/InferenceGateway',
+    database: 'inferencegateway-db-0',
+    project: 'stillwater-sovereign-01',
+    defaultEnv: { 
+      hostingTarget: 'stillwater-inference-gateway', 
+      deployMethod: 'firebase', 
+      status: 'live',
+      deployUrl: 'http://localhost:3009'
+    },
+  },
 };
 
 // ============================================================

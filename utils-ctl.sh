@@ -9,20 +9,36 @@ PORT=5180
 API_PORT=5185
 LOG_FILE="/home/heidless/projects/SuiteUtils/utils.log"
 
+CONFIG_FILE="/home/heidless/projects/SuiteUtils/suite.config.json"
+LIGHT_MODE=$(node -e 'const fs=require("fs"); const c=JSON.parse(fs.readFileSync("'"$CONFIG_FILE"'", "utf8")); console.log(c.lightMode || false);' 2>/dev/null || echo "false")
+
 case "$1" in
     start)
-        echo "🚀 Starting ${APP_NAME} Stack (UI:${PORT}, API:${API_PORT})..."
-        if ss -lnt | grep -qE ":${PORT}(\s|$)" || ss -lnt | grep -qE ":${API_PORT}(\s|$)"; then
-            echo "⚠️ ${APP_NAME} components are already running."
-            exit 1
+        if [ "$LIGHT_MODE" == "true" ]; then
+            echo "🚀 Starting ${APP_NAME} in LIGHT mode (API only, port ${API_PORT})..."
+            if ss -lnt | grep -qE ":${API_PORT}(\s|$)"; then
+                echo "⚠️ ${APP_NAME} API component is already running."
+                exit 1
+            fi
+            cd $APP_DIR
+            nohup env GOOGLE_APPLICATION_CREDENTIALS="/home/heidless/projects/SuiteUtils/suite-admin-sovereign.json" npm run dev:api > $LOG_FILE 2>&1 &
+        else
+            echo "🚀 Starting ${APP_NAME} Stack (UI:${PORT}, API:${API_PORT})..."
+            if ss -lnt | grep -qE ":${PORT}(\s|$)" || ss -lnt | grep -qE ":${API_PORT}(\s|$)"; then
+                echo "⚠️ ${APP_NAME} components are already running."
+                exit 1
+            fi
+            cd $APP_DIR
+            nohup env GOOGLE_APPLICATION_CREDENTIALS="/home/heidless/projects/SuiteUtils/suite-admin-sovereign.json" npm run dev:all > $LOG_FILE 2>&1 &
         fi
-        cd $APP_DIR
-        nohup env GOOGLE_APPLICATION_CREDENTIALS="/home/heidless/projects/SuiteUtils/suite-admin-sovereign.json" npm run dev:all > $LOG_FILE 2>&1 &
+
         echo "⏳ ${APP_NAME} stack starting... (waiting up to 15s for dynamic verification)"
         for i in {1..15}; do
             UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
             API_UP=$(ss -lnt | grep -cE ":${API_PORT}(\s|$)")
-            if [ "$UI_UP" -gt 0 ] && [ "$API_UP" -gt 0 ]; then
+            if [ "$LIGHT_MODE" == "true" ] && [ "$API_UP" -gt 0 ]; then
+                break
+            elif [ "$LIGHT_MODE" != "true" ] && [ "$UI_UP" -gt 0 ] && [ "$API_UP" -gt 0 ]; then
                 break
             fi
             sleep 1
@@ -30,14 +46,23 @@ case "$1" in
 
         UI_UP=$(ss -lnt | grep -cE ":${PORT}(\s|$)")
         API_UP=$(ss -lnt | grep -cE ":${API_PORT}(\s|$)")
-        if [ "$UI_UP" -gt 0 ] && [ "$API_UP" -gt 0 ]; then
-            echo "✅ ${APP_NAME} is FULLY UP (UI: ${PORT} | API: ${API_PORT})"
-        elif [ "$UI_UP" -gt 0 ] || [ "$API_UP" -gt 0 ]; then
-            echo "⚠️ ${APP_NAME} is DEGRADED (UI: $([ "$UI_UP" -gt 0 ] && echo UP || echo DOWN) | API: $([ "$API_UP" -gt 0 ] && echo UP || echo DOWN)). Last log:"
-            tail -n 10 $LOG_FILE 2>/dev/null
+        if [ "$LIGHT_MODE" == "true" ]; then
+            if [ "$API_UP" -gt 0 ]; then
+                echo "✅ ${APP_NAME} is UP in LIGHT mode (API serving UI: ${API_PORT})"
+            else
+                echo "❌ ${APP_NAME} failed to start in LIGHT mode. Last log:"
+                tail -n 10 $LOG_FILE 2>/dev/null
+            fi
         else
-            echo "❌ ${APP_NAME} failed to start. Last log:"
-            tail -n 10 $LOG_FILE 2>/dev/null
+            if [ "$UI_UP" -gt 0 ] && [ "$API_UP" -gt 0 ]; then
+                echo "✅ ${APP_NAME} is FULLY UP (UI: ${PORT} | API: ${API_PORT})"
+            elif [ "$UI_UP" -gt 0 ] || [ "$API_UP" -gt 0 ]; then
+                echo "⚠️ ${APP_NAME} is DEGRADED (UI: $([ "$UI_UP" -gt 0 ] && echo UP || echo DOWN) | API: $([ "$API_UP" -gt 0 ] && echo UP || echo DOWN)). Last log:"
+                tail -n 10 $LOG_FILE 2>/dev/null
+            else
+                echo "❌ ${APP_NAME} failed to start. Last log:"
+                tail -n 10 $LOG_FILE 2>/dev/null
+            fi
         fi
         ;;
     stop)
@@ -55,12 +80,20 @@ case "$1" in
         PID_UI=$(ss -lntp | grep -E ":${PORT}(\s|$)" | grep -oP 'pid=\K\d+' | head -n 1)
         PID_API=$(ss -lntp | grep -E ":${API_PORT}(\s|$)" | grep -oP 'pid=\K\d+' | head -n 1)
         
-        if [ -n "$PID_UI" ] && [ -n "$PID_API" ]; then
-            echo "✅ ${APP_NAME} is FULLY UP (UI: $PID_UI | API: $PID_API)"
-        elif [ -n "$PID_UI" ] || [ -n "$PID_API" ]; then
-            echo "⚠️ ${APP_NAME} is DEGRADED (UI: ${PID_UI:-DOWN} | API: ${PID_API:-DOWN})"
+        if [ "$LIGHT_MODE" == "true" ]; then
+            if [ -n "$PID_API" ]; then
+                echo "✅ ${APP_NAME} is UP in LIGHT mode (API serving UI: $PID_API)"
+            else
+                echo "❌ ${APP_NAME} is DOWN"
+            fi
         else
-            echo "❌ ${APP_NAME} is DOWN"
+            if [ -n "$PID_UI" ] && [ -n "$PID_API" ]; then
+                echo "✅ ${APP_NAME} is FULLY UP (UI: $PID_UI | API: $PID_API)"
+            elif [ -n "$PID_UI" ] || [ -n "$PID_API" ]; then
+                echo "⚠️ ${APP_NAME} is DEGRADED (UI: ${PID_UI:-DOWN} | API: ${PID_API:-DOWN})"
+            else
+                echo "❌ ${APP_NAME} is DOWN"
+            fi
         fi
         echo "--- Terminal Log (Last 10 Lines) ---"
         tail -n 10 $LOG_FILE 2>/dev/null || echo "[No log file found]"

@@ -119,7 +119,8 @@ export class HealthScanner {
       'persona': 3005,
       'suiteutils': 5185,
       'urlshortener': 3006,
-      'tokenmarket': 3007
+      'tokenmarket': 3007,
+      'inferencegateway': 3009
     };
 
     const port = portMap[id];
