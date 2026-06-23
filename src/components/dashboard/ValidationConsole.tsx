@@ -38,6 +38,38 @@ export default function ValidationConsole({ selectedId, onSelect, compact = fals
   const [sortOrder, setSortOrder] = useState<SortOrder>('DESC');
   const [statusFilters, setStatusFilters] = useState<('PASS' | 'PENDING' | 'FAIL')[]>(['PENDING']);
 
+  const [autoValidate, setAutoValidate] = useState<boolean>(true);
+  const [togglingVal, setTogglingVal] = useState(false);
+  
+  const fetchValConfig = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/validation-config`);
+      if (res.ok) {
+        const data = await res.json();
+        setAutoValidate(data.autoValidate);
+      }
+    } catch (err) {
+      console.error('Failed to fetch validation config:', err);
+    }
+  };
+
+  const handleToggleValConfig = async () => {
+    setTogglingVal(true);
+    try {
+      const res = await fetch(`${API_URL}/api/validation-config/toggle`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAutoValidate(data.autoValidate);
+      }
+    } catch (err) {
+      console.error('Failed to toggle validation config:', err);
+    } finally {
+      setTogglingVal(false);
+    }
+  };
+
   const toggleStatusFilter = (status: 'PASS' | 'PENDING' | 'FAIL') => {
     setStatusFilters(prev => 
       prev.includes(status) 
@@ -89,6 +121,7 @@ export default function ValidationConsole({ selectedId, onSelect, compact = fals
 
   useEffect(() => {
     fetchValidations();
+    fetchValConfig();
   }, [refreshTrigger]);
 
   useEffect(() => {
@@ -519,7 +552,21 @@ export default function ValidationConsole({ selectedId, onSelect, compact = fals
                 {validations.length}
               </span>
             </div>
-            <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+            <div className="flex items-center gap-2">
+              <button
+                disabled={togglingVal}
+                onClick={handleToggleValConfig}
+                className={cn(
+                  "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1",
+                  autoValidate 
+                    ? "bg-green-500/10 border-green-500/20 text-green-400" 
+                    : "bg-red-500/10 border-red-500/20 text-red-400"
+                )}
+                title="Click to toggle auto-generation of manual validations in chat"
+              >
+                Auto-Val: {autoValidate ? 'ON' : 'OFF'}
+              </button>
+              <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
               <button 
                 onClick={() => setViewMode('GROUPED')}
                 className={cn(
@@ -538,6 +585,7 @@ export default function ValidationConsole({ selectedId, onSelect, compact = fals
               >
                 <List size={12} />
               </button>
+            </div>
             </div>
           </div>
 
@@ -654,10 +702,25 @@ export default function ValidationConsole({ selectedId, onSelect, compact = fals
             </div>
             <div>
               <h2 className="text-sm font-black text-white uppercase tracking-widest leading-none mb-1">Validation Backlog</h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-mono text-primary font-bold">{validations.length} Points Detected</span>
                 <span className="text-[10px] text-white/20">•</span>
                 <span className="text-[10px] text-white/40 uppercase tracking-tighter">Manual Protocol</span>
+                <span className="text-[10px] text-white/20">•</span>
+                <button
+                  disabled={togglingVal}
+                  onClick={handleToggleValConfig}
+                  className={cn(
+                    "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5",
+                    autoValidate 
+                      ? "bg-green-500/10 border-green-500/30 text-green-400" 
+                      : "bg-red-500/10 border-red-500/30 text-red-400"
+                  )}
+                  title="Click to toggle auto-generation of manual validations in chat"
+                >
+                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", autoValidate ? "bg-green-400" : "bg-red-400")} />
+                  Auto-Val: {autoValidate ? 'ENABLED' : 'DISABLED'}
+                </button>
               </div>
             </div>
           </div>

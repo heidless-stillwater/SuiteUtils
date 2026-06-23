@@ -15,6 +15,7 @@ import {
   Zap,
   Users,
   Share2,
+  Cpu,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSuite } from '../../contexts/SuiteContext';
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { path: '/persona', icon: Users, label: 'Sovereign Persona' },
   { path: '/deploy', icon: Rocket, label: 'Deploy Console' },
   { path: '/history', icon: History, label: 'Deploy History' },
+  { path: '/inference', icon: Cpu, label: 'Inference Admin' },
   { path: '/workspace', icon: Layers, label: 'Workspace' },
   { path: '/backups', icon: Database, label: 'Backups' },
   { path: '/db-admin', icon: Zap, label: 'DB Admin' },

@@ -75,6 +75,11 @@ export const registryDb = getFirestore(adminApp, 'prompttool-db-0');
 export const personaDb = getFirestore(adminApp, 'persona-db-0');
 
 /**
+ * InferenceGateway Database Accessor
+ */
+export const inferenceDb = getFirestore(adminApp, 'inferencegateway-db-0');
+
+/**
  * Auth Accessor
  */
 export const adminAuth = getAuth(adminApp);

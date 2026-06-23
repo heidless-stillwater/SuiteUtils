@@ -205,7 +205,7 @@ export function PersonaPage() {
                   <h4 className={`text-[11px] font-black uppercase tracking-widest ${selectedId === arch.id ? 'text-white' : 'text-white/40'}`}>
                     {arch.archetype}
                   </h4>
-                  <p className="text-[8px] font-mono text-white/20 uppercase mt-0.5">{arch.expertise.split(',')[0]}</p>
+                  <p className="text-[8px] font-mono text-white/20 uppercase mt-0.5">{arch.expertise?.split(',')[0] || ''}</p>
                 </div>
                 {selectedId === arch.id && <ChevronRight className="w-4 h-4 text-primary" />}
               </button>

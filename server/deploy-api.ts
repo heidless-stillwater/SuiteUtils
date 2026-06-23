@@ -1,7 +1,7 @@
 import './services/config-env.js';
 import express from 'express';
 
-import { suiteDb as firestore, adminApp as firebaseApp, personaDb } from './services/FirebaseAdmin.js';
+import { suiteDb as firestore, adminApp as firebaseApp, personaDb, inferenceDb } from './services/FirebaseAdmin.js';
 import { Timestamp, getFirestore } from 'firebase-admin/firestore';
 import { MigrationManager } from './services/MigrationManager.js';
 
@@ -15,7 +15,7 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
 }
 import cors from 'cors';
 import multer from 'multer';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs-extra';
 import os from 'os';
@@ -62,6 +62,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-workspace-id'],
   credentials: true
 }));
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
 app.use(express.json());
 
 app.get('/api/verify-code', (req, res) => {
@@ -252,7 +256,15 @@ app.delete('/api/validations/:id', async (req, res) => {
 const distPath = path.join(process.cwd(), 'dist');
 if (fs.existsSync(distPath)) {
   console.log(`[Server] Serving static files from: ${distPath}`);
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Expires', '0');
+        res.setHeader('Pragma', 'no-cache');
+      }
+    }
+  }));
 }
 
 // Global Access Logger
@@ -1872,6 +1884,464 @@ app.get('/api/backups/restore', async (req, res) => {
   } finally {
     res.end();
   }
+});
+
+// ============================================================
+// GCP Inference VM Deploy & Control
+// ============================================================
+interface InferenceJob {
+  status: 'idle' | 'running' | 'success' | 'failed';
+  action: 'START' | 'STOP';
+  gpuType: 'l4' | 't4' | 'none';
+  logs: string[];
+  startTime: number;
+  elapsed: number;
+}
+
+let activeInferenceJob: InferenceJob = {
+  status: 'idle',
+  action: 'START',
+  gpuType: 'none',
+  logs: [],
+  startTime: 0,
+  elapsed: 0
+};
+
+app.post('/api/inference/deploy', async (req, res) => {
+  const { action, gpu } = req.body;
+  if (!action || (action !== 'START' && action !== 'STOP')) {
+    return res.status(400).json({ error: "Invalid action. Use 'START' or 'STOP'." });
+  }
+
+  if (activeInferenceJob.status === 'running') {
+    return res.status(400).json({ error: "An inference VM deployment or shutdown is already in progress." });
+  }
+
+  const gpuType = (gpu || 'none').toLowerCase() as 'l4' | 't4' | 'none';
+  
+  // Reset job status
+  activeInferenceJob = {
+    status: 'running',
+    action,
+    gpuType,
+    logs: [
+      `[${new Date().toISOString()}] Initiating VM ${action} sequence...`
+    ],
+    startTime: Date.now(),
+    elapsed: 0
+  };
+
+  const scriptPath = action === 'START' ? './scripts/gcp-deploy-ollama.sh' : './scripts/gcp-vm-control.sh';
+  const args = action === 'START' ? ['--gpu', gpuType] : ['stop'];
+  const cwd = '/home/heidless/projects/InferenceGateway';
+
+  console.log(`[Inference Deploy] Spawning: ${scriptPath} ${args.join(' ')} in ${cwd}`);
+  activeInferenceJob.logs.push(`$ cd ${cwd} && ${scriptPath} ${args.join(' ')}`);
+
+  try {
+    const child = spawn(scriptPath, args, {
+      cwd,
+      env: { ...process.env, PATH: process.env.PATH }
+    });
+
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+
+    const handleData = (data: Buffer, isError: boolean) => {
+      const text = data.toString('utf8');
+      if (isError) {
+        stderrBuffer += text;
+      } else {
+        stdoutBuffer += text;
+      }
+
+      const activeBuffer = isError ? stderrBuffer : stdoutBuffer;
+      const lines = activeBuffer.split('\n');
+      if (isError) {
+        stderrBuffer = lines.pop() || '';
+      } else {
+        stdoutBuffer = lines.pop() || '';
+      }
+
+      for (const line of lines) {
+        // Strip ANSI escape codes
+        const cleanLine = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
+        if (cleanLine) {
+          activeInferenceJob.logs.push(cleanLine);
+        }
+      }
+    };
+
+    child.stdout.on('data', (data) => handleData(data, false));
+    child.stderr.on('data', (data) => handleData(data, true));
+
+    child.on('close', async (code) => {
+      // Flush remaining buffers
+      const finalStdout = stdoutBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
+      const finalStderr = stderrBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
+      if (finalStdout) activeInferenceJob.logs.push(finalStdout);
+      if (finalStderr) activeInferenceJob.logs.push(finalStderr);
+
+      activeInferenceJob.elapsed = Math.floor((Date.now() - activeInferenceJob.startTime) / 1000);
+
+      if (code === 0) {
+        activeInferenceJob.status = 'success';
+        activeInferenceJob.logs.push(`[${new Date().toISOString()}] Sequence completed successfully.`);
+
+        // Find endpoint IP
+        let extractedEndpoint = '';
+        for (const line of activeInferenceJob.logs) {
+          if (line.includes('Remote Ollama Endpoint:')) {
+            const match = line.match(/Remote Ollama Endpoint:\s*(http:\/\/[0-9.]+:\d+)/i);
+            if (match && match[1]) {
+              extractedEndpoint = match[1];
+              break;
+            }
+          }
+        }
+
+        // Update Firestore
+        try {
+          const updateData: any = {
+            vmStatus: action === 'START' ? 'RUNNING' : 'STOPPED',
+            updatedAt: new Date().toISOString()
+          };
+          if (action === 'START' && extractedEndpoint) {
+            updateData.gcpEndpoint = extractedEndpoint;
+          }
+          if (action === 'START') {
+            const hardwareMap: Record<string, string> = {
+              l4: 'NVIDIA L4 (24GB VRAM)',
+              t4: 'NVIDIA Tesla T4 (16GB VRAM)',
+              none: 'CPU Only (e2-standard-8)'
+            };
+            updateData.gcpHardware = hardwareMap[gpuType] || 'CPU Only (e2-standard-8)';
+          }
+
+          await inferenceDb.collection('admin').doc('inferenceConfig').update(updateData);
+          console.log('[Inference Deploy] Firestore updated successfully:', updateData);
+        } catch (dbErr: any) {
+          console.error('[Inference Deploy] Firestore update failed:', dbErr.message);
+          activeInferenceJob.logs.push(`[ERROR] Firestore config update failed: ${dbErr.message}`);
+        }
+      } else {
+        activeInferenceJob.status = 'failed';
+        activeInferenceJob.logs.push(`[${new Date().toISOString()}] Sequence failed with exit code ${code}.`);
+
+        // Self-healing: If stopping a VM and it fails because it was not found/doesn't exist,
+        // sync the Firestore state to STOPPED anyway so the user is not locked out of starting it.
+        if (action === 'STOP') {
+          const hasNotFoundError = activeInferenceJob.logs.some(line => 
+            line.toLowerCase().includes('not found') || 
+            line.toLowerCase().includes('404') || 
+            line.toLowerCase().includes('does not exist')
+          );
+          if (hasNotFoundError) {
+            try {
+              await inferenceDb.collection('admin').doc('inferenceConfig').update({
+                vmStatus: 'STOPPED',
+                updatedAt: new Date().toISOString()
+              });
+              activeInferenceJob.logs.push(`[INFO] VM not found on GCP. Synced state to STOPPED.`);
+            } catch (dbErr: any) {
+              console.error('[Inference Deploy] Failed to sync stopped state:', dbErr.message);
+            }
+          }
+        }
+      }
+    });
+
+    res.json({ success: true, message: `Deployment ${action} sequence initiated.` });
+  } catch (err: any) {
+    console.error('[Inference Deploy] Failed to spawn process:', err);
+    activeInferenceJob.status = 'failed';
+    activeInferenceJob.logs.push(`[ERROR] Failed to start process: ${err.message}`);
+    res.status(500).json({ error: `Failed to initiate process: ${err.message}` });
+  }
+});
+
+app.get('/api/inference/deploy/status', (req, res) => {
+  if (activeInferenceJob.status === 'running') {
+    activeInferenceJob.elapsed = Math.floor((Date.now() - activeInferenceJob.startTime) / 1000);
+  }
+  res.json({
+    status: activeInferenceJob.status,
+    action: activeInferenceJob.action,
+    gpuType: activeInferenceJob.gpuType,
+    logs: activeInferenceJob.logs,
+    elapsed: activeInferenceJob.elapsed
+  });
+});
+
+app.post('/api/inference/config', async (req, res) => {
+  const updateData = req.body;
+  try {
+    await inferenceDb.collection('admin').doc('inferenceConfig').update(updateData);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[Inference Config] Update failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/inference/proxy', async (req, res) => {
+  const { url, method, headers, body } = req.body;
+  try {
+    const response = await fetch(url, {
+      method: method || 'POST',
+      headers: headers || {},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      const text = await response.text();
+      res.send(text);
+    }
+  } catch (err: any) {
+    console.error('[Inference Proxy] Relay failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function syncCloudModelsInRegistry() {
+  try {
+    const docRef = inferenceDb.collection('admin').doc('modelRegistry');
+    const docSnap = await docRef.get();
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      const catalog = data?.catalog || [];
+      
+      const cloudModelsToAdd = [
+        { name: 'gemini-2.5-flash', tags: ['cloud', 'google'], size: 'N/A', description: 'Google high-speed model.' },
+        { name: 'gpt-4o', tags: ['cloud', 'openai'], size: 'N/A', description: 'OpenAI flagship omni model.' },
+        { name: 'claude-3.5-sonnet', tags: ['cloud', 'anthropic'], size: 'N/A', description: 'Anthropic high-reasoning model.' },
+        { name: 'deepseek-v3', tags: ['cloud', 'deepseek'], size: 'N/A', description: 'DeepSeek reasoning model.' }
+      ];
+      
+      let updated = false;
+      const newCatalog = [...catalog];
+      for (const model of cloudModelsToAdd) {
+        if (!catalog.some((m: any) => m.name === model.name)) {
+          newCatalog.push(model);
+          updated = true;
+        }
+      }
+      
+      if (updated) {
+        await docRef.update({
+          catalog: newCatalog,
+          updatedAt: new Date().toISOString()
+        });
+        console.log('[Inference Sync] Successfully registered cloud models in database.');
+      }
+    }
+  } catch (err: any) {
+    console.error('[Inference Sync] Error syncing cloud models in registry:', err.message);
+  }
+}
+syncCloudModelsInRegistry();
+
+let cachedBillingInfo: { tier: string; quotas: Record<string, string> } | null = null;
+async function detectGcpBillingInfo() {
+  try {
+    const output = execSync('gcloud compute regions describe us-central1 --format="json(quotas)"', { encoding: 'utf8' });
+    const parsed = JSON.parse(output);
+    const quotas = parsed.quotas || [];
+    
+    const t4LimitObj = quotas.find((q: any) => q.metric === 'NVIDIA_T4_GPUS');
+    const l4LimitObj = quotas.find((q: any) => q.metric === 'NVIDIA_L4_GPUS');
+    
+    const t4Limit = t4LimitObj ? t4LimitObj.limit : 0;
+    const l4Limit = l4LimitObj ? l4LimitObj.limit : 0;
+    
+    const isFree = t4Limit === 0 && l4Limit === 0;
+    cachedBillingInfo = {
+      tier: isFree ? 'Free Tier' : 'Paid Tier',
+      quotas: {
+        l4: l4Limit > 0 ? 'AVAILABLE' : 'RESTRICTED',
+        t4: t4Limit > 0 ? 'AVAILABLE' : 'RESTRICTED'
+      }
+    };
+    console.log('[Billing Detector] Detected billing info:', cachedBillingInfo);
+  } catch (err: any) {
+    console.error('[Billing Detector] Failed to detect billing info:', err.message);
+    cachedBillingInfo = {
+      tier: 'Unknown Tier',
+      quotas: {
+        l4: 'RESTRICTED',
+        t4: 'RESTRICTED'
+      }
+    };
+  }
+}
+detectGcpBillingInfo();
+
+app.get('/api/inference/billing', async (req, res) => {
+  if (!cachedBillingInfo || req.query.refresh === 'true') {
+    await detectGcpBillingInfo();
+  }
+  res.json(cachedBillingInfo);
+});
+
+// ============================================================
+// Validation Engine Configuration (autoValidate toggle)
+// ============================================================
+app.get('/api/validation-config', async (req, res) => {
+  try {
+    const docRef = personaDb.collection('config').doc('persona_architect');
+    const docSnap = await docRef.get();
+    let autoValidate = true;
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      autoValidate = data?.autoValidate !== false;
+    }
+    res.json({ autoValidate });
+  } catch (err: any) {
+    console.error('Failed to get validation config:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/validation-config/toggle', async (req, res) => {
+  try {
+    const docRef = personaDb.collection('config').doc('persona_architect');
+    const docSnap = await docRef.get();
+    let currentVal = true;
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      currentVal = data?.autoValidate !== false;
+    }
+    const newVal = !currentVal;
+    
+    // Update Firestore
+    await docRef.set({ autoValidate: newVal, lastSyncAt: new Date().toISOString() }, { merge: true });
+    
+    // Update local profile.json
+    const personaConfigPath = path.join(os.homedir(), '.config', 'persona', 'profile.json');
+    if (fs.existsSync(personaConfigPath)) {
+      try {
+        const profile = JSON.parse(fs.readFileSync(personaConfigPath, 'utf8'));
+        profile.autoValidate = newVal;
+        profile.lastSyncAt = new Date().toISOString();
+        fs.writeFileSync(personaConfigPath, JSON.stringify(profile, null, 2), 'utf8');
+        console.log('[deploy-api] Successfully updated local Persona profile.json to', newVal);
+      } catch (e: any) {
+        console.error('[deploy-api] Failed to update local Persona profile.json:', e.message);
+      }
+    }
+    
+    res.json({ autoValidate: newVal });
+  } catch (err: any) {
+    console.error('Failed to toggle validation config:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// Ollama Model Pull (SSE proxy to avoid browser CORS)
+// ============================================================
+app.post('/api/ollama/pull', async (req, res) => {
+  const { modelName, endpoint } = req.body as { modelName: string; endpoint: string };
+
+  if (!modelName || !endpoint) {
+    return res.status(400).json({ error: 'modelName and endpoint are required' });
+  }
+
+  // Set up SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering if proxied
+  res.flushHeaders();
+
+  const sendEvent = (data: string) => {
+    res.write(`data: ${data}\n\n`);
+  };
+
+  const targetUrl = new URL('/api/pull', endpoint);
+  const body = JSON.stringify({ name: modelName, stream: true });
+
+  // Use Node's built-in http/https to make the upstream request
+  const protocol = targetUrl.protocol === 'https:' ? await import('https') : await import('http');
+  const options = {
+    hostname: targetUrl.hostname,
+    port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+    path: targetUrl.pathname,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+    timeout: 30 * 60 * 1000, // 30 minute timeout for large models
+  };
+
+  console.log(`[Ollama Pull] Starting pull of '${modelName}' from ${endpoint}`);
+  sendEvent(JSON.stringify({ status: 'starting', model: modelName }));
+
+  const upstream = protocol.request(options, (upstreamRes) => {
+    let buffer = '';
+
+    upstreamRes.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      // NDJSON: split on newlines, process each complete line
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            sendEvent(JSON.stringify(parsed));
+          } catch {
+            // Not valid JSON, send as raw status
+            sendEvent(JSON.stringify({ status: trimmed }));
+          }
+        }
+      }
+    });
+
+    upstreamRes.on('end', () => {
+      // Flush any remaining buffer content
+      if (buffer.trim()) {
+        try {
+          sendEvent(JSON.stringify(JSON.parse(buffer.trim())));
+        } catch {
+          sendEvent(JSON.stringify({ status: buffer.trim() }));
+        }
+      }
+      console.log(`[Ollama Pull] Completed pull of '${modelName}'`);
+      sendEvent('[DONE]');
+      res.end();
+    });
+  });
+
+  upstream.on('error', (err: Error) => {
+    console.error(`[Ollama Pull] Error pulling '${modelName}':`, err.message);
+    sendEvent(JSON.stringify({ error: err.message }));
+    sendEvent('[DONE]');
+    res.end();
+  });
+
+  upstream.on('timeout', () => {
+    console.error(`[Ollama Pull] Timeout pulling '${modelName}'`);
+    upstream.destroy();
+    sendEvent(JSON.stringify({ error: 'Request timed out' }));
+    sendEvent('[DONE]');
+    res.end();
+  });
+
+  upstream.write(body);
+  upstream.end();
+
+  // Clean up if client disconnects early
+  req.on('close', () => {
+    console.log(`[Ollama Pull] Client disconnected during pull of '${modelName}'`);
+    upstream.destroy();
+  });
 });
 
 // SPA fallback: handle client-side routing (must be LAST)
