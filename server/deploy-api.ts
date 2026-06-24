@@ -2344,6 +2344,126 @@ app.post('/api/ollama/pull', async (req, res) => {
   });
 });
 
+// Proxy endpoint for getting Ollama tags
+app.get('/api/ollama/tags', async (req, res) => {
+  const { endpoint } = req.query as { endpoint: string };
+  if (!endpoint) {
+    return res.status(400).json({ error: 'endpoint query parameter is required' });
+  }
+  try {
+    const response = await fetch(`${endpoint}/api/tags`);
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    console.error(`[Ollama Proxy Tags] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy endpoint for deleting Ollama models
+app.post('/api/ollama/delete', async (req, res) => {
+  const { name, endpoint } = req.body as { name: string; endpoint: string };
+  if (!name || !endpoint) {
+    return res.status(400).json({ error: 'name and endpoint are required' });
+  }
+  try {
+    const response = await fetch(`${endpoint}/api/delete`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error(`[Ollama Proxy Delete] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy endpoint for Ollama generate — streams NDJSON response as SSE
+app.post('/api/ollama/generate', async (req, res) => {
+  const { model, prompt, endpoint, stream = true } = req.body as {
+    model: string;
+    prompt: string;
+    endpoint: string;
+    stream?: boolean;
+  };
+
+  if (!model || !prompt || !endpoint) {
+    return res.status(400).json({ error: 'model, prompt, and endpoint are required' });
+  }
+
+  try {
+    const upstream = await fetch(`${endpoint}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: true })
+    });
+
+    if (!upstream.ok) {
+      const errText = await upstream.text();
+      return res.status(upstream.status).json({ error: errText || `Upstream returned ${upstream.status}` });
+    }
+
+    if (!upstream.body) {
+      return res.status(502).json({ error: 'No response body from Ollama' });
+    }
+
+    // Stream as SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const reader = (upstream.body as any).getReader ? (upstream.body as any).getReader() : null;
+    if (!reader) {
+      return res.status(502).json({ error: 'Streaming not supported by upstream' });
+    }
+
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const parsed = JSON.parse(trimmed);
+            res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+            if (parsed.done) break;
+          } catch { /* skip non-JSON lines */ }
+        }
+      }
+    } finally {
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
+  } catch (err: any) {
+    console.error('[Ollama Proxy Generate] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+
+  req.on('close', () => {
+    console.log(`[Ollama Generate] Client disconnected`);
+  });
+});
+
 // SPA fallback: handle client-side routing (must be LAST)
 app.get('*any', (req, res) => {
   const distPath = path.join(process.cwd(), 'dist');

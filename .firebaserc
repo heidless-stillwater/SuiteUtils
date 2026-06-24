@@ -1,7 +1,7 @@
 {
   "projects": {
-    "sovereign-01": "stillwater-sovereign-01",
-    "sovereign-02": "stillwater-sovereign-02"
+    "heidless-apps-2": "heidless-apps-2",
+    "stillwater-sovereign-02": "stillwater-sovereign-02"
   },
   "targets": {
     "heidless-apps-2": {

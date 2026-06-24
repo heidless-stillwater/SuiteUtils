@@ -3,7 +3,7 @@
 
 set -e
 
-SRC_PROJECT="stillwater-sovereign-01"
+SRC_PROJECT="heidless-apps-2"
 TGT_PROJECT="stillwater-sovereign-02"
 
 echo "🔐 Stillwater Sovereign Authentication Migration Tool"
@@ -13,8 +13,8 @@ echo "📤 Target Project: $TGT_PROJECT"
 echo ""
 
 # 1. Export authentication database to a temporary JSON file
-echo "👤 Switching active Firebase CLI account to: heidlessemail21@gmail.com (Source)..."
-firebase login:use heidlessemail21@gmail.com
+echo "👤 Switching active Firebase CLI account to: heidlessemail19@gmail.com (Source)..."
+firebase login:use heidlessemail19@gmail.com
 
 echo "📦 Exporting users from $SRC_PROJECT..."
 firebase auth:export auth_backup.json --format=JSON --project "$SRC_PROJECT"

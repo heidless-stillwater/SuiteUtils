@@ -129,6 +129,12 @@ const checkGpuSuitability = (modelName: string, activeHardware: string) => {
   return { ...req, isSuitable, statusText, badgeColor };
 };
 
+const formatSize = (bytes: number): string => {
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
+  if (bytes >= 1_048_576)     return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+};
+
 export function InferenceAdminPage() {
   const [config, setConfig] = useState<InferenceConfig | null>(null);
   const [registry, setRegistry] = useState<ModelRegistry | null>(null);
@@ -164,6 +170,7 @@ export function InferenceAdminPage() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [autoScrollLogs, setAutoScrollLogs] = useState(true);
   const modalLogRef = useRef<HTMLDivElement | null>(null);
+  const pullAbortControllerRef = useRef<AbortController | null>(null);
 
   // Scroll modal logs to bottom
   useEffect(() => {
@@ -222,7 +229,7 @@ export function InferenceAdminPage() {
     const fetchModels = async () => {
       try {
         const endpoint = config.activeSource === 'localhost' ? 'http://localhost:11434' : config.gcpEndpoint;
-        const res = await fetch(`${endpoint}/api/tags`);
+        const res = await fetch(`${API_URL}/api/ollama/tags?endpoint=${encodeURIComponent(endpoint)}`);
         if (res.ok) {
           const data = await res.json();
           setInstalledModels(data.models || []);
@@ -278,11 +285,16 @@ export function InferenceAdminPage() {
     setIsPulling(modelName);
     setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: 'Connecting...' } }));
     const endpoint = config.activeSource === 'localhost' ? 'http://localhost:11434' : config.gcpEndpoint;
+    
+    const controller = new AbortController();
+    pullAbortControllerRef.current = controller;
+
     try {
       const res = await fetch(`${API_URL}/api/ollama/pull`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelName, endpoint })
+        body: JSON.stringify({ modelName, endpoint }),
+        signal: controller.signal
       });
 
       if (!res.ok || !res.body) {
@@ -331,12 +343,18 @@ export function InferenceAdminPage() {
           } catch { /* ignore non-JSON lines */ }
         }
       }
-    } catch (err) {
-      console.error('Failed to pull model', err);
-      setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: 'Failed — check console' } }));
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Pull operation aborted by user');
+        setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: 'Aborted' } }));
+      } else {
+        console.error('Failed to pull model', err);
+        setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: 'Failed — check console' } }));
+      }
     } finally {
       setIsPulling(null);
-      // Clear progress after a short delay so user can see "Done!"
+      pullAbortControllerRef.current = null;
+      // Clear progress after a short delay so user can see "Done!" or "Aborted"
       setTimeout(() => setPullProgress(prev => {
         const next = { ...prev };
         delete next[modelName];
@@ -345,15 +363,26 @@ export function InferenceAdminPage() {
     }
   };
 
+  const abortPull = () => {
+    if (pullAbortControllerRef.current) {
+      pullAbortControllerRef.current.abort();
+      pullAbortControllerRef.current = null;
+    }
+    if (isPulling) {
+      setPullProgress(prev => ({ ...prev, [isPulling]: { pct: 0, status: 'Aborted' } }));
+      setIsPulling(null);
+    }
+  };
+
   const deleteModel = async (modelName: string) => {
     if (!config) return;
     setIsDeleting(modelName);
     try {
       const endpoint = config.activeSource === 'localhost' ? 'http://localhost:11434' : config.gcpEndpoint;
-      await fetch(`${endpoint}/api/delete`, {
-        method: 'DELETE',
+      await fetch(`${API_URL}/api/ollama/delete`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName })
+        body: JSON.stringify({ name: modelName, endpoint })
       });
       setInstalledModels(prev => prev.filter(m => m.name !== modelName));
     } catch (err) {
@@ -1047,6 +1076,13 @@ export function InferenceAdminPage() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
                 </span>
                 <span>Pulling {isPulling}: {pullProgress[isPulling]?.pct ?? 0}%</span>
+                <button
+                  onClick={abortPull}
+                  className="hover:text-red-400 transition-colors ml-1 p-0.5"
+                  title="Abort Pull"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             )}
           </div>
@@ -1086,6 +1122,13 @@ export function InferenceAdminPage() {
                         <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">
                           {pullProgress[model.name]?.pct ?? 0}%
                         </span>
+                        <button
+                          onClick={abortPull}
+                          className="p-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all ml-1"
+                          title="Abort Pull"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
                     ) : (
                       <button 
@@ -1101,14 +1144,21 @@ export function InferenceAdminPage() {
                   </div>
                   <p className="text-xs text-white/60 mb-3">{model.description}</p>
                   {isPulling === model.name && pullProgress[model.name] && (
-                    <div className="mb-3 space-y-1">
-                      <div className="flex items-center justify-between mb-1">
+                    <div className="mb-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
                         <span className="text-[9px] font-mono text-indigo-300/80 uppercase tracking-wider">
                           {pullProgress[model.name].status}
                         </span>
-                        <span className="text-[9px] font-mono text-white/40">
-                          {pullProgress[model.name].pct}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {pullProgress[model.name].completed != null && pullProgress[model.name].total != null && pullProgress[model.name].total! > 0 && (
+                            <span className="text-[9px] font-mono text-white/50">
+                              {formatSize(pullProgress[model.name].completed!)} / {formatSize(pullProgress[model.name].total!)}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-bold font-mono text-indigo-300">
+                            {pullProgress[model.name].pct}%
+                          </span>
+                        </div>
                       </div>
                       <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
                         <div

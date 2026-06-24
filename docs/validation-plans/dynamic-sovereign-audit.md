@@ -95,7 +95,7 @@ This plan is automatically updated by the Persona Bridge when the Custom Interfa
 - [ ] **Verification**: [VAL-SYS-076](http://localhost:5180/?validation=VAL-SYS-076) - Verify that the session watcher starts and status checks are correct using the corrected paths in the SuiteUtils project folder by running `[!validate status](command://!validate%20status)` or `[!validate history](command://!validate%20history)`, and confirm that modifying planning files does not cause an infinite loop of auto-pushing and logging to progress.md.
 
 ### [Sovereign Sync] Neural Sync and Architect Profile Config
-- [ ] **Verification**: [VAL-SYS-076](http://localhost:5180/?validation=VAL-SYS-076) - Verify that running the `[!sync architect](command://!sync%20architect)` command merges the operating principles and correctly updates profile.json and the Firestore configuration.
+- [x] **Verification**: [VAL-SYS-076](http://localhost:5180/?validation=VAL-SYS-076) - Verify that running the `[!sync architect](command://!sync%20architect)` command merges the operating principles and correctly updates profile.json and the Firestore configuration.
 
 ### [TokenMarket] AdSense Visual Sandbox Integration & Layout Validation
 - [ ] **Verification**: [VAL-TM-113](http://localhost:5180/?validation=VAL-TM-113) - Verify that the localhost mockup card rendering functions correctly in the visual sandbox.

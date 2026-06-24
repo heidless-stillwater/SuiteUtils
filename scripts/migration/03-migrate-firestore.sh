@@ -22,7 +22,7 @@ normalize_gcs_location() {
     fi
 }
 
-SRC_PROJECT="stillwater-sovereign-01"
+SRC_PROJECT="heidless-apps-2"
 TGT_PROJECT="stillwater-sovereign-02"
 
 DATABASES=(
@@ -36,6 +36,7 @@ DATABASES=(
     "persona-db-0"
     "urlshortener-db-0"
     "tokenmarket-db-0"
+    "inferencegateway-db-0"
 )
 
 echo "🔥 Stillwater Sovereign Firestore Databases Migration Tool"
@@ -93,8 +94,8 @@ for DB in "${DATABASES[@]}"; do
     TGT_IMPORT_PATH="gs://$TEMP_TGT_BUCKET/export"
 
     # A. Export from Source Project (Needs Source account context)
-    echo "👤 Switching active gcloud account to: heidlessemail21@gmail.com (Source)..."
-    gcloud config set account heidlessemail21@gmail.com
+    echo "👤 Switching active gcloud account to: heidlessemail19@gmail.com (Source)..."
+    gcloud config set account heidlessemail19@gmail.com
     gcloud config set project "$SRC_PROJECT"
 
     # Dynamically resolve source database location and create matching staging bucket

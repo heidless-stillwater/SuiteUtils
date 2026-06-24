@@ -1,11 +1,11 @@
 #!/bin/bash
-# switch-env.sh: Toggle between stillwater-sovereign-01 and stillwater-sovereign-02
+# switch-env.sh: Toggle between heidless-apps-2 and stillwater-sovereign-02
 
 set -e
 
 ENV=$1
-if [ "$ENV" != "sovereign-01" ] && [ "$ENV" != "sovereign-02" ]; then
-    echo "❌ Error: Invalid environment. Usage: ./switch-env.sh <sovereign-01|sovereign-02>"
+if [ "$ENV" != "heidless-apps-2" ] && [ "$ENV" != "stillwater-sovereign-02" ]; then
+    echo "❌ Error: Invalid environment. Usage: ./switch-env.sh <heidless-apps-2|stillwater-sovereign-02>"
     exit 1
 fi
 
@@ -15,30 +15,24 @@ SUITE_UTILS_DIR="$PROJECTS_DIR/SuiteUtils"
 echo "🔮 Switching Stillwater Sovereign App Suite environment to: $ENV"
 echo "--------------------------------------------------------"
 
-# 1. Resolve Admin Service Accounts in SuiteUtils
-SRC_SA_KEY="$SUITE_UTILS_DIR/suite-admin-sovereign-01.json"
-# Fallback if the user hasn't renamed suite-admin-sovereign.json yet
-if [ ! -f "$SRC_SA_KEY" ] && [ -f "$SUITE_UTILS_DIR/suite-admin-sovereign.json" ]; then
-    cp "$SUITE_UTILS_DIR/suite-admin-sovereign.json" "$SRC_SA_KEY"
-    echo "💾 Backed up existing suite-admin-sovereign.json to suite-admin-sovereign-01.json"
-fi
+# 0. Align gcloud project context
+echo "👤 Switching active gcloud project to: $ENV..."
+gcloud config set project "$ENV"
 
+# 1. Resolve Admin Service Accounts in SuiteUtils
+SRC_SA_KEY="$SUITE_UTILS_DIR/secrets/heidless-apps-2-firebase-adminsdk-fbsvc-fea3de0c63.json"
 TGT_SA_KEY="$SUITE_UTILS_DIR/suite-admin-sovereign-02.json"
-if [ "$ENV" == "sovereign-02" ] && [ ! -f "$TGT_SA_KEY" ]; then
-    echo "⚠️  Warning: Target service account key not found at $TGT_SA_KEY"
-    echo "👉 Please place your stillwater-sovereign-02 service account JSON file at that path."
-fi
 
 # Swapping the root suite-admin-sovereign.json file so legacy scripts resolve to correct project
-if [ "$ENV" == "sovereign-01" ] && [ -f "$SRC_SA_KEY" ]; then
+if [ "$ENV" == "heidless-apps-2" ] && [ -f "$SRC_SA_KEY" ]; then
     cp "$SRC_SA_KEY" "$SUITE_UTILS_DIR/suite-admin-sovereign.json"
-    echo "🔑 Aligned root suite-admin-sovereign.json to sovereign-01."
-elif [ "$ENV" == "sovereign-02" ] && [ -f "$TGT_SA_KEY" ]; then
+    echo "🔑 Aligned root suite-admin-sovereign.json to heidless-apps-2."
+elif [ "$ENV" == "stillwater-sovereign-02" ] && [ -f "$TGT_SA_KEY" ]; then
     cp "$TGT_SA_KEY" "$SUITE_UTILS_DIR/suite-admin-sovereign.json"
-    echo "🔑 Aligned root suite-admin-sovereign.json to sovereign-02."
+    echo "🔑 Aligned root suite-admin-sovereign.json to stillwater-sovereign-02."
 fi
 
-# Define our 10 applications, their active env filename, and if they use service-account.json
+# Define our 11 applications, their active env filename, and if they use service-account.json
 # format: "AppName:EnvFilename:UsesServiceAccount:CustomSAPath"
 APPS=(
     "ag-video-system:.env.local:true:service-account.json"
@@ -51,6 +45,7 @@ APPS=(
     "Persona:.env.local:false:"
     "URLShortener:.env.local:false:"
     "TokenMarket:.env:false:"
+    "InferenceGateway:.env:false:"
 )
 
 for APP_INFO in "${APPS[@]}"; do
@@ -66,30 +61,28 @@ for APP_INFO in "${APPS[@]}"; do
 
     # --- A. Setup .env file switching ---
     ACTIVE_ENV="$APP_DIR/$ENV_FILE"
-    SOV_01_ENV="$APP_DIR/${ENV_FILE}.sovereign-01"
-    SOV_02_ENV="$APP_DIR/${ENV_FILE}.sovereign-02"
+    SRC_ENV="$APP_DIR/${ENV_FILE}.heidless-apps-2"
+    TGT_ENV="$APP_DIR/${ENV_FILE}.stillwater-sovereign-02"
 
-    # Ensure sovereign-01 environment file exists (initialized from current env file if missing)
-    if [ ! -f "$SOV_01_ENV" ]; then
+    # Ensure source environment file exists (initialized from active env file if missing)
+    if [ ! -f "$SRC_ENV" ]; then
         if [ -f "$ACTIVE_ENV" ]; then
-            cp "$ACTIVE_ENV" "$SOV_01_ENV"
-            echo "   💾 Created backup ${ENV_FILE}.sovereign-01 from active config."
-        else
-            echo "   ⚠️  No active config found to initialize ${ENV_FILE}.sovereign-01"
+            cp "$ACTIVE_ENV" "$SRC_ENV"
+            echo "   💾 Created backup ${ENV_FILE}.heidless-apps-2 from active config."
         fi
     fi
 
-    # Ensure sovereign-02 environment file exists (templated from sovereign-01 if missing)
-    if [ ! -f "$SOV_02_ENV" ]; then
-        if [ -f "$SOV_01_ENV" ]; then
+    # Ensure target environment file exists (templated from source if missing)
+    if [ ! -f "$TGT_ENV" ]; then
+        if [ -f "$SRC_ENV" ]; then
             # Copy and replace project string
-            sed 's/stillwater-sovereign-01/stillwater-sovereign-02/g' "$SOV_01_ENV" > "$SOV_02_ENV"
+            sed 's/heidless-apps-2/stillwater-sovereign-02/g' "$SRC_ENV" > "$TGT_ENV"
             # Replace sensitive secrets/IDs with placeholders for configuration safety
-            sed -i 's/NEXT_PUBLIC_FIREBASE_API_KEY=.*/NEXT_PUBLIC_FIREBASE_API_KEY=PLACEHOLDER_INSERT_TARGET_API_KEY/g' "$SOV_02_ENV"
-            sed -i 's/NEXT_PUBLIC_FIREBASE_APP_ID=.*/NEXT_PUBLIC_FIREBASE_APP_ID=PLACEHOLDER_INSERT_TARGET_APP_ID/g' "$SOV_02_ENV"
-            sed -i 's/VITE_FIREBASE_API_KEY=.*/VITE_FIREBASE_API_KEY=PLACEHOLDER_INSERT_TARGET_API_KEY/g' "$SOV_02_ENV"
-            sed -i 's/VITE_FIREBASE_APP_ID=.*/VITE_FIREBASE_APP_ID=PLACEHOLDER_INSERT_TARGET_APP_ID/g' "$SOV_02_ENV"
-            echo "   🆕 Generated template ${ENV_FILE}.sovereign-02 (Please edit to populate target API credentials)."
+            sed -i 's/NEXT_PUBLIC_FIREBASE_API_KEY=.*/NEXT_PUBLIC_FIREBASE_API_KEY=PLACEHOLDER_INSERT_TARGET_API_KEY/g' "$TGT_ENV"
+            sed -i 's/NEXT_PUBLIC_FIREBASE_APP_ID=.*/NEXT_PUBLIC_FIREBASE_APP_ID=PLACEHOLDER_INSERT_TARGET_APP_ID/g' "$TGT_ENV"
+            sed -i 's/VITE_FIREBASE_API_KEY=.*/VITE_FIREBASE_API_KEY=PLACEHOLDER_INSERT_TARGET_API_KEY/g' "$TGT_ENV"
+            sed -i 's/VITE_FIREBASE_APP_ID=.*/VITE_FIREBASE_APP_ID=PLACEHOLDER_INSERT_TARGET_APP_ID/g' "$TGT_ENV"
+            echo "   🆕 Generated template ${ENV_FILE}.stillwater-sovereign-02."
         fi
     fi
 
@@ -108,14 +101,12 @@ for APP_INFO in "${APPS[@]}"; do
         APP_SA_DIR=$(dirname "$APP_SA_DEST")
         mkdir -p "$APP_SA_DIR"
 
-        if [ "$ENV" == "sovereign-01" ] && [ -f "$SRC_SA_KEY" ]; then
+        if [ "$ENV" == "heidless-apps-2" ] && [ -f "$SRC_SA_KEY" ]; then
             cp "$SRC_SA_KEY" "$APP_SA_DEST"
-            echo "   🔐 Installed sovereign-01 service account."
-        elif [ "$ENV" == "sovereign-02" ] && [ -f "$TGT_SA_KEY" ]; then
+            echo "   🔐 Installed heidless-apps-2 service account."
+        elif [ "$ENV" == "stillwater-sovereign-02" ] && [ -f "$TGT_SA_KEY" ]; then
             cp "$TGT_SA_KEY" "$APP_SA_DEST"
-            echo "   🔐 Installed sovereign-02 service account."
-        else
-            echo "   ⚠️  Skipped service account installation (source/target key file missing)."
+            echo "   🔐 Installed stillwater-sovereign-02 service account."
         fi
     fi
 
@@ -123,12 +114,12 @@ for APP_INFO in "${APPS[@]}"; do
     FIREBASE_JSON="$APP_DIR/firebase.json"
     FIREBASE_RC="$APP_DIR/.firebaserc"
     if [ -f "$FIREBASE_JSON" ] || [ -f "$FIREBASE_RC" ]; then
-        # Create standard .firebaserc with both project aliases and multisite targets
+        # Create standard .firebaserc with both project mappings
         cat <<EOF > "$FIREBASE_RC"
 {
   "projects": {
-    "sovereign-01": "heidless-apps-2",
-    "sovereign-02": "stillwater-sovereign-02"
+    "heidless-apps-2": "heidless-apps-2",
+    "stillwater-sovereign-02": "stillwater-sovereign-02"
   },
   "targets": {
     "heidless-apps-2": {
@@ -196,10 +187,10 @@ for APP_INFO in "${APPS[@]}"; do
   }
 }
 EOF
-        echo "   📝 Configured standard .firebaserc with sovereign-01 and sovereign-02 aliases."
+        echo "   📝 Configured standard .firebaserc."
 
-        # Trigger project alias change
-        (cd "$APP_DIR" && firebase use "$ENV" || echo "   ⚠️  Failed to set firebase project alias. Make sure firebase CLI is logged in.")
+        # Trigger project use
+        (cd "$APP_DIR" && firebase use "$ENV" || echo "   ⚠️  Failed to set firebase project. Make sure firebase CLI is logged in.")
     fi
 done
 

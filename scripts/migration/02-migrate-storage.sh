@@ -7,7 +7,7 @@ set -e
 unset GOOGLE_CLOUD_PROJECT
 unset CLOUDSDK_CORE_PROJECT
 
-SRC_BUCKET="stillwater-sovereign-01.firebasestorage.app"
+SRC_BUCKET="heidless-apps-2.firebasestorage.app"
 TGT_BUCKET="stillwater-sovereign-02.firebasestorage.app"
 
 echo "📦 Stillwater Sovereign Cloud Storage Migration Tool"
@@ -35,9 +35,9 @@ fi
 echo "🚀 Starting Local-Buffered Storage Sync (Bypassing IAM Sharing)..."
 
 # Step 1: Pull from Source Bucket
-echo "👤 Switching active gcloud account to: heidlessemail21@gmail.com (Source)..."
-gcloud config set account heidlessemail21@gmail.com
-gcloud config set project stillwater-sovereign-01
+echo "👤 Switching active gcloud account to: heidlessemail19@gmail.com (Source)..."
+gcloud config set account heidlessemail19@gmail.com
+gcloud config set project heidless-apps-2
 
 echo "📥 Pulling files from source bucket to local buffer..."
 mkdir -p ./temp_storage_sync
