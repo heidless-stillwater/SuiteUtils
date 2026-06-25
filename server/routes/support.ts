@@ -125,12 +125,12 @@ router.put('/admin/tickets/:id', verifyAdmin, async (req: Request, res: Response
   const ticketId = req.params.id;
   const adminUserId = (req as any).userId;
   const adminEmail = (req as any).userEmail;
-  const { status, priority, comment } = req.body;
+  const { status, priority, comment, notes, links } = req.body;
 
   try {
     const ticket = await TicketStore.updateTicketStatus(
       ticketId,
-      { status, priority, comment },
+      { status, priority, comment, notes, links },
       adminUserId,
       adminEmail
     );

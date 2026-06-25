@@ -40,7 +40,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const effectiveRole: UserRole = profile?.actingAs || profile?.role || 'member';
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'su';
+  const isAdmin = profile?.role === 'admin' || 
+                  profile?.role === 'su' || 
+                  !!(user?.email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase()));
   const isSu = profile?.role === 'su';
   const isViewer = workspaceRole === 'viewer';
   const isOperator = workspaceRole === 'operator';

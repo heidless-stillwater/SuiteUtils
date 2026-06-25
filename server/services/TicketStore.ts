@@ -159,7 +159,7 @@ Stillwater Suite Support Portal`;
   /** Update ticket status & optional priority/comments (Admin only) */
   async updateTicketStatus(
     ticketId: string,
-    updatesPayload: { status?: string; priority?: string; comment?: string },
+    updatesPayload: { status?: string; priority?: string; comment?: string; notes?: string; links?: string[] },
     adminUserId: string,
     adminEmail: string
   ): Promise<any> {
@@ -187,12 +187,18 @@ Stillwater Suite Support Portal`;
     }
 
     let addedComment = null;
-    if (updatesPayload.comment && updatesPayload.comment.trim()) {
+    if (
+      (updatesPayload.comment && updatesPayload.comment.trim()) ||
+      (updatesPayload.notes && updatesPayload.notes.trim()) ||
+      (updatesPayload.links && updatesPayload.links.length > 0)
+    ) {
       addedComment = {
         id: `comment_${Date.now()}`,
         authorId: adminUserId,
         authorEmail: adminEmail,
-        text: updatesPayload.comment,
+        text: updatesPayload.comment || '',
+        notes: updatesPayload.notes || '',
+        links: updatesPayload.links || [],
         createdAt: now,
       };
       updates.comments = [...(ticket.comments || []), addedComment];
@@ -228,11 +234,27 @@ Stillwater Suite Support Portal`;
 
     const ticketNum = ticket.id.split('_')[1] || 'Update';
     const dateString = new Date(ticket.updatedAt).toLocaleString();
+    
+    let linksText = '';
+    let linksHtml = '';
+    if (comment && comment.links && comment.links.length > 0) {
+      linksText = `\nLinks provided:\n` + comment.links.map((l: string) => `- ${l}`).join('\n') + `\n`;
+      linksHtml = `
+        <div style="margin-top: 15px;">
+          <h4 style="margin-top: 0; margin-bottom: 5px; color: #374151;">Related Links</h4>
+          <ul style="margin: 0; padding-left: 20px;">
+            ${comment.links.map((l: string) => `<li style="margin-bottom: 5px;"><a href="${l}" target="_blank" style="color: #4f46e5; text-decoration: underline;">${l}</a></li>`).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
     const commentSection = comment ? `
 --------------------------------------------------
 SUPPORT TEAM COMMENT
 --------------------------------------------------
 ${comment.text}
+${linksText}
 ` : '';
 
     const textBody = `==================================================
@@ -273,6 +295,7 @@ Stillwater Suite Support Portal`;
   <div style="background: #fafafa; padding: 15px; border-left: 4px solid #4f46e5; border-radius: 4px; margin-bottom: 20px;">
     <h3 style="margin-top: 0; color: #111827;">Support Team Response</h3>
     <p style="margin-bottom: 0; white-space: pre-wrap;">${comment.text}</p>
+    ${linksHtml}
   </div>
   ` : ''}
   

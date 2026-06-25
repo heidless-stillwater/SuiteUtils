@@ -31,6 +31,16 @@ async function main() {
         process.exit(0);
     }
 
+    if (args[0] === 'delete') {
+        if (args.length < 2) {
+            console.error("Usage: npm run baseline delete <label> | --all [--confirm]");
+            process.exit(1);
+        }
+        const label = args[1];
+        await deleteBaseline(label, args.includes('--confirm'));
+        process.exit(0);
+    }
+
     const label = args[0];
     const timestamp = Math.floor(Date.now() / 1000);
     const alamoTag = `alamo-${label}-${timestamp}`;
@@ -207,6 +217,70 @@ async function listBaselines() {
         }
     }
     console.log(`\n---\n`);
+}
+
+async function deleteBaseline(label: string, confirm: boolean) {
+    const targetPaths = await getTargetPaths();
+    const backupsDir = path.join(os.homedir(), '.baseline_backups');
+    const deleteAll = label === '--all';
+    
+    if (deleteAll && !confirm) {
+        console.error("⚠️ Deleting all snapshots requires confirmation. Append --confirm to execute.");
+        process.exit(1);
+    }
+
+    if (deleteAll) {
+        console.log("🧹 Purging all baseline snapshots...");
+        if (fs.existsSync(backupsDir)) {
+            const files = fs.readdirSync(backupsDir);
+            for (const file of files) {
+                const fullPath = path.join(backupsDir, file);
+                if (fs.statSync(fullPath).isDirectory()) {
+                    await fs.remove(fullPath);
+                    console.log(`[DISK] Removed backup directory: ${file}`);
+                }
+            }
+        }
+        for (const repoPath of targetPaths) {
+            if (!fs.existsSync(repoPath) || !fs.existsSync(path.join(repoPath, '.git'))) continue;
+            const repoName = path.basename(repoPath);
+            try {
+                const tags = execSync('git tag -l "alamo-*"', { cwd: repoPath, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+                let count = 0;
+                for (const t of tags) {
+                    execSync(`git tag -d "${t}"`, { cwd: repoPath, stdio: 'pipe' });
+                    count++;
+                }
+                if (count > 0) console.log(`[GIT] Deleted ${count} alamo tags in ${repoName}`);
+            } catch (err: any) {
+                console.error(`[ERROR] Failed to delete git tags in ${repoName}: ${err.message}`);
+            }
+        }
+    } else {
+        if (fs.existsSync(backupsDir)) {
+            const files = fs.readdirSync(backupsDir);
+            let folderDeleted = false;
+            for (const file of files) {
+                const match = file.match(/^alamo-(.+)-\d+$/);
+                if (match && match[1] === label) {
+                    const fullPath = path.join(backupsDir, file);
+                    await fs.remove(fullPath);
+                    console.log(`[DISK] Removed backup directory: ${file}`);
+                    folderDeleted = true;
+                    
+                    for (const repoPath of targetPaths) {
+                        if (!fs.existsSync(repoPath) || !fs.existsSync(path.join(repoPath, '.git'))) continue;
+                        try {
+                            execSync(`git show-ref --tags --quiet "${file}"`, { cwd: repoPath, stdio: 'ignore' });
+                            execSync(`git tag -d "${file}"`, { cwd: repoPath, stdio: 'pipe' });
+                            console.log(`[GIT] Deleted tag ${file} in ${path.basename(repoPath)}`);
+                        } catch {}
+                    }
+                }
+            }
+            if (!folderDeleted) console.log(`No backup folders match label "${label}".`);
+        }
+    }
 }
 
 main().catch(err => {

@@ -39,6 +39,8 @@ interface Comment {
   authorEmail: string;
   text: string;
   createdAt: string;
+  notes?: string;
+  links?: string[];
 }
 
 interface SupportTicket {
@@ -89,7 +91,28 @@ export function AdminSupportConsole() {
   // Selected Ticket Modal
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [adminComment, setAdminComment] = useState("");
+  const [adminNotes, setAdminNotes] = useState("");
+  const [adminLinks, setAdminLinks] = useState<string[]>([]);
+  const [currentLink, setCurrentLink] = useState("");
+  const [newStatus, setNewStatus] = useState<string>("");
   const [updating, setUpdating] = useState(false);
+
+  const selectTicketAndInit = (ticket: SupportTicket | null) => {
+    setSelectedTicket(ticket);
+    if (ticket) {
+      setNewStatus(ticket.status);
+      setAdminComment("");
+      setAdminNotes("");
+      setAdminLinks([]);
+      setCurrentLink("");
+    } else {
+      setNewStatus("");
+      setAdminComment("");
+      setAdminNotes("");
+      setAdminLinks([]);
+      setCurrentLink("");
+    }
+  };
 
   useEffect(() => {
     fetchTickets();
@@ -118,7 +141,14 @@ export function AdminSupportConsole() {
     }
   };
 
-  const handleUpdateTicket = async (ticketId: string, status?: string, priority?: string, commentText?: string) => {
+  const handleUpdateTicket = async (
+    ticketId: string, 
+    status?: string, 
+    priority?: string, 
+    commentText?: string,
+    notesText?: string,
+    linksList?: string[]
+  ) => {
     setUpdating(true);
     try {
       const token = user ? await user.getIdToken() : "";
@@ -128,7 +158,13 @@ export function AdminSupportConsole() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ status, priority, comment: commentText }),
+        body: JSON.stringify({ 
+          status, 
+          priority, 
+          comment: commentText,
+          notes: notesText,
+          links: linksList
+        }),
       });
       if (!res.ok) {
         throw new Error("Failed to update ticket");
@@ -140,8 +176,12 @@ export function AdminSupportConsole() {
       setTickets(prev => prev.map(t => t.id === ticketId ? updated : t));
       if (selectedTicket && selectedTicket.id === ticketId) {
         setSelectedTicket(updated);
+        setNewStatus(updated.status);
       }
       setAdminComment("");
+      setAdminNotes("");
+      setAdminLinks([]);
+      setCurrentLink("");
     } catch (err: any) {
       alert("Error updating ticket: " + err.message);
     } finally {
@@ -433,7 +473,7 @@ export function AdminSupportConsole() {
                     <tr 
                       key={ticket.id}
                       className="hover:bg-white/5 transition-colors cursor-pointer group"
-                      onClick={() => setSelectedTicket(ticket)}
+                      onClick={() => selectTicketAndInit(ticket)}
                     >
                       <td className="p-4">
                         <div className="font-semibold text-white max-w-[200px] truncate">{ticket.subject}</div>
@@ -465,7 +505,7 @@ export function AdminSupportConsole() {
                           className="btn-ghost !p-1 bg-white/5 rounded-lg border border-white/10 hover:bg-primary/20 hover:border-primary/50 group-hover:opacity-100 opacity-60 transition-all"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedTicket(ticket);
+                            selectTicketAndInit(ticket);
                           }}
                         >
                           <ChevronRight className="w-4 h-4 text-white" />
@@ -491,7 +531,7 @@ export function AdminSupportConsole() {
                 <h3 className="text-lg font-bold text-white mt-1">{selectedTicket.subject}</h3>
               </div>
               <button 
-                onClick={() => setSelectedTicket(null)}
+                onClick={() => selectTicketAndInit(null)}
                 className="p-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -543,12 +583,38 @@ export function AdminSupportConsole() {
                             </div>
                             {!isLast && <div className="w-0.5 flex-1 bg-white/10 my-1" />}
                           </div>
-                          <div className="flex-1 bg-indigo-500/5 rounded-xl p-3 border border-indigo-500/10">
-                            <div className="flex justify-between items-center mb-1 text-[10px] text-indigo-300/60">
+                          <div className="flex-1 bg-indigo-500/5 rounded-xl p-3 border border-indigo-500/10 space-y-2">
+                            <div className="flex justify-between items-center text-[10px] text-indigo-300/60">
                               <span className="font-semibold text-indigo-300">Response from {comment.authorEmail}</span>
                               <span>{format(new Date(comment.createdAt), "MMM d, yyyy HH:mm")}</span>
                             </div>
-                            <p className="text-white/80 whitespace-pre-wrap">{comment.text}</p>
+                            {comment.text && <p className="text-white/80 whitespace-pre-wrap leading-relaxed">{comment.text}</p>}
+                            
+                            {comment.notes && (
+                              <div className="mt-2 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-200/90 text-xs">
+                                <span className="text-[10px] font-bold text-amber-400 block uppercase tracking-wider mb-1">Internal Notes</span>
+                                <p className="whitespace-pre-wrap leading-relaxed">{comment.notes}</p>
+                              </div>
+                            )}
+
+                            {comment.links && comment.links.length > 0 && (
+                              <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1">
+                                <span className="text-[10px] font-semibold text-white/40 block uppercase tracking-wider">Attached Links</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {comment.links.map((link, idx) => (
+                                    <a 
+                                      key={idx} 
+                                      href={link} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 hover:text-accent text-[10px] transition-all"
+                                    >
+                                      {link}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -556,26 +622,152 @@ export function AdminSupportConsole() {
                   </div>
                 </div>
 
-                {/* Reply Form */}
-                <div className="space-y-2">
-                  <h4 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Add Response & Update User</h4>
-                  <div className="relative">
-                    <textarea
-                      placeholder="Type a response to update the ticket history and send an email update..."
-                      className="input-cinematic !h-24 resize-none !pr-12 text-xs py-3"
-                      value={adminComment}
-                      onChange={e => setAdminComment(e.target.value)}
-                      disabled={updating}
-                    />
-                    <button
-                      className="absolute right-3 bottom-3 p-2 rounded-xl bg-primary text-black hover:bg-accent transition-colors disabled:opacity-50"
-                      disabled={!adminComment.trim() || updating}
-                      onClick={() => handleUpdateTicket(selectedTicket.id, undefined, undefined, adminComment)}
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
+                {/* Unified Action Ticket Form */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-4">
+                  <h4 className="text-xs font-semibold text-white/80 uppercase tracking-wider flex items-center gap-1.5 border-b border-white/5 pb-2">
+                    <Zap className="w-4 h-4 text-primary" />
+                    Action Ticket
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Public Response */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-white/50 font-semibold uppercase tracking-wider block">Public Response (Emailed to user)</label>
+                      <textarea
+                        placeholder="Type public message to update the user..."
+                        className="input-cinematic !h-24 resize-none text-xs py-2"
+                        value={adminComment}
+                        onChange={e => setAdminComment(e.target.value)}
+                        disabled={updating}
+                      />
+                    </div>
+
+                    {/* Internal Notes */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-white/50 font-semibold uppercase tracking-wider block">Internal Notes (Visible only to team)</label>
+                      <textarea
+                        placeholder="Type private notes for reference..."
+                        className="input-cinematic !h-24 resize-none text-xs py-2"
+                        value={adminNotes}
+                        onChange={e => setAdminNotes(e.target.value)}
+                        disabled={updating}
+                      />
+                    </div>
                   </div>
-                  <span className="text-[10px] text-white/30 block">Note: Adding a comment automatically dispatches a notification email if the ticket is In Progress or Resolved.</span>
+
+                  {/* Links Manager */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-white/50 font-semibold uppercase tracking-wider block">Troubleshooting & Reference Links</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="https://example.com/logs"
+                        className="input-cinematic !h-9 text-xs flex-1"
+                        value={currentLink}
+                        onChange={e => setCurrentLink(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (currentLink.trim()) {
+                              setAdminLinks(prev => [...prev, currentLink.trim()]);
+                              setCurrentLink("");
+                            }
+                          }
+                        }}
+                        disabled={updating}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentLink.trim()) {
+                            setAdminLinks(prev => [...prev, currentLink.trim()]);
+                            setCurrentLink("");
+                          }
+                        }}
+                        className="px-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-xs font-semibold"
+                        disabled={updating || !currentLink.trim()}
+                      >
+                        Add Link
+                      </button>
+                    </div>
+
+                    {/* Staged Links List */}
+                    {adminLinks.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {adminLinks.map((link, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[10px] font-medium">
+                            <span className="truncate max-w-[200px]" title={link}>{link}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAdminLinks(prev => prev.filter((_, i) => i !== idx))}
+                              className="hover:text-rose-400 focus:outline-none ml-1 text-white/40"
+                              disabled={updating}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions & Status Selector */}
+                  <div className="flex flex-col md:flex-row gap-4 items-center justify-between border-t border-white/5 pt-4">
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                      <div className="space-y-1 w-full">
+                        <label className="text-[10px] text-white/50 block">Amend Ticket Status</label>
+                        <select
+                          className="input-cinematic !h-9 text-xs !w-full md:!w-44 py-0"
+                          style={{ colorScheme: 'dark' }}
+                          value={newStatus}
+                          onChange={e => setNewStatus(e.target.value)}
+                          disabled={updating}
+                        >
+                          <option value="open">Open</option>
+                          <option value="in-progress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 w-full md:w-auto justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdminComment("");
+                          setAdminNotes("");
+                          setAdminLinks([]);
+                          setCurrentLink("");
+                          setNewStatus(selectedTicket.status);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-xs font-semibold transition-all"
+                        disabled={updating}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateTicket(
+                          selectedTicket.id, 
+                          newStatus !== selectedTicket.status ? newStatus : undefined, 
+                          undefined, 
+                          adminComment || undefined,
+                          adminNotes || undefined,
+                          adminLinks.length > 0 ? adminLinks : undefined
+                        )}
+                        className="px-4 py-2 rounded-xl bg-primary text-black hover:bg-accent font-bold text-xs shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all flex items-center gap-1.5"
+                        disabled={updating}
+                      >
+                        {updating ? (
+                          <div className="w-3.5 h-3.5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                        Save Ticket Update
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -590,44 +782,44 @@ export function AdminSupportConsole() {
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         className={`px-3 py-2 rounded-xl border text-xs font-bold text-center transition-all ${
-                          selectedTicket.status === 'open' 
+                          newStatus === 'open' 
                             ? 'bg-sky-500/20 border-sky-400 text-sky-400' 
                             : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
                         }`}
-                        onClick={() => handleUpdateTicket(selectedTicket.id, "open")}
+                        onClick={() => setNewStatus("open")}
                         disabled={updating}
                       >
                         Open
                       </button>
                       <button
                         className={`px-3 py-2 rounded-xl border text-xs font-bold text-center transition-all ${
-                          selectedTicket.status === 'in-progress' 
+                          newStatus === 'in-progress' 
                             ? 'bg-indigo-500/20 border-indigo-400 text-indigo-400' 
                             : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
                         }`}
-                        onClick={() => handleUpdateTicket(selectedTicket.id, "in-progress")}
+                        onClick={() => setNewStatus("in-progress")}
                         disabled={updating}
                       >
                         In Progress
                       </button>
                       <button
                         className={`px-3 py-2 rounded-xl border text-xs font-bold text-center transition-all ${
-                          selectedTicket.status === 'resolved' 
+                          newStatus === 'resolved' 
                             ? 'bg-emerald-500/20 border-emerald-400 text-emerald-400' 
                             : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
                         }`}
-                        onClick={() => handleUpdateTicket(selectedTicket.id, "resolved")}
+                        onClick={() => setNewStatus("resolved")}
                         disabled={updating}
                       >
                         Resolve
                       </button>
                       <button
                         className={`px-3 py-2 rounded-xl border text-xs font-bold text-center transition-all ${
-                          selectedTicket.status === 'closed' 
+                          newStatus === 'closed' 
                             ? 'bg-slate-500/20 border-slate-400 text-slate-400' 
                             : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
                         }`}
-                        onClick={() => handleUpdateTicket(selectedTicket.id, "closed")}
+                        onClick={() => setNewStatus("closed")}
                         disabled={updating}
                       >
                         Close
