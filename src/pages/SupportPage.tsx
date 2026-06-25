@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Mail, 
+  LifeBuoy,
   HelpCircle, 
   Ticket, 
   ShieldAlert, 
@@ -137,7 +138,7 @@ export function SupportPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-3">
-            <Mail className="w-7 h-7 text-primary" />
+            <LifeBuoy className="w-7 h-7 text-primary" />
             Support Center
           </h1>
           <p className="text-xs text-white/50 mt-1">
@@ -155,7 +156,7 @@ export function SupportPage() {
                 : "text-white/60 hover:text-white/90"
             }`}
           >
-            <Mail className="w-3.5 h-3.5" />
+            <LifeBuoy className="w-3.5 h-3.5" />
             Submit Request
           </button>
           <button

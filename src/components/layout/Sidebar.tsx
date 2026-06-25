@@ -16,7 +16,7 @@ import {
   Users,
   Share2,
   Cpu,
-  Mail,
+  LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSuite } from '../../contexts/SuiteContext';
@@ -34,7 +34,7 @@ const NAV_ITEMS = [
   { path: '/activity', icon: ClipboardList, label: 'Activity Log' },
   { path: '/themes', icon: Palette, label: 'Theme Studio' },
   { path: '/settings', icon: Settings, label: 'Settings' },
-  { path: '/support', icon: Mail, label: 'Support' },
+  { path: '/support', icon: LifeBuoy, label: 'Support' },
 ];
 
 interface SidebarProps {

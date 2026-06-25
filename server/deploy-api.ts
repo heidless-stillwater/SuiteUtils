@@ -60,7 +60,12 @@ const PORT = Number(process.env.API_PORT) || 5185;
 scheduleManager.init();
 
 app.use(cors({ 
-  origin: '*', 
+  origin: (origin, callback) => {
+    // If no origin (e.g. server-to-server or postman/curl), allow it
+    if (!origin) return callback(null, true);
+    // Allow any origin dynamically to support credentials: true
+    callback(null, true);
+  }, 
   allowedHeaders: ['Content-Type', 'Authorization', 'x-workspace-id'],
   credentials: true
 }));
