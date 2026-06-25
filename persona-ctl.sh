@@ -6,7 +6,7 @@ APP_NAME="Persona"
 APP_DIR="/home/heidless/projects/Persona"
 TMUX_SESSION="stillwater"
 PORT=3005
-BRIDGE_PORT=3008
+BRIDGE_PORT=5005
 LOG_FILE="/home/heidless/projects/SuiteUtils/persona.log"
 
 CONFIG_FILE="/home/heidless/projects/SuiteUtils/suite.config.json"
@@ -17,7 +17,7 @@ case "$1" in
         echo "🚀 Starting ${APP_NAME} Stack (UI:${PORT}, Bridge:${BRIDGE_PORT})..."
         if ss -lnt | grep -qE ":${PORT}(\s|$)" || ss -lnt | grep -qE ":${BRIDGE_PORT}(\s|$)"; then
             echo "⚠️ ${APP_NAME} components are already running."
-            exit 1
+            exit 0
         fi
         cd $APP_DIR
         nohup env PORT=${PORT} LIGHT_MODE=${LIGHT_MODE} ./scripts/start-persona.sh ${PORT} ${BRIDGE_PORT} > $LOG_FILE 2>&1 &

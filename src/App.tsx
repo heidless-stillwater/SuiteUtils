@@ -12,6 +12,7 @@ import { BackupAdminPage } from './pages/BackupAdminPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
 import { DBAdminPage } from './pages/DBAdminPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SupportPage } from './pages/SupportPage';
 import { PersonaPage } from './pages/PersonaPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { PricingPage } from './pages/PricingPage';
@@ -64,6 +65,7 @@ function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/workspace/:workspaceId/invitations" element={<InvitationPage />} />
+            <Route path="/support" element={<SupportPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

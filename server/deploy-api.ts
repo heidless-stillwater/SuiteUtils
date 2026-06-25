@@ -7,7 +7,7 @@ import { MigrationManager } from './services/MigrationManager.js';
 
 console.log('🚀 [Cloud Run] Server process starting...');
 console.log(`📅 [Cloud Run] Time: ${new Date().toISOString()}`);
-console.log(`🔌 [Cloud Run] Expected Port: ${process.env.PORT || 5185}`);
+console.log(`🔌 [Cloud Run] Expected Port: ${process.env.API_PORT || 5185}`);
 console.log(`🔑 [Auth] GOOGLE_APPLICATION_CREDENTIALS: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`);
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   const saPath = path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS);
@@ -34,6 +34,8 @@ import { scheduleManager } from './services/ScheduleManager.js';
 import { TokenMarketIndexer } from './services/TokenMarketIndexer.js';
 import { operationMonitor } from './services/OperationMonitor.js';
 import { notificationManager } from './services/NotificationManager.js';
+import emailLogRouter from './routes/emailLog.js';
+import supportRouter from './routes/support.js';
 import { settingsManager } from './services/SettingsManager.js';
 import { suiteConfigManager } from './services/SuiteConfigManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
@@ -52,7 +54,7 @@ app.use((req, res, next) => {
   (req as any).workspaceId = wsId;
   next();
 });
-const PORT = Number(process.env.PORT) || 5185;
+const PORT = Number(process.env.API_PORT) || 5185;
 
 // Initialize Services
 scheduleManager.init();
@@ -148,7 +150,7 @@ app.post('/api/persona/archetypes/:id', async (req, res) => {
     // 2. Broadcast Live Observation to Persona Engine
     // We attempt to notify the persona of the change so it can ingest the new principles immediately
     try {
-      await fetch(`http://localhost:3008/observe`, {
+      await fetch(`http://localhost:5005/observe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -273,6 +275,8 @@ app.use((req, res, next) => {
   fs.appendFileSync(path.join(process.cwd(), 'logs/access.log'), logEntry);
   next();
 });
+app.use('/api/support', supportRouter);
+app.use('/api/email-log', emailLogRouter);
 
 const releaseManager = new ReleaseManager();
 const activeReleaseControllers = new Map<string, AbortController>();

@@ -16,6 +16,7 @@ import {
   Users,
   Share2,
   Cpu,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSuite } from '../../contexts/SuiteContext';
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { path: '/activity', icon: ClipboardList, label: 'Activity Log' },
   { path: '/themes', icon: Palette, label: 'Theme Studio' },
   { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/support', icon: Mail, label: 'Support' },
 ];
 
 interface SidebarProps {
@@ -124,6 +126,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <img
                 src={profile.photoURL}
                 alt={profile.displayName || ''}
+                referrerPolicy="no-referrer"
                 className="w-8 h-8 rounded-full border border-white/10"
               />
             ) : (

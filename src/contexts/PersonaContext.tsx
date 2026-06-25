@@ -29,7 +29,7 @@ export function PersonaProvider({ children }: { children: React.ReactNode }) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch('http://localhost:3008/broadcast');
+        const res = await fetch('http://localhost:5005/broadcast');
         if (res.ok) {
           const sentinel = await res.json();
           if (sentinel.updatedAt !== lastUpdate) {

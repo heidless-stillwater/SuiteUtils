@@ -58,6 +58,7 @@ export function TopBar() {
                 <img
                   src={profile.photoURL}
                   alt={profile.displayName || ''}
+                  referrerPolicy="no-referrer"
                   className="w-8 h-8 rounded-full border border-white/10"
                 />
               ) : (

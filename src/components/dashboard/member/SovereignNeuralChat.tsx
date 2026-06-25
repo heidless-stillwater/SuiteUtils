@@ -134,7 +134,7 @@ export default function SovereignNeuralChat() {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 3008.',
+        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 5005.',
         timestamp: new Date().toISOString(),
         status: 'error'
       }]);
@@ -186,7 +186,7 @@ export default function SovereignNeuralChat() {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 3008.',
+        content: '### **[BRIDGE_ERROR]**\n\nFailed to establish link with the Persona Bridge. Ensure the daemon is running on port 5005.',
         timestamp: new Date().toISOString(),
         status: 'error'
       }]);
@@ -228,7 +228,7 @@ export default function SovereignNeuralChat() {
             <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Sovereign Neural Chat</h3>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[8px] font-mono text-white/40 uppercase">Bridge: 3008 :: Stable</span>
+              <span className="text-[8px] font-mono text-white/40 uppercase">Bridge: 5005 :: Stable</span>
             </div>
           </div>
         </div>

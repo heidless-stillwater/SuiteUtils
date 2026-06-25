@@ -3,7 +3,7 @@
  * The bridge between SuiteUtils and the Persona Intelligence Hub.
  */
 
-const BRIDGE_URL = 'http://localhost:3008';
+const BRIDGE_URL = 'http://localhost:5005';
 
 export interface Principle {
   content: string;

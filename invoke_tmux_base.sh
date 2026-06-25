@@ -16,7 +16,7 @@ cat <<EOF > "$BASE_DIR/suite.config.json"
     { "id": 3, "name": "resources", "script": "resources-ctl.sh", "port": 3002, "enabled": false },
     { "id": 4, "name": "accreditation", "script": "accreditation-ctl.sh", "port": 3003, "enabled": false },
     { "id": 5, "name": "plantune", "script": "plantune-ctl.sh", "port": 3004, "enabled": false },
-    { "id": 6, "name": "persona", "script": "persona-ctl.sh", "port": 3005, "supportingPorts": [3006], "enabled": true },
+    { "id": 6, "name": "persona", "script": "persona-ctl.sh", "port": 3005, "supportingPorts": [5005], "enabled": true },
     { "id": 7, "name": "master", "script": "master-ctl.sh", "port": 5173, "enabled": false },
     { "id": 8, "name": "utils", "script": "utils-ctl.sh", "port": 5180, "supportingPorts": [5185], "enabled": false }
   ]

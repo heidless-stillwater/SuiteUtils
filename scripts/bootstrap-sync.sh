@@ -13,11 +13,11 @@ fi
 echo "🚀 [Bootstrap-Sync] Starting SuiteUtils & Persona in MINIMAL mode..."
 "$BASE_DIR/suite-ctl.sh" minimal
 
-# 2. Wait/Poll for Persona Bridge port 3008 to be ready
-echo "📡 [Bootstrap-Sync] Waiting for Persona Bridge to come online on port 3008..."
+# 2. Wait/Poll for Persona Bridge port 5005 to be ready
+echo "📡 [Bootstrap-Sync] Waiting for Persona Bridge to come online on port 5005..."
 MAX_RETRIES=30
 COUNT=0
-while ! curl -s -m 2 http://localhost:3008/api/health/ping > /dev/null; do
+while ! curl -s -m 2 http://localhost:5005/api/health/ping > /dev/null; do
     sleep 1
     COUNT=$((COUNT+1))
     if [ $COUNT -ge $MAX_RETRIES ]; then
@@ -28,9 +28,9 @@ while ! curl -s -m 2 http://localhost:3008/api/health/ping > /dev/null; do
 done
 echo -e "\n✅ [Bootstrap-Sync] Persona Bridge is online!"
 
-# 3. Trigger conversation sync with architect
+// 3. Trigger conversation sync with architect
 echo "🛰️ [Bootstrap-Sync] Triggering sync to 'architect' archetype..."
-SYNC_RES=$(curl -s -X POST http://localhost:3008/command \
+SYNC_RES=$(curl -s -X POST http://localhost:5005/command \
     -H "Content-Type: application/json" \
     -d "{\"text\": \"!sync architect\", \"conversationId\": \"$CONV_ID\", \"source\": \"bootstrap\"}")
 

@@ -117,7 +117,7 @@ export class HealthScanner {
       'promptaccreditation': 3003,
       'plantune': 3004,
       'persona': 3005,
-      'suiteutils': 5185,
+      'suiteutils': 5180,
       'urlshortener': 3006,
       'tokenmarket': 3007,
       'inferencegateway': 3009
@@ -127,15 +127,29 @@ export class HealthScanner {
     let url = firestoreUrl;
     if (!isProd && port) url = `http://127.0.0.1:${port}/api/health/ping`;
 
-    // 2. SELF-CHECK: If we are checking suiteutils, we are definitely UP
+    // 2. SELF-CHECK: Suiteutils health
     if (id === 'suiteutils') {
+      // Detect PID using the same strategy as other services
+      let suitePid: number | undefined;
+      if (port) {
+        try {
+          const { stdout } = await execAsync(`ss -lntp "sport = :${port}" 2>/dev/null`, { timeout: 1500 });
+          const pidMatch = stdout.match(/pid=(\d+)/);
+          if (pidMatch) {
+            suitePid = parseInt(pidMatch[1]);
+          } else {
+            const { stdout: fuserOut } = await execAsync(`fuser ${port}/tcp 2>/dev/null`, { timeout: 1000 });
+            if (fuserOut) suitePid = parseInt(fuserOut.trim().split(/\s+/)[0]);
+          }
+        } catch (e) {}
+      }
       const result: HealthStatus = {
         appId,
         status: 'UP',
         lastChecked: new Date().toISOString(),
         responseTime: Date.now() - start,
-        pid: process.pid,
-        port: port || Number(process.env.PORT) || 5185
+        pid: suitePid,
+        port: port || Number(process.env.SUITEUTILS_PORT) || 5180,
       };
       this.statusMap.set(id, result);
       return result;

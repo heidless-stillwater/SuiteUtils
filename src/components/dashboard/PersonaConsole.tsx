@@ -55,7 +55,7 @@ export default function PersonaConsole() {
 
   const fetchObservations = async () => {
     try {
-      const res = await fetch('http://localhost:3008/observations');
+      const res = await fetch('http://localhost:5005/observations');
       if (res.ok) {
         const data = await res.json();
         setObservations(data);
@@ -130,7 +130,7 @@ export default function PersonaConsole() {
               </div>
               <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
                 <Activity className="w-3.5 h-3.5 text-primary" />
-                <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Port 3008 Stream</span>
+                <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Port 5005 Stream</span>
               </div>
             </div>
           </div>

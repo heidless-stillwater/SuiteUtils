@@ -14,7 +14,7 @@ window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
   const workspaceId = localStorage.getItem('activeWorkspaceId') || 'stillwater-suite';
   const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-  if (url.includes(':5185/api') || url.includes(':5181/api')) {
+  if (url.includes(':5180/api')) {
     const headers = new Headers(init?.headers || {});
     if (!headers.has('x-workspace-id')) {
       headers.set('x-workspace-id', workspaceId);

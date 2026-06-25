@@ -111,7 +111,7 @@ export function SettingsPage() {
       <div className="glass-card-static p-6">
         <div className="flex items-start gap-5">
           {profile.photoURL ? (
-            <img src={profile.photoURL} alt="" className="w-20 h-20 rounded-2xl border-2 border-white/10 shadow-lg" />
+            <img src={profile.photoURL} alt="" referrerPolicy="no-referrer" className="w-20 h-20 rounded-2xl border-2 border-white/10 shadow-lg" />
           ) : (
             <div className="w-20 h-20 rounded-2xl bg-primary/20 flex items-center justify-center text-primary text-2xl font-bold">
               {(profile.displayName || profile.email)?.[0]?.toUpperCase()}

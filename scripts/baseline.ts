@@ -28,7 +28,7 @@ async function main() {
 
     if (args[0] === 'list') {
         await listBaselines();
-        return;
+        process.exit(0);
     }
 
     const label = args[0];
@@ -95,6 +95,7 @@ async function main() {
     console.log(`🏰 SNAPSHOT PROTOCOL COMPLETE: Created tag [${alamoTag}] in ${successCount} repos.`);
     console.log(`Backup files stored at: ${backupBaseDir}`);
     console.log(`======================================================================`);
+    process.exit(0);
 }
 
 async function listBaselines() {

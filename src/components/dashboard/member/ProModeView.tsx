@@ -443,7 +443,7 @@ export default function ProModeView({
                 <div className="flex items-center justify-between py-1 border-b border-white/5">
                   <span className="text-white/20 uppercase tracking-tighter">Process</span>
                   <span className="text-white/60">
-                    {isUp ? `PID:${health?.pid || '?'} | PORT:${health?.port || '?'}` : `PORT:${health?.port || '?'}`}
+                    {`PID:${health?.pid ?? '?'} | PORT:${health?.port ?? '?'}`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-1">

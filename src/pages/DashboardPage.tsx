@@ -737,7 +737,7 @@ export function DashboardPage() {
                   Sovereign Audit Context
                 </p>
                 <p className="text-[9px] font-mono text-white/10 uppercase">
-                  Port 5185
+                  Port 5180
                 </p>
               </div>
             </motion.aside>
