@@ -1,4 +1,4 @@
-import { spawn, execFile, ChildProcess } from 'child_process';
+import { spawn, execFile, ChildProcess, exec } from 'child_process';
 import { EventEmitter } from 'events';
 import fs, { appendFileSync } from 'fs';
 import path from 'path';
@@ -468,7 +468,7 @@ export class DeploymentManager extends EventEmitter {
 
         try {
             const ws = workspaceManager.getWorkspace(workspaceId);
-            const app = ws?.apps.find((a: any) => a.id === appId);
+            const app = ws?.apps.find((a: any) => a.id === appId) || ws?.infrastructure?.find((a: any) => a.id === appId);
             if (app?.deployUrl) {
                 return app.deployUrl;
             }
@@ -561,14 +561,25 @@ export class DeploymentManager extends EventEmitter {
         'promptaccreditation': 'accreditation',
         'plantune': 'plantune',
         'suiteutils': 'utils',
+        'suiteutils-api': 'utils',
         'persona': 'persona',
+        'persona-bridge': 'persona',
         'urlshortener': 'urlshortener',
         'inferencegateway': 'inferencegateway'
     };
 
+    private async isPortListening(port: number): Promise<boolean> {
+        return new Promise<boolean>((resolve) => {
+            exec(`ss -lnt "sport = :${port}"`, (err, stdout) => {
+                if (err) resolve(false);
+                else resolve(stdout.includes(`:${port}`));
+            });
+        });
+    }
+
     public async startLocalApp(appId: string, workspaceId: string = 'stillwater-suite'): Promise<void> {
         const ws = workspaceManager.getWorkspace(workspaceId);
-        const app = ws?.apps.find(a => a.id === appId);
+        const app = ws?.apps.find(a => a.id === appId) || ws?.infrastructure?.find(a => a.id === appId);
         if (!app) throw new Error(`App ${appId} not found in workspace ${workspaceId}`);
 
         const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
@@ -576,6 +587,40 @@ export class DeploymentManager extends EventEmitter {
         
         if (!fs.existsSync(scriptPath)) {
             throw new Error(`Control script not found for ${appId} (Expected: ${scriptPath})`);
+        }
+
+        // Manage lightMode and transitions for suiteutils/suiteutils-api
+        if (appId === 'suiteutils') {
+            const uiActive = await this.isPortListening(5180);
+            if (uiActive) {
+                // Already running, nothing to do
+                return;
+            }
+            
+            suiteConfigManager.setLightMode(false);
+            
+            // If the API is running but UI is not, we need to recreate the stack in full mode
+            const apiActive = await this.isPortListening(5185);
+            if (apiActive) {
+                await new Promise<void>((resolve, reject) => {
+                    const stopProc = spawn('/bin/bash', [scriptPath, 'stop']);
+                    stopProc.on('close', (code) => {
+                        if (code === 0) resolve();
+                        else reject(new Error(`Failed to stop running api during full-mode transition`));
+                    });
+                });
+            }
+        } else if (appId === 'suiteutils-api') {
+            const apiActive = await this.isPortListening(5185);
+            if (apiActive) {
+                // Already running, nothing to do
+                return;
+            }
+            
+            const uiActive = await this.isPortListening(5180);
+            if (!uiActive) {
+                suiteConfigManager.setLightMode(true);
+            }
         }
 
         // Enable in config so Watchdog monitors it
@@ -594,6 +639,30 @@ export class DeploymentManager extends EventEmitter {
         const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
         const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
         
+        if (appId === 'suiteutils') {
+            // Stop app but keep service running: transition to lightMode
+            suiteConfigManager.setLightMode(true);
+            
+            // Surgically terminate UI port 5180 to avoid killing this running API process
+            return new Promise((resolve) => {
+                exec('fuser -k 5180/tcp', () => {
+                    resolve();
+                });
+            });
+        }
+
+        if (appId === 'suiteutils-api') {
+            // Stop the entire stack
+            suiteConfigManager.setModuleEnabled('utils', false);
+            return new Promise((resolve, reject) => {
+                const proc = spawn('/bin/bash', [scriptPath, 'stop']);
+                proc.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`Failed to stop ${appId} (Exit Code: ${code})`));
+                });
+            });
+        }
+
         // Disable in config so Watchdog ignores it
         suiteConfigManager.setModuleEnabled(scriptPrefix, false);
 
@@ -609,6 +678,16 @@ export class DeploymentManager extends EventEmitter {
     public async restartLocalApp(appId: string): Promise<void> {
         const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
         const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
+
+        if (appId === 'suiteutils') {
+            suiteConfigManager.setLightMode(false);
+        } else if (appId === 'suiteutils-api') {
+            const uiActive = await this.isPortListening(5180);
+            if (!uiActive) {
+                suiteConfigManager.setLightMode(true);
+            }
+        }
+
         return new Promise((resolve, reject) => {
             const proc = spawn('/bin/bash', [scriptPath, 'restart']);
             proc.on('close', (code) => {
@@ -621,13 +700,64 @@ export class DeploymentManager extends EventEmitter {
     public async bulkToggleLocalApps(appIds: string[], enabled: boolean): Promise<void> {
         const scriptPrefixes = appIds.map(id => this.APP_SCRIPT_MAP[id] || id);
         
-        // 1. Update config first (so Watchdog knows what to do)
-        suiteConfigManager.setModulesEnabled(scriptPrefixes, enabled);
+        if (enabled) {
+            if (appIds.includes('suiteutils')) {
+                const uiActive = await this.isPortListening(5180);
+                if (!uiActive) {
+                    suiteConfigManager.setLightMode(false);
+                    const apiActive = await this.isPortListening(5185);
+                    if (apiActive) {
+                        const scriptPath = path.join(process.cwd(), 'utils-ctl.sh');
+                        await new Promise<void>((resolve, reject) => {
+                            const stopProc = spawn('/bin/bash', [scriptPath, 'stop']);
+                            stopProc.on('close', (code) => {
+                                if (code === 0) resolve();
+                                else reject(new Error(`Failed to stop utils stack`));
+                            });
+                        });
+                    }
+                }
+            } else if (appIds.includes('suiteutils-api')) {
+                const apiActive = await this.isPortListening(5185);
+                if (!apiActive) {
+                    const uiActive = await this.isPortListening(5180);
+                    if (!uiActive) {
+                        suiteConfigManager.setLightMode(true);
+                    }
+                }
+            }
+            suiteConfigManager.setModulesEnabled(scriptPrefixes, enabled);
+        } else {
+            if (appIds.includes('suiteutils') && !appIds.includes('suiteutils-api')) {
+                suiteConfigManager.setLightMode(true);
+                await new Promise<void>((resolve) => {
+                    exec('fuser -k 5180/tcp', () => {
+                        resolve();
+                    });
+                });
+            } else {
+                suiteConfigManager.setModulesEnabled(scriptPrefixes, enabled);
+            }
+        }
 
-        // 2. Perform process actions
         const action = enabled ? 'start' : 'stop';
+        let targetAppIds = appIds;
+        if (enabled) {
+            const filtered: string[] = [];
+            for (const id of appIds) {
+                if (id === 'suiteutils' && await this.isPortListening(5180)) continue;
+                if (id === 'suiteutils-api' && await this.isPortListening(5185)) continue;
+                filtered.push(id);
+            }
+            targetAppIds = filtered;
+        } else {
+            if (appIds.includes('suiteutils') && !appIds.includes('suiteutils-api')) {
+                targetAppIds = appIds.filter(id => id !== 'suiteutils' && id !== 'suiteutils-api');
+            }
+        }
+
         const results = await Promise.allSettled(
-            appIds.map(appId => {
+            targetAppIds.map(appId => {
                 const scriptPrefix = this.APP_SCRIPT_MAP[appId] || appId;
                 const scriptPath = path.join(process.cwd(), `${scriptPrefix}-ctl.sh`);
                 return new Promise<void>((resolve, reject) => {

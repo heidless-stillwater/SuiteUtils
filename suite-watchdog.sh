@@ -36,17 +36,23 @@ while true; do
         | paste - - - - \
         > "$TMP_MODULES"
 
+    LIGHT_MODE=$(node -e 'const fs=require("fs"); const c=JSON.parse(fs.readFileSync("'"$CONFIG_FILE"'", "utf8")); console.log(c.lightMode || false);' 2>/dev/null || echo "false")
+
     while read -r name script port enabled; do
         if [ "$enabled" = "true" ]; then
-            if ! ss -lnt | grep -qE ":${port}(\s|$)"; then
-                echo "[$(date)] ⚠️  $name (Port $port) OFFLINE. Attempting resurrection..." >> "$LOG_FILE"
+            CHECK_PORT=$port
+            if [ "$name" = "utils" ] && [ "$LIGHT_MODE" = "true" ]; then
+                CHECK_PORT=5185
+            fi
+            if ! ss -lnt | grep -qE ":${CHECK_PORT}(\s|$)"; then
+                echo "[$(date)] ⚠️  $name (Port $CHECK_PORT) OFFLINE. Attempting resurrection..." >> "$LOG_FILE"
                 /home/heidless/projects/SuiteUtils/$script start >> "$LOG_FILE" 2>&1
                 sleep 3
                 # Verify resurrection succeeded
-                if ss -lnt | grep -qE ":${port}(\s|$)"; then
-                    echo "[$(date)] ✅ $name resurrected successfully on port $port." >> "$LOG_FILE"
+                if ss -lnt | grep -qE ":${CHECK_PORT}(\s|$)"; then
+                    echo "[$(date)] ✅ $name resurrected successfully on port $CHECK_PORT." >> "$LOG_FILE"
                 else
-                    echo "[$(date)] ❌ $name resurrection FAILED on port $port. Check log." >> "$LOG_FILE"
+                    echo "[$(date)] ❌ $name resurrection FAILED on port $CHECK_PORT. Check log." >> "$LOG_FILE"
                 fi
                 STATE_CHANGED=true
             fi

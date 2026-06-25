@@ -24,6 +24,7 @@ import { Link } from 'react-router-dom';
 
 interface ProModeViewProps {
   apps: any[];
+  infrastructure?: any[];
   healthResults: any[];
   onOpenLogs: (appId: string) => void;
   selectedIds: string[];
@@ -37,6 +38,7 @@ interface ProModeViewProps {
 
 export default function ProModeView({ 
   apps, 
+  infrastructure = [],
   healthResults, 
   onOpenLogs,
   selectedIds,
@@ -53,6 +55,10 @@ export default function ProModeView({
     }
     return 4;
   });
+
+  // Collapsible sections state
+  const [isAppsOpen, setIsAppsOpen] = React.useState(false);
+  const [isInfraOpen, setIsInfraOpen] = React.useState(true);
 
   const handleCardsPerRowChange = (cols: number) => {
     setCardsPerRow(cols);
@@ -73,6 +79,18 @@ export default function ProModeView({
     return apps.map(([id]) => id);
   });
 
+  const [infraOrder, setInfraOrder] = React.useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hive-infra-order');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {}
+      }
+    }
+    return infrastructure.map(([id]) => id);
+  });
+
   React.useEffect(() => {
     const currentIds = apps.map(([id]) => id);
     setAppOrder(prev => {
@@ -88,6 +106,22 @@ export default function ProModeView({
       return prev;
     });
   }, [apps]);
+
+  React.useEffect(() => {
+    const currentIds = infrastructure.map(([id]) => id);
+    setInfraOrder(prev => {
+      const filtered = prev.filter(id => currentIds.includes(id));
+      const missing = currentIds.filter(id => !filtered.includes(id));
+      const merged = [...filtered, ...missing];
+      if (JSON.stringify(prev) !== JSON.stringify(merged)) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('hive-infra-order', JSON.stringify(merged));
+        }
+        return merged;
+      }
+      return prev;
+    });
+  }, [infrastructure]);
 
   const handleShiftApp = (appId: string, direction: 'left' | 'right') => {
     const index = appOrder.indexOf(appId);
@@ -108,6 +142,25 @@ export default function ProModeView({
     }
   };
 
+  const handleShiftInfra = (appId: string, direction: 'left' | 'right') => {
+    const index = infraOrder.indexOf(appId);
+    if (index === -1) return;
+    
+    let newIndex = index;
+    if (direction === 'left' && index > 0) newIndex = index - 1;
+    else if (direction === 'right' && index < infraOrder.length - 1) newIndex = index + 1;
+    
+    if (newIndex !== index) {
+      const newOrder = [...infraOrder];
+      newOrder[index] = newOrder[newIndex];
+      newOrder[newIndex] = appId;
+      setInfraOrder(newOrder);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hive-infra-order', JSON.stringify(newOrder));
+      }
+    }
+  };
+
   const GRID_COLUMNS_MAP: Record<number, string> = {
     1: 'grid-cols-1',
     2: 'grid-cols-1 sm:grid-cols-2',
@@ -121,7 +174,7 @@ export default function ProModeView({
   };
 
   const handleSelectAll = () => {
-    const allIds = apps.map(([appId]) => appId);
+    const allIds = [...apps.map(([appId]) => appId), ...infrastructure.map(([appId]) => appId)];
     const allSelected = allIds.every(id => selectedIds.includes(id));
     
     if (allSelected) {
@@ -136,9 +189,211 @@ export default function ProModeView({
   };
 
   const handleClearSelection = () => {
-    apps.forEach(([appId]) => {
+    const allIds = [...apps.map(([appId]) => appId), ...infrastructure.map(([appId]) => appId)];
+    allIds.forEach(appId => {
       if (selectedIds.includes(appId)) toggleSelect(appId);
     });
+  };
+
+  const renderCard = (appId: string, index: number, isInfra: boolean) => {
+    const list = isInfra ? infrastructure : apps;
+    const orderList = isInfra ? infraOrder : appOrder;
+    const shiftHandler = isInfra ? handleShiftInfra : handleShiftApp;
+    
+    const appEntry = list.find(([id]) => id === appId);
+    if (!appEntry) return null;
+    const [_, config] = appEntry;
+    const health = getHealth(appId);
+    const isUp = health?.status === 'UP' || appId.toLowerCase() === 'suiteutils';
+    const LINKED_MODULES: Record<string, string> = {
+      'suiteutils': 'suiteutils-api',
+      'suiteutils-api': 'suiteutils',
+      'persona': 'persona-bridge',
+      'persona-bridge': 'persona'
+    };
+    const linkedId = LINKED_MODULES[appId];
+
+    const isSelected = selectedIds.includes(appId);
+    const isWorking = loadingAppId === appId || (loadingAppId !== null && loadingAppId === linkedId);
+    const isCompleted = completedIds.includes(appId) || (linkedId !== undefined && completedIds.includes(linkedId));
+    
+    return (
+      <motion.div 
+        key={appId} 
+        layout
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          toggleSelect(appId);
+        }}
+        className={`glass-card p-5 group relative overflow-hidden cursor-pointer transition-all duration-500 ${
+          isWorking ? 'border-primary/60 bg-primary/20 ring-2 ring-primary/40 shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)]' : 
+          isSelected ? 'border-indigo-400/50 bg-indigo-400/10 ring-1 ring-indigo-400/30 shadow-[0_0_20px_rgba(129,140,248,0.15)]' :
+          (health?.status === 'UP') ? 'border-primary/30 bg-primary/10 shadow-[inset_0_0_20px_rgba(var(--primary-rgb),0.15),0_0_15px_rgba(var(--primary-rgb),0.1)]' :
+          'hover:border-white/10'
+        }`}
+      >
+        {/* Orchestration Telemetry Overlay */}
+        {(isWorking || isCompleted) && (
+          <div className="absolute inset-0 z-[60] bg-black/40 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+            <div className="absolute bottom-0 left-0 w-full h-2 bg-white/5 overflow-hidden">
+              <motion.div
+                initial={{ width: '0%' }}
+                animate={{ 
+                  width: isCompleted ? '100%' : isWorking ? '92%' : '8%',
+                  backgroundColor: isCompleted ? '#4ade80' : '#3b82f6'
+                }}
+                transition={{ 
+                  width: { duration: isCompleted ? 0.3 : 20, ease: isCompleted ? "easeOut" : "linear" },
+                  backgroundColor: { duration: 0.3 }
+                }}
+                className="h-full shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+              />
+            </div>
+            
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative">
+                {isCompleted ? (
+                  <CheckCircle2 className="w-8 h-8 text-green-500" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+                )}
+              </div>
+              
+              <div>
+                <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isCompleted ? 'text-green-400' : 'text-primary animate-pulse'}`}>
+                  {isCompleted ? 'State Confirmed' : (isUp ? 'Extinguishing...' : 'Probing Port...')}
+                </span>
+                <p className="text-[8px] font-mono text-white/20 uppercase tracking-widest mt-1">
+                  Neural Link :: {appId}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Selection Checkbox Overlay */}
+        <div className={`absolute top-0 left-0 p-3 z-10 transition-opacity duration-300 ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'
+        }`}>
+          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${
+            isWorking ? 'bg-primary border-primary' :
+            isSelected ? 'bg-indigo-50 border-indigo-50' : 'border-white/20'
+          }`}>
+            {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
+          </div>
+        </div>
+
+        {/* Shift Controls Overlay */}
+        <div className="absolute top-0 right-0 p-3 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {index > 0 && (
+            <div className="relative group/btn">
+              <button 
+                onClick={(e) => { e.stopPropagation(); shiftHandler(appId, 'left'); }}
+                className="p-1 rounded-md bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <div className="absolute top-full right-0 mt-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
+                Shift Earlier
+              </div>
+            </div>
+          )}
+          {index < orderList.length - 1 && (
+            <div className="relative group/btn">
+              <button 
+                onClick={(e) => { e.stopPropagation(); shiftHandler(appId, 'right'); }}
+                className="p-1 rounded-md bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              <div className="absolute top-full right-0 mt-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
+                Shift Later
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mb-4">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500 ${
+            isUp 
+              ? 'bg-primary/20 text-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]' 
+              : 'bg-white/5 text-white/20'
+          }`}>
+            <Server className="w-5 h-5" />
+          </div>
+          <div className="flex flex-col items-end">
+            <span className={`text-[9px] font-black uppercase tracking-widest transition-colors duration-500 ${isUp ? 'text-primary' : 'text-white/20'}`}>
+              {isUp ? 'MODULE ACTIVE' : 'MODULE OFFLINE'}
+            </span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary-rgb),0.6)]' : 'bg-white/10'}`} />
+              <span className={`text-[8px] font-mono transition-colors duration-500 ${isUp ? 'text-primary/60' : 'text-white/20'}`}>
+                {health?.latency ? `${health.latency}ms` : '--'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <h3 className="text-sm font-bold text-white/90 mb-1 uppercase tracking-tight truncate group-hover:text-primary transition-colors">
+          {config.displayName || config.name || appId}
+        </h3>
+        <p className="text-[10px] text-white/30 font-mono mb-4 truncate">{config.path}</p>
+
+        {/* High-Density Telemetry Block */}
+        <div className="space-y-2 text-[10px] text-white/40 font-mono bg-black/40 p-3 rounded-lg mb-4 border border-white/5 backdrop-blur-md">
+          <div className="flex items-center justify-between py-1 border-b border-white/5">
+            <span className="text-white/20 uppercase tracking-tighter">Process</span>
+            <span className="text-white/60">
+              {`PID:${health?.pid ?? '?'} | PORT:${health?.port ?? '?'}`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-white/20 uppercase tracking-tighter">Version</span>
+            <span className="text-primary/60 font-black">v{health?.appVersion || '1.0.0'}</span>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => handleAction(appId, isUp ? 'stop' : 'start')}
+              disabled={isWorking}
+              className={`p-2 rounded-lg transition-all ${
+                isUp 
+                  ? 'text-red-400 bg-red-400/10 hover:bg-red-400/20' 
+                  : 'text-primary bg-primary/10 hover:bg-primary/20'
+              } border border-transparent hover:border-current/20 disabled:opacity-50`}
+              title={isWorking ? "Orchestrating..." : (isUp ? "Extinguish Module" : "Ignite Module")}
+            >
+              {isWorking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (isUp ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />)}
+            </button>
+            <button
+              onClick={() => handleAction(appId, 'restart')}
+              disabled={isWorking || !isUp}
+              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/30 hover:text-white transition-all border border-white/5 disabled:opacity-20"
+              title="Reboot Module"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button 
+              onClick={() => onOpenLogs(appId)}
+              className="p-2 rounded-lg bg-white/5 hover:bg-primary/20 text-white/30 hover:text-primary transition-all border border-white/5 hover:border-primary/40"
+              title="Terminal Stream"
+            >
+              <Terminal className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          
+          <Link
+            to={appId === 'persona' ? "/persona" : "/deploy"}
+            className="flex items-center gap-1.5 text-[10px] text-white/25 hover:text-primary transition-colors font-bold uppercase tracking-widest"
+          >
+            {appId === 'persona' ? "Intelligence Core" : "Details"}
+            <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </motion.div>
+    );
   };
 
   return (
@@ -182,7 +437,7 @@ export default function ProModeView({
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Hive Operations</span>
             <span className="text-[11px] text-white/80 font-black uppercase tracking-widest mt-0.5">
-              {selectedIds.length > 0 ? `${selectedIds.length} of ${apps.length} Modules Selected` : 'Select Modules to Synchronize'}
+              {selectedIds.length > 0 ? `${selectedIds.length} of ${apps.length + infrastructure.length} Modules Selected` : 'Select Modules to Synchronize'}
             </span>
           </div>
           {selectedIds.length > 0 && (
@@ -210,22 +465,22 @@ export default function ProModeView({
             <button
               onClick={handleSelectAll}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                selectedIds.length === apps.length
+                selectedIds.length === (apps.length + infrastructure.length)
                   ? 'bg-primary/20 border-primary/40 text-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.1)]'
                   : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
               }`}
             >
               <div className={`w-3.5 h-3.5 rounded border transition-all flex items-center justify-center ${
-                selectedIds.length === apps.length ? 'bg-primary border-primary' : 'border-white/20'
+                selectedIds.length === (apps.length + infrastructure.length) ? 'bg-primary border-primary' : 'border-white/20'
               }`}>
-                {selectedIds.length === apps.length && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
+                {selectedIds.length === (apps.length + infrastructure.length) && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
               </div>
               <span className="text-[10px] font-black uppercase tracking-widest">
-                {selectedIds.length === apps.length ? 'Deselect All' : 'Select All'}
+                {selectedIds.length === (apps.length + infrastructure.length) ? 'Deselect All' : 'Select All'}
               </span>
             </button>
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
-              {selectedIds.length === apps.length ? 'Clear all selected modules' : 'Select all 8 registered modules'}
+              {selectedIds.length === (apps.length + infrastructure.length) ? 'Clear all selected modules' : `Select all ${apps.length + infrastructure.length} registered modules`}
               <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-black/90" />
             </div>
           </div>
@@ -304,196 +559,86 @@ export default function ProModeView({
         </div>
       </div>
 
-      {/* High-Density Service Grid */}
-      <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4`}>
-        {appOrder.map((appId, index) => {
-          const appEntry = apps.find(([id]) => id === appId);
-          if (!appEntry) return null;
-          const [_, config] = appEntry;
-          const health = getHealth(appId);
-          const isUp = health?.status === 'UP' || appId.toLowerCase() === 'suiteutils';
-          const isSelected = selectedIds.includes(appId);
-          const isWorking = loadingAppId === appId;
-          const isCompleted = completedIds.includes(appId);
-          
-          return (
-            <motion.div 
-              key={appId} 
-              layout
-              onClick={(e) => {
-                if ((e.target as HTMLElement).closest('button')) return;
-                toggleSelect(appId);
-              }}
-              className={`glass-card p-5 group relative overflow-hidden cursor-pointer transition-all duration-500 ${
-                isWorking ? 'border-primary/60 bg-primary/20 ring-2 ring-primary/40 shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)]' : 
-                isSelected ? 'border-indigo-400/50 bg-indigo-400/10 ring-1 ring-indigo-400/30 shadow-[0_0_20px_rgba(129,140,248,0.15)]' :
-                (health?.status === 'UP') ? 'border-primary/30 bg-primary/10 shadow-[inset_0_0_20px_rgba(var(--primary-rgb),0.15),0_0_15px_rgba(var(--primary-rgb),0.1)]' :
-                'hover:border-white/10'
-              }`}
+      {/* Applications Section */}
+      <div className="space-y-4">
+        <button
+          onClick={() => setIsAppsOpen(!isAppsOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-2xl transition-all group text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 text-primary border border-primary/20 transition-transform duration-300 ${isAppsOpen ? 'rotate-90' : ''}`}>
+              <ChevronRight className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-white/90">Applications</h3>
+              <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-0.5">
+                {apps.length} Module{apps.length > 1 ? 's' : ''} Registered
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
+              {apps.filter(([id]) => getHealth(id)?.status === 'UP').length} Active
+            </span>
+          </div>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {isAppsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden"
             >
-              {/* Orchestration Telemetry Overlay */}
-              {(isWorking || isCompleted) && (
-                <div className="absolute inset-0 z-[60] bg-black/40 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
-                  <div className="absolute bottom-0 left-0 w-full h-2 bg-white/5 overflow-hidden">
-                    <motion.div
-                      initial={{ width: '0%' }}
-                      animate={{ 
-                        width: isCompleted ? '100%' : isWorking ? '92%' : '8%',
-                        backgroundColor: isCompleted ? '#4ade80' : '#3b82f6'
-                      }}
-                      transition={{ 
-                        width: { duration: isCompleted ? 0.3 : 20, ease: isCompleted ? "easeOut" : "linear" },
-                        backgroundColor: { duration: 0.3 }
-                      }}
-                      className="h-full shadow-[0_0_15px_rgba(59,130,246,0.5)]"
-                    />
-                  </div>
-                  
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="relative">
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-8 h-8 text-green-500" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-                      )}
-                    </div>
-                    
-                    <div>
-                      <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isCompleted ? 'text-green-400' : 'text-primary animate-pulse'}`}>
-                        {isCompleted ? 'State Confirmed' : (isUp ? 'Extinguishing...' : 'Probing Port...')}
-                      </span>
-                      <p className="text-[8px] font-mono text-white/20 uppercase tracking-widest mt-1">
-                        Neural Link :: {appId}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Selection Checkbox Overlay */}
-              <div className={`absolute top-0 left-0 p-3 z-10 transition-opacity duration-300 ${
-                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'
-              }`}>
-                <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${
-                  isWorking ? 'bg-primary border-primary' :
-                  isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-white/20'
-                }`}>
-                  {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
-                </div>
-              </div>
-
-              {/* Shift Controls Overlay */}
-              <div className="absolute top-0 right-0 p-3 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                {index > 0 && (
-                  <div className="relative group/btn">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleShiftApp(appId, 'left'); }}
-                      className="p-1 rounded-md bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="absolute top-full right-0 mt-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
-                      Shift Earlier
-                    </div>
-                  </div>
-                )}
-                {index < appOrder.length - 1 && (
-                  <div className="relative group/btn">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleShiftApp(appId, 'right'); }}
-                      className="p-1 rounded-md bg-black/40 hover:bg-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md border border-white/5"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="absolute top-full right-0 mt-2 px-2 py-1 bg-black/90 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/80 rounded-lg opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-300 whitespace-nowrap shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)] z-[100] backdrop-blur-md">
-                      Shift Later
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500 ${
-                  isUp 
-                    ? 'bg-primary/20 text-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]' 
-                    : 'bg-white/5 text-white/20'
-                }`}>
-                  <Server className="w-5 h-5" />
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className={`text-[9px] font-black uppercase tracking-widest transition-colors duration-500 ${isUp ? 'text-primary' : 'text-white/20'}`}>
-                    {isUp ? 'MODULE ACTIVE' : 'MODULE OFFLINE'}
-                  </span>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary-rgb),0.6)]' : 'bg-white/10'}`} />
-                    <span className={`text-[8px] font-mono transition-colors duration-500 ${isUp ? 'text-primary/60' : 'text-white/20'}`}>
-                      {health?.latency ? `${health.latency}ms` : '--'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <h3 className="text-sm font-bold text-white/90 mb-1 uppercase tracking-tight truncate group-hover:text-primary transition-colors">
-                {config.displayName || config.name || appId}
-              </h3>
-              <p className="text-[10px] text-white/30 font-mono mb-4 truncate">{config.path}</p>
-
-              {/* High-Density Telemetry Block */}
-              <div className="space-y-2 text-[10px] text-white/40 font-mono bg-black/40 p-3 rounded-lg mb-4 border border-white/5 backdrop-blur-md">
-                <div className="flex items-center justify-between py-1 border-b border-white/5">
-                  <span className="text-white/20 uppercase tracking-tighter">Process</span>
-                  <span className="text-white/60">
-                    {`PID:${health?.pid ?? '?'} | PORT:${health?.port ?? '?'}`}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <span className="text-white/20 uppercase tracking-tighter">Version</span>
-                  <span className="text-primary/60 font-black">v{health?.appVersion || '1.0.0'}</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => handleAction(appId, isUp ? 'stop' : 'start')}
-                    disabled={isWorking}
-                    className={`p-2 rounded-lg transition-all ${
-                      isUp 
-                        ? 'text-red-400 bg-red-400/10 hover:bg-red-400/20' 
-                        : 'text-primary bg-primary/10 hover:bg-primary/20'
-                    } border border-transparent hover:border-current/20 disabled:opacity-50`}
-                    title={isWorking ? "Orchestrating..." : (isUp ? "Extinguish Module" : "Ignite Module")}
-                  >
-                    {isWorking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (isUp ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />)}
-                  </button>
-                  <button
-                    onClick={() => handleAction(appId, 'restart')}
-                    disabled={isWorking || !isUp}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/30 hover:text-white transition-all border border-white/5 disabled:opacity-20"
-                    title="Reboot Module"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                  <button 
-                    onClick={() => onOpenLogs(appId)}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-primary/20 text-white/30 hover:text-primary transition-all border border-white/5 hover:border-primary/40"
-                    title="Terminal Stream"
-                  >
-                    <Terminal className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                
-                <Link
-                  to={appId === 'persona' ? "/persona" : "/deploy"}
-                  className="flex items-center gap-1.5 text-[10px] text-white/25 hover:text-primary transition-colors font-bold uppercase tracking-widest"
-                >
-                  {appId === 'persona' ? "Intelligence Core" : "Details"}
-                  <ArrowRight className="w-3 h-3" />
-                </Link>
+              <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4 pt-2 pb-6`}>
+                {appOrder.map((appId, index) => renderCard(appId, index, false))}
               </div>
             </motion.div>
-          );
-        })}
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Infrastructure Section */}
+      <div className="space-y-4">
+        <button
+          onClick={() => setIsInfraOpen(!isInfraOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-2xl transition-all group text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 text-primary border border-primary/20 transition-transform duration-300 ${isInfraOpen ? 'rotate-90' : ''}`}>
+              <ChevronRight className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-white/90">Infrastructure Services</h3>
+              <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-0.5">
+                {infrastructure.length} Service{infrastructure.length > 1 ? 's' : ''} Monitored
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
+              {infrastructure.filter(([id]) => getHealth(id)?.status === 'UP').length} Active
+            </span>
+          </div>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {isInfraOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4 pt-2 pb-6`}>
+                {infraOrder.map((appId, index) => renderCard(appId, index, true))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Maintenance Controls */}

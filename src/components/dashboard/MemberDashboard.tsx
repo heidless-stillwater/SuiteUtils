@@ -8,6 +8,7 @@ import ProModeView from './member/ProModeView';
 interface MemberDashboardProps {
   profile: any;
   apps: any[];
+  infrastructure?: any[];
   healthResults: any[];
   onOpenLogs: (appId: string) => void;
   selectedIds: string[];
@@ -23,6 +24,7 @@ interface MemberDashboardProps {
 export default function MemberDashboard({ 
   profile, 
   apps, 
+  infrastructure = [],
   healthResults, 
   onOpenLogs,
   selectedIds,
@@ -55,6 +57,7 @@ export default function MemberDashboard({
           ) : (
             <ProModeView 
               apps={apps} 
+              infrastructure={infrastructure}
               healthResults={healthResults} 
               onOpenLogs={onOpenLogs}
               selectedIds={selectedIds}

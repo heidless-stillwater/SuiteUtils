@@ -18,6 +18,7 @@ export interface Workspace {
   description: string;
   ownerEmail?: string;
   apps: AppConfig[];
+  infrastructure?: AppConfig[];
   createdAt: string;
   gcpProjectId?: string;
 }
@@ -56,6 +57,10 @@ export class WorkspaceManager {
             { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-url-shortener-02.web.app' },
             { id: 'tokenmarket', name: 'TokenMarket v1.0', dbId: 'tokenmarket-db-0', projectPath: '~/projects/TokenMarket', hostingTarget: 'stillwater-token-market', deployMethod: 'firebase', deployUrl: 'https://stillwater-token-market-02.web.app' },
             { id: 'inferencegateway', name: 'InferenceGateway v1.0', dbId: 'inferencegateway-db-0', projectPath: '~/projects/InferenceGateway', hostingTarget: 'stillwater-inference-gateway', deployMethod: 'firebase', deployUrl: 'http://localhost:3009' }
+          ],
+          infrastructure: [
+            { id: 'suiteutils-api', name: 'SuiteUtils API', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suite-utils' },
+            { id: 'persona-bridge', name: 'Persona Bridge API', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'stillwater-persona' }
           ]
         };
         this.workspaces.set(defaultWorkspace.id, defaultWorkspace);
@@ -103,6 +108,10 @@ export class WorkspaceManager {
           { id: 'urlshortener', name: 'URLShortener v1.0', dbId: 'urlshortener-db-0', projectPath: '~/projects/URLShortener', hostingTarget: 'stillwater-url-shortener', deployMethod: 'cloud-build', deployUrl: 'https://stillwater-url-shortener-02.web.app' },
           { id: 'tokenmarket', name: 'TokenMarket v1.0', dbId: 'tokenmarket-db-0', projectPath: '~/projects/TokenMarket', hostingTarget: 'stillwater-token-market', deployMethod: 'firebase', deployUrl: 'https://stillwater-token-market-02.web.app' },
           { id: 'inferencegateway', name: 'InferenceGateway v1.0', dbId: 'inferencegateway-db-0', projectPath: '~/projects/InferenceGateway', hostingTarget: 'stillwater-inference-gateway', deployMethod: 'firebase', deployUrl: 'http://localhost:3009' }
+        ],
+        infrastructure: [
+          { id: 'suiteutils-api', name: 'SuiteUtils API', dbId: 'suiteutils-db-0', projectPath: '~/projects/SuiteUtils', hostingTarget: 'suite-utils' },
+          { id: 'persona-bridge', name: 'Persona Bridge API', dbId: 'persona-db-0', projectPath: '~/projects/Persona', hostingTarget: 'stillwater-persona' }
         ]
       };
       this.workspaces.set(id, ws);

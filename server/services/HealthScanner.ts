@@ -118,6 +118,8 @@ export class HealthScanner {
       'plantune': 3004,
       'persona': 3005,
       'suiteutils': 5180,
+      'suiteutils-api': 5185,
+      'persona-bridge': 5005,
       'urlshortener': 3006,
       'tokenmarket': 3007,
       'inferencegateway': 3009
@@ -129,30 +131,26 @@ export class HealthScanner {
 
     // 2. SELF-CHECK: Suiteutils health
     if (id === 'suiteutils') {
-      // Detect PID using the same strategy as other services
-      let suitePid: number | undefined;
-      if (port) {
-        try {
-          const { stdout } = await execAsync(`ss -lntp "sport = :${port}" 2>/dev/null`, { timeout: 1500 });
-          const pidMatch = stdout.match(/pid=(\d+)/);
-          if (pidMatch) {
-            suitePid = parseInt(pidMatch[1]);
-          } else {
-            const { stdout: fuserOut } = await execAsync(`fuser ${port}/tcp 2>/dev/null`, { timeout: 1000 });
-            if (fuserOut) suitePid = parseInt(fuserOut.trim().split(/\s+/)[0]);
-          }
-        } catch (e) {}
+      const configPath = path.join(process.cwd(), 'suite.config.json');
+      let isLightMode = false;
+      let isEnabled = false;
+      try {
+        const config = fs.readJsonSync(configPath);
+        isLightMode = config.lightMode === true;
+        isEnabled = config.modules.find((m: any) => m.name === 'utils')?.enabled === true;
+      } catch (e) {}
+
+      if (isLightMode || !isEnabled) {
+        const result: HealthStatus = {
+          appId,
+          status: 'DOWN',
+          lastChecked: new Date().toISOString(),
+          responseTime: Date.now() - start,
+          port: 5180
+        };
+        this.statusMap.set(id, result);
+        return result;
       }
-      const result: HealthStatus = {
-        appId,
-        status: 'UP',
-        lastChecked: new Date().toISOString(),
-        responseTime: Date.now() - start,
-        pid: suitePid,
-        port: port || Number(process.env.SUITEUTILS_PORT) || 5180,
-      };
-      this.statusMap.set(id, result);
-      return result;
     }
 
     let pid: number | undefined;

@@ -5,7 +5,7 @@ export type { AppConfig as AppRecord };
 export class AppRegistry {
   getApps(workspaceId: string = 'stillwater-suite'): AppConfig[] {
     const ws = workspaceManager.getWorkspace(workspaceId);
-    return ws?.apps || [];
+    return [...(ws?.apps || []), ...(ws?.infrastructure || [])];
   }
 
   getApp(appId: string, workspaceId: string = 'stillwater-suite'): AppConfig | undefined {

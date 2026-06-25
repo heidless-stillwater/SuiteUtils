@@ -104,6 +104,22 @@
         "deployMethod": "firebase",
         "deployUrl": "http://localhost:3009"
       }
+    ],
+    "infrastructure": [
+      {
+        "id": "suiteutils-api",
+        "name": "SuiteUtils API",
+        "dbId": "suiteutils-db-0",
+        "projectPath": "~/projects/SuiteUtils",
+        "hostingTarget": "suite-utils"
+      },
+      {
+        "id": "persona-bridge",
+        "name": "Persona Bridge API",
+        "dbId": "persona-db-0",
+        "projectPath": "~/projects/Persona",
+        "hostingTarget": "stillwater-persona"
+      }
     ]
   },
   {
@@ -189,6 +205,22 @@
         "dbId": "inferencegateway-db-0",
         "projectPath": "~/projects/InferenceGateway",
         "deployMethod": "firebase"
+      }
+    ],
+    "infrastructure": [
+      {
+        "id": "suiteutils-api",
+        "name": "SuiteUtils API",
+        "dbId": "suiteutils-db-0",
+        "projectPath": "~/projects/SuiteUtils",
+        "hostingTarget": "suite-utils"
+      },
+      {
+        "id": "persona-bridge",
+        "name": "Persona Bridge API",
+        "dbId": "persona-db-0",
+        "projectPath": "~/projects/Persona",
+        "hostingTarget": "stillwater-persona"
       }
     ]
   }

@@ -12,12 +12,16 @@ import {
   Users,
   UserPlus,
   Mail,
-  Shield
+  Shield,
+  ChevronDown,
+  ChevronRight,
+  Server
 } from 'lucide-react';
 import { useSuite } from '../contexts/SuiteContext';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../lib/api-config';
 import { parseDate } from '../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface AppConfig {
   id: string;
@@ -40,10 +44,15 @@ export function WorkspacePage() {
   const { user, workspaceRole, isViewer } = useAuth();
   const [activeTab, setActiveTab] = useState<'apps' | 'team' | 'settings'>('apps');
   const [apps, setApps] = useState<AppConfig[]>([]);
+  const [infrastructure, setInfrastructure] = useState<AppConfig[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Accordion Expand/Collapse State
+  const [isAppsExpanded, setIsAppsExpanded] = useState(false);
+  const [isInfraExpanded, setIsInfraExpanded] = useState(true);
 
   // New Invitation Form
   const [showInvite, setShowInvite] = useState(false);
@@ -52,6 +61,7 @@ export function WorkspacePage() {
 
   // New App Form
   const [showAdd, setShowAdd] = useState(false);
+  const [addType, setAddType] = useState<'app' | 'infrastructure'>('app');
   const [newApp, setNewApp] = useState<Partial<AppConfig>>({
     id: '',
     name: '',
@@ -74,6 +84,7 @@ export function WorkspacePage() {
         const appData = await appRes.json();
         const invData = await invRes.json();
         setApps(appData.apps || []);
+        setInfrastructure(appData.infrastructure || []);
         setInvitations(invData || []);
       } catch (err) {
         console.error('Failed to fetch workspace data:', err);
@@ -119,7 +130,7 @@ export function WorkspacePage() {
     }
   };
 
-  const handleSave = async (updatedApps: AppConfig[]) => {
+  const handleSave = async (updatedApps: AppConfig[], updatedInfra: AppConfig[]) => {
     setSaving(true);
     setError(null);
     try {
@@ -129,10 +140,11 @@ export function WorkspacePage() {
           'Content-Type': 'application/json',
           'x-workspace-id': currentSuite?.id || ''
         },
-        body: JSON.stringify({ apps: updatedApps })
+        body: JSON.stringify({ apps: updatedApps, infrastructure: updatedInfra })
       });
       if (!res.ok) throw new Error('Failed to save changes');
       setApps(updatedApps);
+      setInfrastructure(updatedInfra);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -142,15 +154,25 @@ export function WorkspacePage() {
 
   const addApp = () => {
     if (!newApp.id || !newApp.name) return;
-    const updated = [...apps, newApp as AppConfig];
-    handleSave(updated);
+    if (addType === 'infrastructure') {
+      const updated = [...infrastructure, newApp as AppConfig];
+      handleSave(apps, updated);
+    } else {
+      const updated = [...apps, newApp as AppConfig];
+      handleSave(updated, infrastructure);
+    }
     setNewApp({ id: '', name: '', dbId: '', projectPath: '', hostingTarget: '' });
     setShowAdd(false);
   };
 
-  const removeApp = (id: string) => {
-    const updated = apps.filter(a => a.id !== id);
-    handleSave(updated);
+  const removeApp = (id: string, type: 'app' | 'infrastructure') => {
+    if (type === 'infrastructure') {
+      const updated = infrastructure.filter(a => a.id !== id);
+      handleSave(apps, updated);
+    } else {
+      const updated = apps.filter(a => a.id !== id);
+      handleSave(updated, infrastructure);
+    }
   };
 
   if (loading) {
@@ -215,39 +237,152 @@ export function WorkspacePage() {
       )}
 
       {activeTab === 'apps' ? (
-        <div className="grid grid-cols-1 gap-4">
-          {apps.map((app) => (
-            <div key={app.id} className="glass-card-static p-6 flex items-center justify-between group">
-              <div className="flex items-center gap-6">
-                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
-                  <Layers className="w-6 h-6 text-white/20" />
+        <div className="space-y-6">
+          {/* Apps Accordion */}
+          <div className="glass-card-static overflow-hidden">
+            <button
+              onClick={() => setIsAppsExpanded(!isAppsExpanded)}
+              className="w-full p-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                  <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white/90">{app.name}</h3>
-                  <div className="flex items-center gap-4 mt-1 text-xs text-white/30">
-                    <span className="flex items-center gap-1.5">
-                      <Database className="w-3 h-3" />
-                      {app.dbId}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Folder className="w-3 h-3" />
-                      {app.projectPath}
-                    </span>
-                  </div>
+                  <h2 className="text-lg font-bold text-white/90">Applications</h2>
+                  <p className="text-xs text-white/30 mt-0.5">Custom modules deployed in the hive ({apps.length} active)</p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => removeApp(app.id)}
-                  className="p-2 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                  title="Remove App"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+              <div className="text-white/40">
+                {isAppsExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
               </div>
-            </div>
-          ))}
+            </button>
+            <AnimatePresence initial={false}>
+              {isAppsExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="border-t border-white/5"
+                >
+                  <div className="p-6 grid grid-cols-1 gap-4">
+                    {apps.length === 0 ? (
+                      <p className="text-sm text-white/20 italic">No applications registered</p>
+                    ) : (
+                      apps.map((app) => (
+                        <div key={app.id} className="glass-card p-5 flex items-center justify-between group border-white/5">
+                          <div className="flex items-center gap-6">
+                            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+                              <Layers className="w-6 h-6 text-white/20" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-bold text-white/90">{app.name}</h3>
+                              <div className="flex items-center gap-4 mt-1 text-xs text-white/30">
+                                <span className="flex items-center gap-1.5">
+                                  <Database className="w-3 h-3" />
+                                  {app.dbId}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <Folder className="w-3 h-3" />
+                                  {app.projectPath}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!isViewer && (
+                              <button 
+                                onClick={() => removeApp(app.id, 'app')}
+                                className="p-2 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                                title="Remove App"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Infrastructure Accordion */}
+          <div className="glass-card-static overflow-hidden">
+            <button
+              onClick={() => setIsInfraExpanded(!isInfraExpanded)}
+              className="w-full p-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                  <Server className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white/90">Infrastructure</h2>
+                  <p className="text-xs text-white/30 mt-0.5">Core API processes running background services ({infrastructure.length} active)</p>
+                </div>
+              </div>
+              <div className="text-white/40">
+                {isInfraExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+              </div>
+            </button>
+            <AnimatePresence initial={false}>
+              {isInfraExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="border-t border-white/5"
+                >
+                  <div className="p-6 grid grid-cols-1 gap-4">
+                    {infrastructure.length === 0 ? (
+                      <p className="text-sm text-white/20 italic">No infrastructure processes registered</p>
+                    ) : (
+                      infrastructure.map((infra) => (
+                        <div key={infra.id} className="glass-card p-5 flex items-center justify-between group border-white/5">
+                          <div className="flex items-center gap-6">
+                            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+                              <Server className="w-6 h-6 text-white/20" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-bold text-white/90">{infra.name}</h3>
+                              <div className="flex items-center gap-4 mt-1 text-xs text-white/30">
+                                <span className="flex items-center gap-1.5">
+                                  <Database className="w-3 h-3" />
+                                  {infra.dbId}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <Folder className="w-3 h-3" />
+                                  {infra.projectPath}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!isViewer && (
+                              <button 
+                                onClick={() => removeApp(infra.id, 'infrastructure')}
+                                className="p-2 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                                title="Remove Infrastructure"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       ) : activeTab === 'team' ? (
         <div className="space-y-4">
@@ -345,15 +480,26 @@ export function WorkspacePage() {
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="glass-card w-full max-w-md p-8 animate-in zoom-in duration-200">
-            <h2 className="text-xl font-bold text-white mb-6">Add New Application</h2>
+            <h2 className="text-xl font-bold text-white mb-6 font-mono uppercase tracking-wider">Add New Registry Item</h2>
             <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Item Type</label>
+                <select
+                  value={addType}
+                  onChange={e => setAddType(e.target.value as 'app' | 'infrastructure')}
+                  className="w-full h-12 px-4 bg-[#0d0d11] border border-white/10 rounded-xl text-white outline-none focus:border-primary/50"
+                >
+                  <option value="app" className="bg-[#0d0d11] text-white">Application Module</option>
+                  <option value="infrastructure" className="bg-[#0d0d11] text-white">Infrastructure Process</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/30 mb-2">Internal ID</label>
                 <input 
                   value={newApp.id}
                   onChange={e => setNewApp({...newApp, id: e.target.value})}
                   className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-primary/50"
-                  placeholder="e.g. my-app-0"
+                  placeholder={addType === 'infrastructure' ? "e.g. suiteutils-api" : "e.g. my-app-0"}
                 />
               </div>
               <div>
@@ -362,7 +508,7 @@ export function WorkspacePage() {
                   value={newApp.name}
                   onChange={e => setNewApp({...newApp, name: e.target.value})}
                   className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-primary/50"
-                  placeholder="e.g. My Dashboard"
+                  placeholder={addType === 'infrastructure' ? "e.g. SuiteUtils API" : "e.g. My Dashboard"}
                 />
               </div>
               <div>
@@ -387,7 +533,10 @@ export function WorkspacePage() {
 
             <div className="flex gap-3 mt-8">
               <button 
-                onClick={() => setShowAdd(false)}
+                onClick={() => {
+                  setShowAdd(false);
+                  setNewApp({ id: '', name: '', dbId: '', projectPath: '', hostingTarget: '' });
+                }}
                 className="flex-1 h-12 rounded-xl bg-white/5 text-white/60 font-bold hover:bg-white/10 transition-all"
               >
                 Cancel
@@ -396,7 +545,7 @@ export function WorkspacePage() {
                 onClick={addApp}
                 className="flex-1 h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/80 transition-all shadow-lg shadow-primary/20"
               >
-                Add App
+                Add Item
               </button>
             </div>
           </div>

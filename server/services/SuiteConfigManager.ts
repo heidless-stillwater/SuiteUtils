@@ -12,6 +12,7 @@ interface ModuleConfig {
 
 interface SuiteConfig {
   activeSession: string;
+  lightMode?: boolean;
   modules: ModuleConfig[];
 }
 
@@ -31,6 +32,19 @@ export class SuiteConfigManager {
 
   private writeConfig(config: SuiteConfig) {
     fs.writeJsonSync(this.configPath, config, { spaces: 2 });
+  }
+
+  public setLightMode(lightMode: boolean) {
+    try {
+      const config = this.readConfig();
+      if (config.lightMode !== lightMode) {
+        console.log(`[SuiteConfig] Setting lightMode to: ${lightMode}`);
+        config.lightMode = lightMode;
+        this.writeConfig(config);
+      }
+    } catch (err) {
+      console.error(`[SuiteConfig] Failed to update lightMode: ${err}`);
+    }
   }
 
   public setModulesEnabled(scriptNames: string[], enabled: boolean) {

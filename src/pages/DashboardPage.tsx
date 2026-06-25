@@ -28,6 +28,7 @@ export function DashboardPage() {
   const { currentSuite, dbError } = useSuite();
   const { profile } = useAuth();
   const [healthResults, setHealthResults] = useState<HealthResult[]>([]);
+  const [workspaceConfig, setWorkspaceConfig] = useState<any>(null);
   const [loadingAppId, setLoadingAppId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -169,6 +170,18 @@ export function DashboardPage() {
   };
 
   // Parse URL parameters for direct validation deep-linking
+  useEffect(() => {
+    if (!currentSuite?.id) return;
+    fetch(`${API_URL}/api/workspaces/current`, {
+      headers: { 'x-workspace-id': currentSuite.id }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setWorkspaceConfig(data);
+      })
+      .catch(console.error);
+  }, [currentSuite?.id]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const valId = params.get('validation');
@@ -342,7 +355,7 @@ export function DashboardPage() {
 
   const handleAction = async (appId: string, action: 'start' | 'stop' | 'restart', force = false) => {
     if (!force) {
-      const displayName = currentSuite?.apps?.[appId]?.displayName || appId;
+      const displayName = currentSuite?.apps?.[appId]?.displayName || infrastructure.find((entry: any) => entry[0] === appId)?.[1]?.displayName || appId;
       setOrchestrationConfirmation({
         appId,
         action,
@@ -352,8 +365,16 @@ export function DashboardPage() {
       return;
     }
 
+    const LINKED_MODULES: Record<string, string> = {
+      'suiteutils': 'suiteutils-api',
+      'suiteutils-api': 'suiteutils',
+      'persona': 'persona-bridge',
+      'persona-bridge': 'persona'
+    };
+    const linkedId = LINKED_MODULES[appId];
+
     setLoadingAppId(appId);
-    setCompletedIds(prev => prev.filter(id => id !== appId));
+    setCompletedIds(prev => prev.filter(id => id !== appId && id !== linkedId));
     
     try {
       await new Promise(r => setTimeout(r, 600));
@@ -373,7 +394,11 @@ export function DashboardPage() {
         await new Promise(r => setTimeout(r, minDuration - elapsed));
       }
 
-      setCompletedIds(prev => [...prev, appId]);
+      setCompletedIds(prev => {
+        const next = [...prev, appId];
+        if (linkedId) next.push(linkedId);
+        return next;
+      });
       
       // Let the "CONFIRMED" checkmark linger
       await new Promise(r => setTimeout(r, 2000));
@@ -382,7 +407,7 @@ export function DashboardPage() {
     } finally {
       setLoadingAppId(null);
       // Wait a bit before clearing completedIds so the UI reflects success
-      setTimeout(() => setCompletedIds(prev => prev.filter(id => id !== appId)), 3000);
+      setTimeout(() => setCompletedIds(prev => prev.filter(id => id !== appId && id !== linkedId)), 3000);
     }
   };
 
@@ -402,10 +427,11 @@ export function DashboardPage() {
 
   const handleBulkToggle = async (enabled: boolean, force = false) => {
     const action = enabled ? 'start' : 'stop';
-    const targetIds = selectedIds.length > 0 ? selectedIds : apps.map(([id]) => id);
+    const allGridIds = [...apps.map((entry: any) => entry[0]), ...infrastructure.map((entry: any) => entry[0])];
+    const targetIds = selectedIds.length > 0 ? selectedIds : allGridIds;
     
     if (!force) {
-      const displayNames = targetIds.map(id => currentSuite?.apps?.[id]?.displayName || id);
+      const displayNames = targetIds.map(id => currentSuite?.apps?.[id]?.displayName || infrastructure.find((entry: any) => entry[0] === id)?.[1]?.displayName || id);
       const displayName = targetIds.length === apps.length 
         ? 'All Modules'
         : displayNames.join(', ');
@@ -474,7 +500,39 @@ export function DashboardPage() {
     );
   }
 
-  const apps = Object.entries(currentSuite?.apps || {}).sort((a, b) => {
+  const workspaceAppIds = workspaceConfig?.apps?.map((a: any) => a.id.toLowerCase()) || [];
+  
+  const apps = Object.entries(currentSuite?.apps || {})
+    .filter(([id]) => {
+      if (!workspaceConfig) return true;
+      return workspaceAppIds.includes(id.toLowerCase());
+    })
+    .sort((a, b) => {
+      const nameA = a[1]?.displayName || a[0] || '';
+      const nameB = b[1]?.displayName || b[0] || '';
+      return nameA.localeCompare(nameB);
+    });
+
+  const infrastructure = (workspaceConfig?.infrastructure || []).map((infra: any) => {
+    return [
+      infra.id,
+      {
+        displayName: infra.name,
+        name: infra.name,
+        path: infra.projectPath,
+        hostingTarget: infra.hostingTarget,
+        dbId: infra.dbId,
+        environments: {
+          production: {
+            status: 'not-configured',
+            deployMethod: 'firebase',
+            hostingTarget: infra.hostingTarget,
+            lastDeployAt: null
+          }
+        }
+      }
+    ];
+  }).sort((a: any, b: any) => {
     const nameA = a[1]?.displayName || a[0] || '';
     const nameB = b[1]?.displayName || b[0] || '';
     return nameA.localeCompare(nameB);
@@ -781,7 +839,7 @@ export function DashboardPage() {
                   onClick={() => { setDashboardMode('REGISTRY'); setIsManualMode(true); }}
                   icon={<List className="w-3.5 h-3.5" />}
                   label="Registry"
-                  tally={`${liveApps.length}/${apps.length}`}
+                  tally={`${liveApps.length}/${apps.length + infrastructure.length}`}
                 />
               </div>
 
@@ -827,6 +885,7 @@ export function DashboardPage() {
                 <MemberDashboard 
                   profile={profile}
                   apps={apps}
+                  infrastructure={infrastructure}
                   healthResults={healthResults}
                   onOpenLogs={openLogs}
                   selectedIds={selectedIds}
@@ -957,7 +1016,7 @@ export function DashboardPage() {
                     {orchestrationConfirmation.appIds?.map(id => (
                       <div key={id} className="flex items-center gap-1.5 py-0.5">
                         <div className="w-1 h-1 rounded-full bg-white/30" />
-                        <span>{currentSuite?.apps?.[id]?.displayName || id}</span>
+                        <span>{currentSuite?.apps?.[id]?.displayName || infrastructure.find((entry: any) => entry[0] === id)?.[1]?.displayName || id}</span>
                       </div>
                     ))}
                   </div>
