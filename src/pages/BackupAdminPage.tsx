@@ -638,7 +638,7 @@ export function BackupAdminPage() {
                     console.log('[Migration] Captured completion event:', data);
                     setMigrationResult({
                       targetWorkspace: data.targetWorkspace || 'New GCP Server',
-                      targetProject: data.targetProject || 'stillwater-sovereign-01',
+                      targetProject: data.targetProject || 'stillwater-sovereign-02',
                       appCount: data.appCount || 7,
                       durationMs: data.durationMs || 0,
                       backupPath: data.backupPath || 'Migration Target',
@@ -656,7 +656,7 @@ export function BackupAdminPage() {
                     const finalEvents = [...prev, errorEvent];
                     setMigrationResult({
                       targetWorkspace: selectedTargetWorkspace === 'new-gcp-server' ? 'Target: New GCP Server' : 'Stillwater Suite',
-                      targetProject: 'stillwater-sovereign-01',
+                      targetProject: 'stillwater-sovereign-02',
                       appCount: 7,
                       durationMs: 0,
                       backupPath: pathsToMigrate[0] || 'Migration Target',
@@ -689,7 +689,7 @@ export function BackupAdminPage() {
           console.log('[Migration] No result found at loop end, triggering fail-safe summary.');
           setMigrationResult({
             targetWorkspace: selectedTargetWorkspace === 'new-gcp-server' ? 'Target: New GCP Server' : 'Stillwater Suite',
-            targetProject: 'stillwater-sovereign-01',
+            targetProject: 'stillwater-sovereign-02',
             appCount: 7,
             durationMs: 0,
             backupPath: pathsToMigrate[0],
@@ -713,7 +713,7 @@ export function BackupAdminPage() {
         // Immediate result set (not inside the functional update, but sharing the same events)
         setMigrationResult({
           targetWorkspace: selectedTargetWorkspace === 'new-gcp-server' ? 'Target: New GCP Server' : 'Stillwater Suite',
-          targetProject: 'stillwater-sovereign-01',
+          targetProject: 'stillwater-sovereign-02',
           appCount: 7,
           durationMs: 0,
           backupPath: pathsToMigrate[0] || 'Migration Target',

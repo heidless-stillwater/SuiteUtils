@@ -514,7 +514,7 @@ const BackupRegistry: React.FC<BackupRegistryProps> = ({
                               {backup.fullPath && (
                                 <div className="flex flex-wrap items-center gap-3 mt-1.5">
                                   <a
-                                    href={`https://console.cloud.google.com/storage/browser/${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'stillwater-sovereign-01.firebasestorage.app'}/${backup.fullPath.substring(0, backup.fullPath.lastIndexOf('/') + 1)}?project=${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'stillwater-sovereign-01'}`}
+                                    href={`https://console.cloud.google.com/storage/browser/${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'stillwater-sovereign-02.firebasestorage.app'}/${backup.fullPath.substring(0, backup.fullPath.lastIndexOf('/') + 1)}?project=${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'stillwater-sovereign-02'}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-[9px] text-primary hover:text-primary/80 font-bold flex items-center gap-1 transition-colors uppercase tracking-wider group/link"

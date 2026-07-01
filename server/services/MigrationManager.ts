@@ -74,7 +74,7 @@ export class MigrationManager {
     const targetWorkspace = workspaceManager.getWorkspace(targetWorkspaceId);
     if (!targetWorkspace) throw new Error(`Target workspace ${targetWorkspaceId} not found`);
 
-    const targetProjectId = targetWorkspace.gcpProjectId || 'stillwater-sovereign-01';
+    const targetProjectId = targetWorkspace.gcpProjectId || 'stillwater-sovereign-02';
     const appIds = targetWorkspace.apps.map(a => a.id);
     const sendProgress = (msg: string, step: 'info' | 'success' | 'error' = 'info', percent?: number) => 
       onProgress?.({ message: msg, step, percent });
@@ -110,7 +110,7 @@ export class MigrationManager {
 
           // Robust Service Account Activation for gcloud (Fixes: error fetching project)
           let targetKeyPath = '';
-          if (targetProjectId === 'stillwater-sovereign-01') {
+          if (targetProjectId === 'stillwater-sovereign-02') {
             targetKeyPath = path.join(process.cwd(), 'suite-admin-sovereign.json');
           }
 
@@ -218,7 +218,7 @@ export class MigrationManager {
       
       if (!targetApp) {
         let credential = applicationDefault();
-        if (targetProjectId === 'stillwater-sovereign-01') {
+        if (targetProjectId === 'stillwater-sovereign-02') {
           const targetKeyPath = path.join(process.cwd(), 'suite-admin-sovereign.json');
           if (fs.existsSync(targetKeyPath)) {
             credential = cert(targetKeyPath);

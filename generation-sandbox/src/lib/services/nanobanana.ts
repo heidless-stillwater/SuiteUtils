@@ -129,7 +129,7 @@ export class NanoBananaService {
     private async getVertexClient(): Promise<GoogleGenAI> {
         if (this.vertexClient) return this.vertexClient;
 
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'stillwater-sovereign-01';
+        const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'stillwater-sovereign-02';
         const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
 
         console.log(`[NanoBanana] Initializing Vertex AI client for project: ${projectId} in ${location}`);
@@ -170,7 +170,7 @@ export class NanoBananaService {
         const { prompt, aspectRatio, onProgress, onStatus, signal } = options;
         const baseModel = 'veo-2.0-generate-001';
         const regions = ['us-central1', 'us-east1', 'europe-west1', 'asia-northeast1', 'us-west1', 'europe-west4'];
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'stillwater-sovereign-01';
+        const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'stillwater-sovereign-02';
 
         // Flatten and rank slots
         const slots = regions.map(location => ({
@@ -326,7 +326,7 @@ export class NanoBananaService {
         
         // --- SINGLE STRIKE CONFIGURATION ---
         // We prioritize the most typically reliable path: heidless-apps-3
-        const primaryProject = process.env.GOOGLE_CLOUD_PROJECT || 'stillwater-sovereign-01';
+        const primaryProject = process.env.GOOGLE_CLOUD_PROJECT || 'stillwater-sovereign-02';
         const primaryRegion = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
         const primaryModel = 'imagen-4.0-generate-001';
 

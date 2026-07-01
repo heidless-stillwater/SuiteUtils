@@ -13,7 +13,7 @@ This document provides a highly detailed, multi-perspective systems audit of the
 ## 1. 🏰 The Senior Systems Architect Lens
 
 ### 1.1. Multitenancy & Decentralization Assessment
-The Stillwater Suite utilizes a decoupled, multi-instance database pattern structured around **five dedicated Firestore database nodes** under the `stillwater-sovereign-01` project:
+The Stillwater Suite utilizes a decoupled, multi-instance database pattern structured around **five dedicated Firestore database nodes** under the `stillwater-sovereign-02` project:
 1. `promptresources-db-0` — Resource indexing and deployment configurations.
 2. `promptaccreditation-db-0` — Certification registry and audit records.
 3. `persona-db-0` — Cognitive profiles and behavioral configuration layers.

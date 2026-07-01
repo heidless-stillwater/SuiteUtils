@@ -78,7 +78,7 @@ async function main() {
       path: "~/projects/URLShortener",
       database: "urlshortener-db-0",
       displayName: "URLShortener v1.0",
-      project: "stillwater-sovereign-01",
+      project: "stillwater-sovereign-02",
       environments: {
         dev: {
           lastDeployAt: null,

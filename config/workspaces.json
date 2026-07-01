@@ -3,7 +3,7 @@
     "id": "stillwater-suite",
     "name": "SuiteUtils v1.0",
     "description": "Production Hub for Stillwater Core Apps",
-    "gcpProjectId": "stillwater-sovereign-01",
+    "gcpProjectId": "stillwater-sovereign-02",
     "ownerEmail": "heidlessemail21@gmail.com",
     "createdAt": "2026-04-29T18:02:07.252Z",
     "apps": [
@@ -111,7 +111,8 @@
         "name": "SuiteUtils API",
         "dbId": "suiteutils-db-0",
         "projectPath": "~/projects/SuiteUtils",
-        "hostingTarget": "suite-utils"
+        "hostingTarget": "suite-utils",
+        "deployMethod": "cloud-build"
       },
       {
         "id": "persona-bridge",
@@ -126,7 +127,7 @@
     "id": "new-gcp-server",
     "name": "Target: New GCP Server",
     "description": "Migration Target for Production Cluster",
-    "gcpProjectId": "stillwater-sovereign-01",
+    "gcpProjectId": "stillwater-sovereign-02",
     "createdAt": "2026-05-02T17:48:00.000Z",
     "apps": [
       {

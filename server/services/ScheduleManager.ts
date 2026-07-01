@@ -31,7 +31,7 @@ export class ScheduleManager {
     fs.ensureDirSync(path.dirname(this.configPath));
     
     // Initialize Orchestrator using environment variables
-    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-02.firebasestorage.app';
     const credentialsPath = path.join(process.cwd(), 'server/config/service-account.json');
     
     const storage = new GCSStorageProvider(bucketName, credentialsPath);
@@ -66,6 +66,18 @@ export class ScheduleManager {
     schedules.forEach(s => {
       if (s.status === 'active') {
         this.scheduleJob(s);
+      }
+    });
+
+    // Start recurring broadcast-worker to process queued email broadcasts every 2 minutes
+    console.log('[Scheduler] Registering recurring broadcast-worker (every 2 minutes)...');
+    cron.schedule('*/2 * * * *', async () => {
+      console.log('[Scheduler] Running broadcast-worker cron job...');
+      try {
+        const { BroadcastService } = await import('./BroadcastService.js');
+        await BroadcastService.processQueue();
+      } catch (err: any) {
+        console.error('[Scheduler] Broadcast worker cron job failed:', err.message);
       }
     });
   }

@@ -18,7 +18,9 @@ import {
   RotateCcw,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -34,6 +36,12 @@ interface ProModeViewProps {
   loadingAppId: string | null;
   completedIds: string[];
   bulkActionType: 'enable' | 'disable' | null;
+  activeSortType: 'name' | 'timestamp' | 'updated' | 'custom';
+  setActiveSortType: React.Dispatch<React.SetStateAction<'name' | 'timestamp' | 'updated' | 'custom'>>;
+  activeSortDirection: 'asc' | 'desc';
+  setActiveSortDirection: React.Dispatch<React.SetStateAction<'asc' | 'desc'>>;
+  onFreezeSort: (type: 'name' | 'timestamp' | 'updated' | 'custom', direction: 'asc' | 'desc', appOrder: string[], infraOrder: string[]) => Promise<void>;
+  defaultSort?: any;
 }
 
 export default function ProModeView({ 
@@ -47,7 +55,13 @@ export default function ProModeView({
   handleBulkToggle,
   loadingAppId,
   completedIds,
-  bulkActionType
+  bulkActionType,
+  activeSortType,
+  setActiveSortType,
+  activeSortDirection,
+  setActiveSortDirection,
+  onFreezeSort,
+  defaultSort
 }: ProModeViewProps) {
   const [cardsPerRow, setCardsPerRow] = React.useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -57,8 +71,8 @@ export default function ProModeView({
   });
 
   // Collapsible sections state
-  const [isAppsOpen, setIsAppsOpen] = React.useState(false);
-  const [isInfraOpen, setIsInfraOpen] = React.useState(true);
+  const [isAppsOpen, setIsAppsOpen] = React.useState(true);
+  const [isInfraOpen, setIsInfraOpen] = React.useState(false);
 
   const handleCardsPerRowChange = (cols: number) => {
     setCardsPerRow(cols);
@@ -68,6 +82,9 @@ export default function ProModeView({
   };
 
   const [appOrder, setAppOrder] = React.useState<string[]>(() => {
+    if (defaultSort?.appOrder) {
+      return defaultSort.appOrder;
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('hive-app-order');
       if (saved) {
@@ -80,6 +97,9 @@ export default function ProModeView({
   });
 
   const [infraOrder, setInfraOrder] = React.useState<string[]>(() => {
+    if (defaultSort?.infraOrder) {
+      return defaultSort.infraOrder;
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('hive-infra-order');
       if (saved) {
@@ -90,6 +110,86 @@ export default function ProModeView({
     }
     return infrastructure.map(([id]) => id);
   });
+
+  React.useEffect(() => {
+    if (defaultSort?.appOrder) {
+      setAppOrder(defaultSort.appOrder);
+    }
+    if (defaultSort?.infraOrder) {
+      setInfraOrder(defaultSort.infraOrder);
+    }
+  }, [defaultSort]);
+
+  const [freezeStatus, setFreezeStatus] = React.useState<'idle' | 'freezing' | 'frozen'>('idle');
+
+  const sortModules = (list: any[], orderList: string[], type: string, direction: 'asc' | 'desc') => {
+    const sorted = [...list];
+    
+    if (type === 'custom') {
+      sorted.sort((a, b) => {
+        let indexA = orderList.indexOf(a[0]);
+        let indexB = orderList.indexOf(b[0]);
+        if (indexA === -1) indexA = 999;
+        if (indexB === -1) indexB = 999;
+        return indexA - indexB;
+      });
+    } else if (type === 'name') {
+      sorted.sort((a, b) => {
+        const titleA = a[1]?.displayName || a[0] || '';
+        const titleB = b[1]?.displayName || b[0] || '';
+        return titleA.localeCompare(titleB);
+      });
+    } else if (type === 'timestamp') {
+      sorted.sort((a, b) => {
+        const getMs = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'object') {
+            if (typeof val.toMillis === 'function') return val.toMillis();
+            if (val.seconds) return val.seconds * 1000;
+          }
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? 0 : d.getTime();
+        };
+        const msA = getMs(a[1]?.environments?.production?.lastDeployAt);
+        const msB = getMs(b[1]?.environments?.production?.lastDeployAt);
+        return msA - msB;
+      });
+    } else if (type === 'updated') {
+      sorted.sort((a, b) => {
+        const getMs = (val: any) => {
+          if (!val) return 0;
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? 0 : d.getTime();
+        };
+        const msA = getMs(a[1]?.lastUpdatedAt);
+        const msB = getMs(b[1]?.lastUpdatedAt);
+        return msA - msB;
+      });
+    }
+    
+    if (direction === 'desc') {
+      sorted.reverse();
+    }
+    return sorted;
+  };
+
+  const sortedApps = sortModules(apps, appOrder, activeSortType, activeSortDirection);
+  const sortedInfra = sortModules(infrastructure, infraOrder, activeSortType, activeSortDirection);
+
+  const handleFreezeClick = async () => {
+    if (freezeStatus !== 'idle') return;
+    setFreezeStatus('freezing');
+    try {
+      const currentAppOrder = sortedApps.map(([id]) => id);
+      const currentInfraOrder = sortedInfra.map(([id]) => id);
+      await onFreezeSort(activeSortType, activeSortDirection, currentAppOrder, currentInfraOrder);
+      setFreezeStatus('frozen');
+      setTimeout(() => setFreezeStatus('idle'), 3000);
+    } catch (e) {
+      console.error(e);
+      setFreezeStatus('idle');
+    }
+  };
 
   React.useEffect(() => {
     const currentIds = apps.map(([id]) => id);
@@ -124,39 +224,53 @@ export default function ProModeView({
   }, [infrastructure]);
 
   const handleShiftApp = (appId: string, direction: 'left' | 'right') => {
-    const index = appOrder.indexOf(appId);
+    const currentSorted = sortModules(apps, appOrder, activeSortType, activeSortDirection).map(([id]) => id);
+    const index = currentSorted.indexOf(appId);
     if (index === -1) return;
-    
+
     let newIndex = index;
     if (direction === 'left' && index > 0) newIndex = index - 1;
-    else if (direction === 'right' && index < appOrder.length - 1) newIndex = index + 1;
-    
+    else if (direction === 'right' && index < currentSorted.length - 1) newIndex = index + 1;
+
     if (newIndex !== index) {
-      const newOrder = [...appOrder];
+      const newOrder = [...currentSorted];
       newOrder[index] = newOrder[newIndex];
       newOrder[newIndex] = appId;
+      
       setAppOrder(newOrder);
       if (typeof window !== 'undefined') {
         localStorage.setItem('hive-app-order', JSON.stringify(newOrder));
       }
+      
+      if (activeSortType !== 'custom') {
+        setActiveSortType('custom');
+        setActiveSortDirection('asc');
+      }
     }
   };
 
-  const handleShiftInfra = (appId: string, direction: 'left' | 'right') => {
-    const index = infraOrder.indexOf(appId);
+  const handleShiftInfra = (infraId: string, direction: 'left' | 'right') => {
+    const currentSorted = sortModules(infrastructure, infraOrder, activeSortType, activeSortDirection).map(([id]) => id);
+    const index = currentSorted.indexOf(infraId);
     if (index === -1) return;
-    
+
     let newIndex = index;
     if (direction === 'left' && index > 0) newIndex = index - 1;
-    else if (direction === 'right' && index < infraOrder.length - 1) newIndex = index + 1;
-    
+    else if (direction === 'right' && index < currentSorted.length - 1) newIndex = index + 1;
+
     if (newIndex !== index) {
-      const newOrder = [...infraOrder];
+      const newOrder = [...currentSorted];
       newOrder[index] = newOrder[newIndex];
-      newOrder[newIndex] = appId;
+      newOrder[newIndex] = infraId;
+      
       setInfraOrder(newOrder);
       if (typeof window !== 'undefined') {
         localStorage.setItem('hive-infra-order', JSON.stringify(newOrder));
+      }
+      
+      if (activeSortType !== 'custom') {
+        setActiveSortType('custom');
+        setActiveSortDirection('asc');
       }
     }
   };
@@ -556,48 +670,46 @@ export default function ProModeView({
               </button>
             ))}
           </div>
-        </div>
-      </div>
 
-      {/* Applications Section */}
-      <div className="space-y-4">
-        <button
-          onClick={() => setIsAppsOpen(!isAppsOpen)}
-          className="w-full flex items-center justify-between p-4 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-2xl transition-all group text-left cursor-pointer"
-        >
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 text-primary border border-primary/20 transition-transform duration-300 ${isAppsOpen ? 'rotate-90' : ''}`}>
-              <ChevronRight className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-white/90">Applications</h3>
-              <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-0.5">
-                {apps.length} Module{apps.length > 1 ? 's' : ''} Registered
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
-              {apps.filter(([id]) => getHealth(id)?.status === 'UP').length} Active
-            </span>
-          </div>
-        </button>
-
-        <AnimatePresence initial={false}>
-          {isAppsOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-              className="overflow-hidden"
+          {/* Sorting Controls */}
+          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
+            <span className="text-[9px] text-white/30 font-black uppercase tracking-wider">Sort:</span>
+            <select
+              value={activeSortType}
+              onChange={(e) => {
+                setActiveSortType(e.target.value as any);
+              }}
+              className="bg-black/40 border border-white/10 text-white/80 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-primary/40 transition-colors"
             >
-              <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4 pt-2 pb-6`}>
-                {appOrder.map((appId, index) => renderCard(appId, index, false))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <option value="name">App Name</option>
+              <option value="timestamp">Timestamp</option>
+              <option value="updated">Last Updated</option>
+              <option value="custom">Custom</option>
+            </select>
+            <button
+              onClick={() => {
+                setActiveSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+              }}
+              className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all flex items-center justify-center animate-hover"
+              title={`Sort direction: ${activeSortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
+            >
+              {activeSortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={handleFreezeClick}
+              disabled={freezeStatus !== 'idle'}
+              className={`px-4 py-2.5 rounded-xl border transition-all font-black uppercase tracking-widest text-[10px] ${
+                freezeStatus === 'frozen'
+                  ? 'bg-green-500/20 border-green-500/40 text-green-400 font-bold shadow-[0_0_15px_rgba(74,222,128,0.2)]'
+                  : freezeStatus === 'freezing'
+                  ? 'bg-primary/10 border-primary/20 text-primary opacity-50'
+                  : 'bg-primary/20 border-primary/30 text-primary hover:bg-primary/30 active:scale-[0.98] font-bold shadow-[0_0_15px_rgba(var(--primary-rgb),0.1)]'
+              }`}
+            >
+              {freezeStatus === 'frozen' ? 'FROZEN ✓' : freezeStatus === 'freezing' ? 'FREEZING...' : 'FREEZE'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Infrastructure Section */}
@@ -634,28 +746,54 @@ export default function ProModeView({
               className="overflow-hidden"
             >
               <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4 pt-2 pb-6`}>
-                {infraOrder.map((appId, index) => renderCard(appId, index, true))}
+                {sortedInfra.map(([appId], index) => renderCard(appId, index, true))}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Maintenance Controls */}
-      <div className="p-6 glass-card border-primary/20 bg-primary/5 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-2xl bg-primary/10 text-primary">
-            <RefreshCw className="w-6 h-6 animate-spin-slow" />
+      {/* Applications Section */}
+      <div className="space-y-4">
+        <button
+          onClick={() => setIsAppsOpen(!isAppsOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-2xl transition-all group text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 text-primary border border-primary/20 transition-transform duration-300 ${isAppsOpen ? 'rotate-90' : ''}`}>
+              <ChevronRight className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-white/90">Applications</h3>
+              <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-0.5">
+                {apps.length} Module{apps.length > 1 ? 's' : ''} Registered
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="font-bold text-white">Full Suite Synchronization</h4>
-            <p className="text-xs text-white/40">Force global health check and neural cache invalidation.</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
+              {apps.filter(([id]) => getHealth(id)?.status === 'UP').length} Active
+            </span>
           </div>
-        </div>
-        <button className="px-6 py-2 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold transition-all border border-primary/30 shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]">
-          EXECUTE RESYNC
         </button>
+
+        <AnimatePresence initial={false}>
+          {isAppsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className={`grid ${GRID_COLUMNS_MAP[cardsPerRow] || 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4 pt-2 pb-6`}>
+                {sortedApps.map(([appId], index) => renderCard(appId, index, false))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
     </motion.div>
   );
 }

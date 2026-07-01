@@ -203,14 +203,14 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     displayName: 'SuiteUtils v1.0',
     path: '~/projects/SuiteUtils',
     database: 'suiteutils-db-0',
-    project: 'stillwater-sovereign-01',
+    project: 'stillwater-sovereign-02',
     defaultEnv: { hostingTarget: 'suite-utils', deployMethod: 'firebase', status: 'live' },
   },
   'persona': {
     displayName: 'persona v1.0',
     path: '~/projects/Persona',
     database: 'persona-db-0',
-    project: 'stillwater-sovereign-01',
+    project: 'stillwater-sovereign-02',
     defaultEnv: { 
       hostingTarget: 'stillwater-persona', 
       deployMethod: 'cloud-build', 
@@ -233,7 +233,7 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     displayName: 'TokenMarket v1.0',
     path: '~/projects/TokenMarket',
     database: 'tokenmarket-db-0',
-    project: 'stillwater-sovereign-01',
+    project: 'stillwater-sovereign-02',
     defaultEnv: { 
       hostingTarget: 'stillwater-token-market', 
       deployMethod: 'firebase', 
@@ -245,7 +245,7 @@ export const STILLWATER_APPS: Record<string, Omit<AppConfig, 'environments'> & {
     displayName: 'InferenceGateway v1.0',
     path: '~/projects/InferenceGateway',
     database: 'inferencegateway-db-0',
-    project: 'stillwater-sovereign-01',
+    project: 'stillwater-sovereign-02',
     defaultEnv: { 
       hostingTarget: 'stillwater-inference-gateway', 
       deployMethod: 'firebase', 

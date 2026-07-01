@@ -18,6 +18,7 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { PricingPage } from './pages/PricingPage';
 import InvitationPage from './pages/InvitationPage';
 import { InferenceAdminPage } from './pages/InferenceAdminPage';
+import { BroadcastAdminPage } from './pages/BroadcastAdminPage';
 import { Loader2 } from 'lucide-react';
 
 function App() {
@@ -54,6 +55,7 @@ function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/persona" element={<PersonaPage />} />
+            <Route path="/broadcast" element={<BroadcastAdminPage />} />
             <Route path="/deploy" element={<DeployConsolePage />} />
             <Route path="/history" element={<DeployHistoryPage />} />
             <Route path="/inference" element={<InferenceAdminPage />} />

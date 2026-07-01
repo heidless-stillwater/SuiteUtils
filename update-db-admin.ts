@@ -3,7 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 initializeApp({
   credential: applicationDefault(),
-  projectId: 'stillwater-sovereign-01'
+  projectId: 'stillwater-sovereign-02'
 });
 
 const db = getFirestore('suiteutils-db-0');

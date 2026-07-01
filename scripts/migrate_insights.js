@@ -4,7 +4,7 @@ const path = require('path');
 // Initialize with service account if needed, or use default if in authorized environment
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: 'stillwater-sovereign-01'
+    projectId: 'stillwater-sovereign-02'
   });
 }
 

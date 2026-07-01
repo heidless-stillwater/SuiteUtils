@@ -19,6 +19,12 @@ interface MemberDashboardProps {
   completedIds: string[];
   bulkActionType: 'enable' | 'disable' | null;
   viewMode: 'casual' | 'pro';
+  activeSortType: 'name' | 'timestamp' | 'updated' | 'custom';
+  setActiveSortType: React.Dispatch<React.SetStateAction<'name' | 'timestamp' | 'updated' | 'custom'>>;
+  activeSortDirection: 'asc' | 'desc';
+  setActiveSortDirection: React.Dispatch<React.SetStateAction<'asc' | 'desc'>>;
+  onFreezeSort: (type: 'name' | 'timestamp' | 'updated' | 'custom', direction: 'asc' | 'desc', appOrder: string[], infraOrder: string[]) => Promise<void>;
+  defaultSort?: any;
 }
 
 export default function MemberDashboard({ 
@@ -34,7 +40,13 @@ export default function MemberDashboard({
   loadingAppId,
   completedIds,
   bulkActionType,
-  viewMode
+  viewMode,
+  activeSortType,
+  setActiveSortType,
+  activeSortDirection,
+  setActiveSortDirection,
+  onFreezeSort,
+  defaultSort
 }: MemberDashboardProps) {
   return (
     <div className="space-y-8 page-enter">
@@ -67,6 +79,12 @@ export default function MemberDashboard({
               loadingAppId={loadingAppId}
               completedIds={completedIds}
               bulkActionType={bulkActionType}
+              activeSortType={activeSortType}
+              setActiveSortType={setActiveSortType}
+              activeSortDirection={activeSortDirection}
+              setActiveSortDirection={setActiveSortDirection}
+              onFreezeSort={onFreezeSort}
+              defaultSort={defaultSort}
             />
           )}
         </motion.div>

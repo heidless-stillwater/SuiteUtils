@@ -14,7 +14,7 @@ function getEnsuredApp(): App {
 
     const privateKey = process.env.FIREBASE_PRIVATE_KEY || process.env.SERVICE_PRIVATE_KEY;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.SERVICE_CLIENT_EMAIL;
-    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.SERVICE_PROJECT_ID || 'stillwater-sovereign-01';
+    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.SERVICE_PROJECT_ID || 'stillwater-sovereign-02';
     
     console.log('[Firebase Admin] Target Project ID:', projectId);
     console.log('[Firebase Admin] GOOGLE_CLOUD_PROJECT:', process.env.GOOGLE_CLOUD_PROJECT);
@@ -32,7 +32,7 @@ function getEnsuredApp(): App {
         } 
         
         // Fallback: Check for local service account file (dev only, excluded via .gitignore)
-        const conventionPaths = [
+        const conventionPaths = process.env.NODE_ENV === 'production' ? [] : [
             path.join(process.cwd(), 'server', 'config', 'service-account.json'),
             path.join(process.cwd(), 'suite-admin-sovereign.json')
         ];
@@ -78,6 +78,11 @@ export const personaDb = getFirestore(adminApp, 'persona-db-0');
  * InferenceGateway Database Accessor
  */
 export const inferenceDb = getFirestore(adminApp, 'inferencegateway-db-0');
+
+/**
+ * TokenMarket Database Accessor
+ */
+export const tokenmarketDb = getFirestore(adminApp, 'tokenmarket-db-0');
 
 /**
  * Auth Accessor

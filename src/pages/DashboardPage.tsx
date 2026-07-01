@@ -32,6 +32,15 @@ export function DashboardPage() {
   const [loadingAppId, setLoadingAppId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeSortType, setActiveSortType] = useState<'name' | 'timestamp' | 'updated' | 'custom'>('custom');
+  const [activeSortDirection, setActiveSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  useEffect(() => {
+    if (workspaceConfig?.defaultSort) {
+      setActiveSortType(workspaceConfig.defaultSort.type || 'custom');
+      setActiveSortDirection(workspaceConfig.defaultSort.direction || 'asc');
+    }
+  }, [workspaceConfig]);
 
   // Dashboard View State
   const [dashboardMode, setDashboardMode] = useState<'SOVEREIGN' | 'REGISTRY' | 'VALIDATION'>('REGISTRY');
@@ -488,6 +497,8 @@ export function DashboardPage() {
     }
   };
 
+
+
   if (dbError) {
     return (
       <div className="page-enter space-y-4">
@@ -507,10 +518,15 @@ export function DashboardPage() {
       if (!workspaceConfig) return true;
       return workspaceAppIds.includes(id.toLowerCase());
     })
-    .sort((a, b) => {
-      const nameA = a[1]?.displayName || a[0] || '';
-      const nameB = b[1]?.displayName || b[0] || '';
-      return nameA.localeCompare(nameB);
+    .map(([id, appConfig]) => {
+      const wsApp = workspaceConfig?.apps?.find((a: any) => a.id.toLowerCase() === id.toLowerCase());
+      return [
+        id,
+        {
+          ...appConfig,
+          lastUpdatedAt: wsApp?.lastUpdatedAt || null
+        }
+      ] as [string, any];
     });
 
   const infrastructure = (workspaceConfig?.infrastructure || []).map((infra: any) => {
@@ -522,6 +538,7 @@ export function DashboardPage() {
         path: infra.projectPath,
         hostingTarget: infra.hostingTarget,
         dbId: infra.dbId,
+        lastUpdatedAt: infra.lastUpdatedAt || null,
         environments: {
           production: {
             status: 'not-configured',
@@ -532,11 +549,32 @@ export function DashboardPage() {
         }
       }
     ];
-  }).sort((a: any, b: any) => {
-    const nameA = a[1]?.displayName || a[0] || '';
-    const nameB = b[1]?.displayName || b[0] || '';
-    return nameA.localeCompare(nameB);
   });
+
+  const handleFreezeSort = async (
+    type: 'name' | 'timestamp' | 'updated' | 'custom',
+    direction: 'asc' | 'desc',
+    appOrder: string[],
+    infraOrder: string[]
+  ) => {
+    try {
+      const wsId = currentSuite?.id || 'stillwater-suite';
+      const res = await fetch(`${API_URL}/api/workspaces/${wsId}/freeze-sort`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-workspace-id': wsId
+        },
+        body: JSON.stringify({ type, direction, appOrder, infraOrder })
+      });
+      const data = await res.json();
+      if (data.success && data.workspace) {
+        setWorkspaceConfig(data.workspace);
+      }
+    } catch (err) {
+      console.error('Failed to freeze sort order:', err);
+    }
+  };
   const liveApps = healthResults.filter(h => h.status === 'UP' || h.appId.toLowerCase() === 'suiteutils');
   const failedApps = healthResults.filter(h => h.status === 'DOWN' && h.appId.toLowerCase() !== 'suiteutils');
 
@@ -896,6 +934,12 @@ export function DashboardPage() {
                   completedIds={completedIds}
                   bulkActionType={bulkActionType}
                   viewMode={viewMode}
+                  activeSortType={activeSortType}
+                  setActiveSortType={setActiveSortType}
+                  activeSortDirection={activeSortDirection}
+                  setActiveSortDirection={setActiveSortDirection}
+                  onFreezeSort={handleFreezeSort}
+                  defaultSort={workspaceConfig?.defaultSort}
                 />
               </motion.div>
             )}

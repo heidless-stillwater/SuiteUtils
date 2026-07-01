@@ -1,7 +1,7 @@
 # Migration Plan: App Suite (Source to Target GCP/Firebase)
 
 ## Goal Description
-Migrate the entire Stillwater Sovereign App Suite from the source Google Cloud/Firebase account (`heidlessemail21@gmail.com` / `stillwater-sovereign-01`) to the target Google Cloud/Firebase account (`heidlessemail19@gmail.com` / `stillwater-sovereign-02`). This involves migrating 10 React/NextJS apps, completely transferring all Firebase Authentication accounts, Storage buckets, Firestore databases, and Firestore indexes. We will also introduce a placeholder architecture to cleanly toggle between the two environments in the future.
+Migrate the entire Stillwater Sovereign App Suite from the source Google Cloud/Firebase account (`heidlessemail21@gmail.com` / `stillwater-sovereign-02`) to the target Google Cloud/Firebase account (`heidlessemail19@gmail.com` / `stillwater-sovereign-02`). This involves migrating 10 React/NextJS apps, completely transferring all Firebase Authentication accounts, Storage buckets, Firestore databases, and Firestore indexes. We will also introduce a placeholder architecture to cleanly toggle between the two environments in the future.
 
 ## Design Decisions (From /grill-me session)
 

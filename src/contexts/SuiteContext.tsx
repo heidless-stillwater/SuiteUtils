@@ -84,7 +84,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                       }
                       // Ensure project is set and updated to sovereign GCP project
                       if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
-                        app.project = 'stillwater-sovereign-01';
+                        app.project = 'stillwater-sovereign-02';
                         needsSync = true;
                       }
                       // Ensure path is synced with the static registry (case casing self-healing)
@@ -104,7 +104,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                         displayName: config.displayName,
                         path: config.path,
                         database: config.database,
-                        project: config.project || 'stillwater-sovereign-01',
+                        project: config.project || 'stillwater-sovereign-02',
                         environments: {
                           production: { ...config.defaultEnv, lastDeployAt: null },
                           staging: { hostingTarget: null, deployMethod: config.defaultEnv.deployMethod, lastDeployAt: null, status: 'not-configured' },
@@ -228,7 +228,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
         displayName: config.displayName,
         path: config.path,
         database: config.database,
-        project: config.project || 'stillwater-sovereign-01',
+        project: config.project || 'stillwater-sovereign-02',
         environments: {
           production: defaultEnv,
           staging: {

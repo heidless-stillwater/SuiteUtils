@@ -37,7 +37,7 @@ export class RollbackManager {
   private projectId: string;
   private localRestoreRoot: string;
 
-  constructor(storageProvider: IStorageProvider, projectId: string = 'stillwater-sovereign-01') {
+  constructor(storageProvider: IStorageProvider, projectId: string = 'stillwater-sovereign-02') {
     this.storageProvider = storageProvider;
     this.projectId = projectId;
     this.localRestoreRoot = path.join(process.cwd(), 'BACKUPS/temp_restore');
@@ -50,8 +50,8 @@ export class RollbackManager {
     } else {
       let credential = applicationDefault();
       
-      // If we are targeting stillwater-sovereign-01, use the specific service account key if it exists
-      if (this.projectId === 'stillwater-sovereign-01') {
+      // If we are targeting stillwater-sovereign-02, use the specific service account key if it exists
+      if (this.projectId === 'stillwater-sovereign-02') {
         const targetKeyPath = path.join(process.cwd(), 'suite-admin-sovereign.json');
         if (fs.existsSync(targetKeyPath)) {
           console.log(`[RollbackManager] Loading target service account for ${this.projectId}`);

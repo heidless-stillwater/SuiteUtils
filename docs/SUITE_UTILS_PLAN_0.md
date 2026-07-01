@@ -27,7 +27,7 @@ deployment methods at all times:
   │ Persona             │ ~/projects/Persona               │ persona-db-0           │ TBD                       │ TBD            │
   └─────────────────────┴──────────────────────────────────┴────────────────────────┴───────────────────────────┴────────────────┘
 
-  All apps share GCP project: stillwater-sovereign-01
+  All apps share GCP project: stillwater-sovereign-02
   DO NOT use the "(default)" Firestore database for SuiteUtils — use "suiteutils-db-0" exclusively.
 
 

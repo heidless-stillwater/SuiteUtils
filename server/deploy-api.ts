@@ -36,6 +36,7 @@ import { operationMonitor } from './services/OperationMonitor.js';
 import { notificationManager } from './services/NotificationManager.js';
 import emailLogRouter from './routes/emailLog.js';
 import supportRouter from './routes/support.js';
+import broadcastRouter from './routes/broadcast.js';
 import { settingsManager } from './services/SettingsManager.js';
 import { suiteConfigManager } from './services/SuiteConfigManager.js';
 import { workspaceManager } from './services/WorkspaceManager.js';
@@ -54,7 +55,7 @@ app.use((req, res, next) => {
   (req as any).workspaceId = wsId;
   next();
 });
-const PORT = Number(process.env.API_PORT) || 5185;
+const PORT = Number(process.env.API_PORT || process.env.PORT) || 5185;
 
 // Initialize Services
 scheduleManager.init();
@@ -282,6 +283,7 @@ app.use((req, res, next) => {
 });
 app.use('/api/support', supportRouter);
 app.use('/api/email-log', emailLogRouter);
+app.use('/api/admin/broadcast', broadcastRouter);
 
 const releaseManager = new ReleaseManager();
 const activeReleaseControllers = new Map<string, AbortController>();
@@ -395,7 +397,7 @@ deploymentManager.on('update', async (job: any) => {
       duration: job.duration || 0,
       deployMethod: job.deployMethod || 'firebase',
       hostingTarget: job.hostingTarget || null,
-      project: job.project || 'stillwater-sovereign-01',
+      project: job.project || 'stillwater-sovereign-02',
       errorLogs: job.error || null,
       deployUrl: job.url || null,
       logs: job.logs || []
@@ -751,7 +753,45 @@ app.get('/api/workspaces', (req, res) => {
 
 app.get('/api/workspaces/current', (req, res) => {
   const ws = workspaceManager.getWorkspace((req as any).workspaceId);
-  res.json(ws || { id: (req as any).workspaceId, apps: [] });
+  if (!ws) {
+    return res.json({ id: (req as any).workspaceId, apps: [] });
+  }
+
+  const enrich = (modules: any[] = []) => {
+    return modules.map(mod => {
+      let lastUpdatedAt: string | null = null;
+      if (mod.projectPath) {
+        try {
+          const resolvedPath = mod.projectPath.replace(/^~/, os.homedir());
+          const stats = fs.statSync(resolvedPath);
+          lastUpdatedAt = stats.mtime.toISOString();
+        } catch (err) {}
+      }
+      return { ...mod, lastUpdatedAt };
+    });
+  };
+
+  res.json({
+    ...ws,
+    apps: enrich(ws.apps),
+    infrastructure: enrich(ws.infrastructure)
+  });
+});
+
+app.post('/api/workspaces/:id/freeze-sort', async (req, res) => {
+  const { id } = req.params;
+  const { type, direction, appOrder, infraOrder } = req.body;
+  try {
+    const ws = workspaceManager.getWorkspace(id);
+    if (!ws) throw new Error(`Workspace ${id} not found`);
+    const updated = await workspaceManager.updateWorkspace(id, {
+      ...ws,
+      defaultSort: { type, direction, appOrder, infraOrder }
+    });
+    res.json({ success: true, workspace: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/workspaces/:id', async (req, res) => {
@@ -866,7 +906,7 @@ function resolvePath(p: string): string {
 }
 function getStorageProvider(): IStorageProvider {
   const settings = settingsManager.getSettings();
-  const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
+  const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-02.firebasestorage.app';
   const credentialsPath = path.join(__dirname, 'config/service-account.json');
   if (settings.activeStorageProvider === 'google-drive') {
     return new GoogleDriveStorageProvider(credentialsPath);
@@ -897,7 +937,7 @@ async function getAccessToken(): Promise<string> {
 
 app.get('/api/releases/:hostingTarget', async (req, res) => {
   const { hostingTarget } = req.params;
-  const project = (req.query.project as string) || 'stillwater-sovereign-01';
+  const project = (req.query.project as string) || 'stillwater-sovereign-02';
 
   try {
     const token = await getAccessToken();
@@ -951,7 +991,7 @@ app.post('/api/rollback', async (req, res) => {
 
   const workspaceId = (req as any).workspaceId || 'stillwater-suite';
   const workspace = workspaceManager.getWorkspace(workspaceId);
-  const firebaseProject = firebaseApp.options.projectId || workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
+  const firebaseProject = firebaseApp.options.projectId || workspace?.gcpProjectId || project || 'stillwater-sovereign-02';
   console.log(`\n[Rollback] ${hostingTarget} → ${versionName} (Workspace: ${workspaceId}, Project: ${firebaseProject})`);
 
   // SSE setup
@@ -1096,7 +1136,7 @@ app.post('/api/deploy', async (req, res) => {
   const { appId, projectPath, hostingTarget, project, displayName } = req.body;
   const workspaceId = req.headers['x-workspace-id'] as string || 'stillwater-suite';
   let workspace = workspaceManager.getWorkspace(workspaceId) as any;
-  let firebaseProject = project || 'stillwater-sovereign-01';
+  let firebaseProject = project || 'stillwater-sovereign-02';
   let resolvedDeployMethod = req.body.deployMethod || 'firebase';
   let resolvedHostingTarget = hostingTarget || null;
   
@@ -1167,17 +1207,17 @@ app.post('/api/deploy', async (req, res) => {
     resolvedHostingTarget = hostingTarget || envData?.hostingTarget || workspaceApp.hostingTarget || null;
   }
 
-  firebaseProject = firebaseApp.options.projectId || workspace?.gcpProjectId || project || 'stillwater-sovereign-01';
+  firebaseProject = firebaseApp.options.projectId || workspace?.gcpProjectId || project || 'stillwater-sovereign-02';
 
   // 3. GLOBAL FAIL-SAFE: If this is PlanTune and we still resolved to apps-0, 
   // try to find the 'Target: New GCP Server' workspace globally (Local or Firestore)
-  if (appId === 'plantune' && firebaseProject === 'stillwater-sovereign-01') {
+  if (appId === 'plantune' && firebaseProject === 'stillwater-sovereign-02') {
     
     // Check local workspaces first
-    const localFallback = workspaceManager.getWorkspaces().find(w => w.gcpProjectId === 'stillwater-sovereign-01');
+    const localFallback = workspaceManager.getWorkspaces().find(w => w.gcpProjectId === 'stillwater-sovereign-02');
     if (localFallback) {
       workspace = localFallback;
-      firebaseProject = 'stillwater-sovereign-01';
+      firebaseProject = 'stillwater-sovereign-02';
       const localApp = workspace.apps.find((a: any) => a.id === 'plantune');
       if (localApp) {
         resolvedDeployMethod = localApp.deployMethod || 'cloud-build';
@@ -1185,12 +1225,12 @@ app.post('/api/deploy', async (req, res) => {
       }
     } else {
       // Check Firestore
-      const globalSuites = await firestore.collection('suites').where('gcpProjectId', '==', 'stillwater-sovereign-01').get();
+      const globalSuites = await firestore.collection('suites').where('gcpProjectId', '==', 'stillwater-sovereign-02').get();
       if (!globalSuites.empty) {
         const suiteDoc = globalSuites.docs[0];
         const suiteData = suiteDoc.data();
         
-        firebaseProject = 'stillwater-sovereign-01';
+        firebaseProject = 'stillwater-sovereign-02';
         resolvedDeployMethod = 'cloud-build';
         resolvedHostingTarget = null;
         
@@ -1663,7 +1703,7 @@ app.get('/api/storage/zip-contents', async (req, res) => {
     if (!(storageProvider instanceof GCSStorageProvider)) {
       return res.status(400).json({ error: 'Zip inspection is only supported on GCS for now.' });
     }
-    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-02.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const file = bucket.file(filePath as string);
     
@@ -1697,7 +1737,7 @@ app.get('/api/storage/zip-file-content', async (req, res) => {
     if (!(storageProvider instanceof GCSStorageProvider)) {
       return res.status(400).json({ error: 'Zip file extraction is only supported on GCS for now.' });
     }
-    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-01.firebasestorage.app';
+    const bucketName = process.env.GCS_BUCKET_NAME || 'stillwater-sovereign-02.firebasestorage.app';
     const bucket = (storageProvider as any).storage.bucket(bucketName);
     const zipFile = bucket.file(zipPath as string);
     

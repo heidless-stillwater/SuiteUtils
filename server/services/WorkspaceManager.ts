@@ -12,6 +12,13 @@ export interface AppConfig {
   deployUrl?: string;
 }
 
+export interface DefaultSortConfig {
+  type: 'name' | 'timestamp' | 'updated' | 'custom';
+  direction: 'asc' | 'desc';
+  appOrder?: string[];
+  infraOrder?: string[];
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -21,6 +28,7 @@ export interface Workspace {
   infrastructure?: AppConfig[];
   createdAt: string;
   gcpProjectId?: string;
+  defaultSort?: DefaultSortConfig;
 }
 
 export class WorkspaceManager {
@@ -79,7 +87,7 @@ export class WorkspaceManager {
     const list = Array.from(this.workspaces.values());
     return list.map(w => ({
       ...w,
-      gcpProjectId: adminApp?.options?.projectId || w.gcpProjectId || 'stillwater-sovereign-01'
+      gcpProjectId: adminApp?.options?.projectId || w.gcpProjectId || 'stillwater-sovereign-02'
     }));
   }
 
@@ -121,7 +129,7 @@ export class WorkspaceManager {
     if (ws) {
       return {
         ...ws,
-        gcpProjectId: adminApp?.options?.projectId || ws.gcpProjectId || 'stillwater-sovereign-01'
+        gcpProjectId: adminApp?.options?.projectId || ws.gcpProjectId || 'stillwater-sovereign-02'
       };
     }
     return ws;

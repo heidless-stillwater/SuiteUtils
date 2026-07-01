@@ -80,7 +80,7 @@ export function DeployConsolePage() {
   const { activeWorkspaceId, availableWorkspaces } = useWorkspace();
   
   const activeWorkspace = availableWorkspaces.find(w => w.id === activeWorkspaceId);
-  const targetProject = activeWorkspace?.gcpProjectId || currentSuite?.gcpProjectId || 'stillwater-sovereign-01';
+  const targetProject = activeWorkspace?.gcpProjectId || currentSuite?.gcpProjectId || 'stillwater-sovereign-02';
   const targetEmail = activeWorkspace?.ownerEmail || currentSuite?.ownerEmail;
 
   const { user } = useAuth();

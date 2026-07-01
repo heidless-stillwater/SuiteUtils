@@ -3,7 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: 'stillwater-sovereign-01'
+    projectId: 'stillwater-sovereign-02'
   });
 }
 

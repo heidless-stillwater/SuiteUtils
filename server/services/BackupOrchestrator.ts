@@ -80,7 +80,7 @@ export class BackupOrchestrator {
     'media'
   ];
 
-  constructor(storageProvider: IStorageProvider, projectId: string = 'stillwater-sovereign-01') {
+  constructor(storageProvider: IStorageProvider, projectId: string = 'stillwater-sovereign-02') {
     this.storageProvider = storageProvider;
     this.projectId = projectId;
     this.localBackupRoot = path.join(process.cwd(), 'BACKUPS');

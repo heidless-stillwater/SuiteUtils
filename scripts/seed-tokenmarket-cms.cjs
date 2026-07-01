@@ -22,7 +22,76 @@ const baselineContent = [
     type: 'policy',
     title: 'Terms of Service',
     order: 2,
-    content: `# Terms of Service\n\nWelcome to **TokenMarket**. By accessing this site, you agree to comply with and be bound by the following terms of use.\n\n## Disclaimer of Warranties\n* The commodity AI sector indices, valuations, compute cost models, and custom portfolio returns provided on this platform are for informational and educational purposes only.\n* None of this content constitutes financial advice, investment recommendations, or endorsement of any specific token or blockchain protocol.\n* We do not guarantee the accuracy, completeness, or timeliness of the CoinGecko API data feeds.\n\n## Developer API Acceptable Use\n* We provision developer keys to access computed AI sector index metrics and live market prices.\n* You agree not to abuse the API endpoints or exceed the standard rate limit of 60 requests per minute.\n* Commercial redistribution of raw index payloads without developer license attributes is prohibited.\n* We reserve the right to throttle or terminate API keys that compromise server stability or bypass programmatic terms.`
+    content: `# Terms of Service
+
+Last Updated: June 2026
+
+Welcome to **TokenMarket**. By accessing, browsing, or using this platform—including our commodity AI sector indices, compute cost models, dashboard visualisations, and Developer API endpoints—you agree to comply with and be bound by the following Terms of Service. If you do not agree to these terms, you must immediately discontinue use of the platform and our services.
+
+---
+
+## 1. Scope of Services & Disclaimer of Advice
+
+### 1.1 Informational & Educational Purposes Only
+The content, metrics, valuations, calculations, and custom portfolio returns provided on this platform are for **informational and educational purposes only**.
+
+> **No Financial Advice**: None of the content on this website constitutes investment, financial, tax, or legal advice. No action should be taken based on any information contained herein. We are not a registered broker-dealer, investment advisor, or commodity trading advisor.
+
+### 1.2 Data Source Limitations
+We rely on third-party public feeds (including the CoinGecko API) and hardware provider price lists to compute our indices and compute-to-market ratios. We do not guarantee the accuracy, completeness, timeliness, or reliability of these external feeds.
+
+---
+
+## 2. Developer API & Acceptable Use Policy
+
+We provision API keys to allow developers to retrieve real-time indices, compute metrics, and sector weights. By using our API, you agree to the following conditions:
+
+* **Rate Limits**: You must not exceed the standard limit of **60 requests per minute** (unless otherwise upgraded to a higher tier plan).
+* **Automated Scrapers**: You must not run aggressive scraping tools or bots that mimic human traffic to bypass programmatic rate-limiting.
+* **No Redistribution**: Commercial redistribution or white-label embedding of raw API payloads without developer license attributes is strictly prohibited.
+* **Key Security**: You are solely responsible for keeping your developer key secure. Any activity traced to your key will be deemed your responsibility.
+
+---
+
+## 3. Account Tiering & Premium Upgrades
+
+* **Free Plan**: Provided on an "as-available" basis with standard rate limits and standard data latency.
+* **Standard & Pro Tiers**: Unlock high-frequency streams, raised API limits, and support ticketing priority.
+* **Billing & Subscriptions**: Payments are processed securely via third-party providers. All subscriptions are billed on a recurring basis and can be managed or cancelled from your Account tab.
+
+---
+
+## 4. Intellectual Property Rights
+
+* **Platform Content**: All calculations, proprietary composite scoring algorithms (such as the **Compute-to-Market Ratio**), visual designs, dashboards, and source code are the intellectual property of TokenMarket and its operators.
+* **Trademarks**: The names, logos, and taglines associated with **TokenMarket** are protected trademark assets. You may not use them in connection with any product or service without prior written consent.
+
+---
+
+## 5. Limitation of Liability & Indemnification
+
+### 5.1 No Warranties
+The platform and API are provided on an **"as-is"** and **"as-available"** basis. We make no warranties, express or implied, regarding uptime, stability, or database persistence.
+
+### 5.2 Limitation of Liability
+In no event shall TokenMarket, its developers, or its affiliates be liable for any direct, indirect, incidental, special, or consequential damages—including but not limited to investment losses, trading losses, loss of profits, data loss, or server downtime—arising from your use or inability to use the platform.
+
+### 5.3 Indemnification
+You agree to indemnify and hold harmless TokenMarket and its operators from any claims, losses, liabilities, and expenses (including legal fees) arising from your breach of these Terms or misuse of the platform and API endpoints.
+
+---
+
+## 6. Amendments & Governing Law
+
+### 6.1 Changes to Terms
+We reserve the right to amend these Terms at any time. Any changes will be posted on this page with an updated "Last Updated" timestamp. Your continued use of the platform after updates are made constitutes acceptance of the new Terms.
+
+### 6.2 Governing Law
+These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which the operators of TokenMarket reside, without regard to conflicts of law principles.
+
+---
+
+For inquiries, licensing requests, or support regarding these terms, please contact us at **support@fundingcloud.com**.`
   },
   {
     key: 'about-algorithms',

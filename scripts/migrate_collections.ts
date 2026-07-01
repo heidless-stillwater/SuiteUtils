@@ -4,7 +4,7 @@ import fs from 'fs';
 
 // Configuration
 const sourceKeyPath = './scratch/service-account-target.json'; // heidless-apps-2
-const targetKeyPath = './suite-admin-sovereign.json';         // stillwater-sovereign-01
+const targetKeyPath = './suite-admin-sovereign.json';         // stillwater-sovereign-02
 
 const sourceAccount = JSON.parse(fs.readFileSync(sourceKeyPath, 'utf8'));
 const targetAccount = JSON.parse(fs.readFileSync(targetKeyPath, 'utf8'));

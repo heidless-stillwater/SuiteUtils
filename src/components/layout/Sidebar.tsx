@@ -17,6 +17,7 @@ import {
   Share2,
   Cpu,
   LifeBuoy,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSuite } from '../../contexts/SuiteContext';
@@ -25,6 +26,7 @@ import { SuiteSwitcher } from './SuiteSwitcher';
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/persona', icon: Users, label: 'Sovereign Persona' },
+  { path: '/broadcast', icon: Mail, label: 'Campaigns' },
   { path: '/deploy', icon: Rocket, label: 'Deploy Console' },
   { path: '/history', icon: History, label: 'Deploy History' },
   { path: '/inference', icon: Cpu, label: 'Inference Admin' },

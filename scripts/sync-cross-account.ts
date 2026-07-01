@@ -42,7 +42,7 @@ async function runSync() {
   const targetProject = targetAccount.project_id;
 
   const sourceBucketName = 'heidless-apps-2.firebasestorage.app';
-  const targetBucketName = 'stillwater-sovereign-01.firebasestorage.app';
+  const targetBucketName = 'stillwater-sovereign-02.firebasestorage.app';
 
   console.log(`📥 Source Project: ${sourceProject} (${sourceBucketName})`);
   console.log(`📤 Target Project: ${targetProject} (${targetBucketName})`);
