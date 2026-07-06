@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, Activity, Database, CheckCircle2, Play, Square, Loader2, Download, Trash2, ShieldCheck, ToggleLeft, ToggleRight, X, Maximize2, Terminal } from 'lucide-react';
+import { Server, Activity, Database, CheckCircle2, Play, Square, Loader2, Download, Trash2, ShieldCheck, ToggleLeft, ToggleRight, X, Maximize2, Terminal, ChevronDown, ChevronRight, Search, ArrowUpDown, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp } from 'lucide-react';
 import { inferenceDb } from '../lib/inference-firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
@@ -172,6 +172,57 @@ export function InferenceAdminPage() {
   const modalLogRef = useRef<HTMLDivElement | null>(null);
   const pullAbortControllerRef = useRef<AbortController | null>(null);
 
+  // LM Studio States
+  const [providerTab, setProviderTab] = useState<'ollama' | 'lmstudio'>('ollama');
+  const [lmModels, setLmModels] = useState<any[]>([]);
+  const [lmCache, setLmCache] = useState<any[]>([]);
+  const [lmLoading, setLmLoading] = useState(false);
+  const [isLoadingModel, setIsLoadingModel] = useState<string | null>(null);
+  const [isUnloadingModel, setIsUnloadingModel] = useState<string | null>(null);
+
+  // Catalog View States (Collapsible, Sortable, Filterable)
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [selectedTopLevelFilter, setSelectedTopLevelFilter] = useState('All');
+  const [catalogSortBy, setCatalogSortBy] = useState('default');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  // Catalog Grouping and Filtering Helpers
+  const getModelGroupName = (name: string): string => {
+    const lower = name.toLowerCase();
+    if (lower.includes('gemma-4') || lower.includes('gemma4')) return 'Gemma 4';
+    if (lower.includes('gemma')) return 'Gemma';
+    if (lower.includes('llama-3.2') || lower.includes('llama3.2')) return 'Llama 3.2';
+    if (lower.includes('llama-3') || lower.includes('llama3')) return 'Llama 3';
+    if (lower.includes('qwen2.5') || lower.includes('qwen-2.5')) return 'Qwen 2.5';
+    if (lower.includes('qwen')) return 'Qwen';
+    if (lower.includes('gemini')) return 'Gemini';
+    if (lower.includes('gpt-')) return 'GPT';
+    if (lower.includes('claude')) return 'Claude';
+    if (lower.includes('deepseek')) return 'DeepSeek';
+    if (lower.includes('mistral')) return 'Mistral';
+    return 'Other';
+  };
+
+  const parseSizeToBytes = (sizeStr: string): number => {
+    if (!sizeStr || sizeStr === 'N/A') return 0;
+    const lower = sizeStr.toLowerCase();
+    const match = lower.match(/([\d.]+)\s*([kmgt]b)/i);
+    if (!match) return 0;
+    const val = parseFloat(match[1]);
+    const unit = match[2];
+    if (unit.includes('gb')) return val * 1024 * 1024 * 1024;
+    if (unit.includes('mb')) return val * 1024 * 1024;
+    if (unit.includes('kb')) return val * 1024;
+    return val;
+  };
+
+  const toggleGroupExpand = (groupName: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
+
   // Scroll modal logs to bottom
   useEffect(() => {
     if (autoScrollLogs && modalLogRef.current) {
@@ -181,6 +232,8 @@ export function InferenceAdminPage() {
 
   const [billingInfo, setBillingInfo] = useState<{ tier: string; quotas: Record<string, string> } | null>(null);
   const [loadingBilling, setLoadingBilling] = useState(false);
+  const [isCheckingLiveStatus, setIsCheckingLiveStatus] = useState(false);
+
 
   const fetchBillingInfo = async (refresh = false) => {
     setLoadingBilling(true);
@@ -247,6 +300,138 @@ export function InferenceAdminPage() {
     return () => clearInterval(interval);
   }, [config?.activeSource, config?.gcpEndpoint, config?.vmStatus]);
 
+  // LM Studio API Helpers & Polling
+  const getLmStudioEndpoint = () => {
+    if (!config) return 'http://localhost:1234';
+    if (config.activeSource === 'localhost') return 'http://localhost:1234';
+    return config.gcpEndpoint.replace(':11434', ':1234');
+  };
+
+  const fetchLmModels = async () => {
+    if (!config) return;
+    setLmLoading(true);
+    try {
+      const endpoint = getLmStudioEndpoint();
+      
+      // 1. Fetch loaded models
+      const modelsRes = await fetch(`${API_URL}/api/lmstudio/models?endpoint=${encodeURIComponent(endpoint)}`);
+      let loadedModelsList: any[] = [];
+      if (modelsRes.ok) {
+        const data = await modelsRes.json();
+        loadedModelsList = Array.isArray(data) ? data : (data.data || data.models || []);
+      }
+
+      // 2. Fetch cached (on-disk) models
+      const cacheRes = await fetch(`${API_URL}/api/lmstudio/cache?endpoint=${encodeURIComponent(endpoint)}`);
+      let cacheModelsList: any[] = [];
+      if (cacheRes.ok) {
+        cacheModelsList = await cacheRes.json();
+      }
+
+      setLmCache(cacheModelsList);
+
+      // Merge cached models with loaded status
+      const mergedModels = cacheModelsList.map((item: any) => {
+        // A model is loaded if its modelKey or path is present in loadedModelsList
+        const isLoaded = loadedModelsList.some((lm: any) => 
+          lm.id === item.modelKey || 
+          lm.id === item.path || 
+          (lm.id && lm.id.toLowerCase() === item.modelKey.toLowerCase()) ||
+          (lm.id && lm.id.toLowerCase().includes(item.modelKey.toLowerCase()))
+        );
+        return {
+          ...item,
+          id: item.modelKey,
+          is_loaded: isLoaded
+        };
+      });
+
+      // Include any models that are loaded but somehow not found in cache (fallback)
+      loadedModelsList.forEach((lm: any) => {
+        if (!mergedModels.some((m: any) => m.id === lm.id || lm.id.includes(m.id))) {
+          mergedModels.push({
+            id: lm.id,
+            modelKey: lm.id,
+            displayName: lm.id,
+            is_loaded: true,
+            type: 'llm',
+            sizeBytes: 0,
+            path: lm.id
+          });
+        }
+      });
+
+      setLmModels(mergedModels);
+    } catch (err) {
+      console.error('Failed to fetch LM Studio models:', err);
+      setLmModels([]);
+      setLmCache([]);
+    } finally {
+      setLmLoading(false);
+    }
+  };
+
+  const loadLmModel = async (modelKey: string) => {
+    if (!config) return;
+    setIsLoadingModel(modelKey);
+    try {
+      const endpoint = getLmStudioEndpoint();
+      const res = await fetch(`${API_URL}/api/lmstudio/load`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelKey, endpoint })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to load model');
+      }
+      await fetchLmModels();
+    } catch (err: any) {
+      console.error('Failed to load LM Studio model:', err);
+      alert(`Error loading model: ${err.message}`);
+    } finally {
+      setIsLoadingModel(null);
+    }
+  };
+
+  const unloadLmModel = async (modelKey: string) => {
+    if (!config) return;
+    setIsUnloadingModel(modelKey);
+    try {
+      const endpoint = getLmStudioEndpoint();
+      const res = await fetch(`${API_URL}/api/lmstudio/unload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelKey, endpoint })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to unload model');
+      }
+      await fetchLmModels();
+    } catch (err: any) {
+      console.error('Failed to unload LM Studio model:', err);
+      alert(`Error unloading model: ${err.message}`);
+    } finally {
+      setIsUnloadingModel(null);
+    }
+  };
+
+  // Poll LM Studio models when tab is selected or config changes
+  useEffect(() => {
+    if (providerTab === 'lmstudio') {
+      fetchLmModels();
+      const interval = setInterval(fetchLmModels, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [providerTab, config?.activeSource, config?.gcpEndpoint, config?.vmStatus]);
+
+  // Reset catalog filter/search when switching provider tabs
+  useEffect(() => {
+    setSelectedTopLevelFilter('All');
+    setCatalogSearch('');
+  }, [providerTab]);
+
   const updateConfigInDb = async (updateData: Partial<InferenceConfig>) => {
     try {
       const res = await fetch(`${API_URL}/api/inference/config`, {
@@ -284,13 +469,20 @@ export function InferenceAdminPage() {
     if (!config) return;
     setIsPulling(modelName);
     setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: 'Connecting...' } }));
-    const endpoint = config.activeSource === 'localhost' ? 'http://localhost:11434' : config.gcpEndpoint;
+    
+    let hasError = false;
+    const isLmStudio = providerTab === 'lmstudio';
+    const endpoint = isLmStudio 
+      ? getLmStudioEndpoint()
+      : (config.activeSource === 'localhost' ? 'http://localhost:11434' : config.gcpEndpoint);
+    
+    const pullPath = isLmStudio ? '/api/lmstudio/pull' : '/api/ollama/pull';
     
     const controller = new AbortController();
     pullAbortControllerRef.current = controller;
 
     try {
-      const res = await fetch(`${API_URL}/api/ollama/pull`, {
+      const res = await fetch(`${API_URL}${pullPath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ modelName, endpoint }),
@@ -319,6 +511,7 @@ export function InferenceAdminPage() {
             const ev = JSON.parse(line);
             if (ev.error) {
               setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: `Error: ${ev.error}` } }));
+              hasError = true;
               break;
             }
             if (ev.status === 'success') {
@@ -329,6 +522,17 @@ export function InferenceAdminPage() {
                 ...prev,
                 [modelName]: {
                   pct,
+                  status: ev.status || 'Downloading...',
+                  completed: ev.completed,
+                  total: ev.total
+                }
+              }));
+            } else if (ev.pct != null) {
+              setPullProgress(prev => ({
+                ...prev,
+                [modelName]: {
+                  ...(prev[modelName] || {}),
+                  pct: ev.pct,
                   status: ev.status || 'Downloading...',
                   completed: ev.completed,
                   total: ev.total
@@ -350,16 +554,18 @@ export function InferenceAdminPage() {
       } else {
         console.error('Failed to pull model', err);
         setPullProgress(prev => ({ ...prev, [modelName]: { pct: 0, status: 'Failed — check console' } }));
+        hasError = true;
       }
     } finally {
       setIsPulling(null);
       pullAbortControllerRef.current = null;
       // Clear progress after a short delay so user can see "Done!" or "Aborted"
+      const delay = hasError ? 10000 : 3000;
       setTimeout(() => setPullProgress(prev => {
         const next = { ...prev };
         delete next[modelName];
         return next;
-      }), 3000);
+      }), delay);
     }
   };
 
@@ -591,12 +797,42 @@ export function InferenceAdminPage() {
     };
     checkActiveJob();
     
+    // Check live status on mount
+    const checkLiveVmStatus = async () => {
+      try {
+        await fetch(`${API_URL}/api/inference/gcp/live-status`);
+      } catch (err) {
+        console.error('Failed to fetch live GCP VM status on mount/poll:', err);
+      }
+    };
+    checkLiveVmStatus();
+
+    // Poll live status every 45 seconds
+    const liveStatusInterval = setInterval(checkLiveVmStatus, 45000);
+    
     return () => {
       if ((window as any).inferencePollInterval) {
         clearInterval((window as any).inferencePollInterval);
       }
+      clearInterval(liveStatusInterval);
     };
   }, []);
+
+  const handleManualLiveStatusCheck = async () => {
+    setIsCheckingLiveStatus(true);
+    try {
+      const res = await fetch(`${API_URL}/api/inference/gcp/live-status`);
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[Manual GCP VM Status Check]:', data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch live GCP VM status manually:', err);
+    } finally {
+      setIsCheckingLiveStatus(false);
+    }
+  };
+
 
   const updateHardwareProfile = async (hardwareName: string) => {
     if (!config) return;
@@ -750,8 +986,16 @@ export function InferenceAdminPage() {
               <Activity className="w-4 h-4 text-indigo-400" />
               <span>{isVmControlCollapsed ? '▶' : '▼'} GCP VM Control</span>
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               <span className="text-[9px] font-mono text-white/40 hidden sm:inline">{config.gcpHardware}</span>
+              <button
+                onClick={handleManualLiveStatusCheck}
+                disabled={isCheckingLiveStatus}
+                className="p-1 rounded-md hover:bg-white/5 text-white/40 hover:text-white transition-colors flex items-center justify-center disabled:opacity-50"
+                title="Refresh Live status from GCP"
+              >
+                <Loader2 className={cn("w-3.5 h-3.5", isCheckingLiveStatus && "animate-spin")} />
+              </button>
               <span className={cn(
                 "text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full border",
                 config.vmStatus === 'RUNNING' ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-white/5 text-white/40 border-white/10"
@@ -759,6 +1003,7 @@ export function InferenceAdminPage() {
                 {config.vmStatus}
               </span>
             </div>
+
           </div>
 
           {!isVmControlCollapsed && (
@@ -995,65 +1240,187 @@ export function InferenceAdminPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Models For Use */}
         <div className="glass-card-static p-6 space-y-6">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-4">
-            <Database className="w-4 h-4 text-white/60" />
-            <h2 className="text-sm font-black text-white uppercase tracking-widest">Models For Use (Active & Installed)</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-4 gap-4">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-white/60" />
+              <h2 className="text-sm font-black text-white uppercase tracking-widest">Models For Use (Active & Installed)</h2>
+            </div>
+            
+            {/* Custom NextUI-like Tab Switched button group */}
+            <div className="flex p-0.5 bg-white/5 border border-white/10 rounded-xl">
+              <button
+                onClick={() => setProviderTab('ollama')}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                  providerTab === 'ollama' 
+                    ? "bg-primary text-black shadow-lg shadow-primary/20" 
+                    : "text-white/60 hover:text-white"
+                )}
+              >
+                Ollama / Cloud
+              </button>
+              <button
+                onClick={() => setProviderTab('lmstudio')}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                  providerTab === 'lmstudio' 
+                    ? "bg-primary text-black shadow-lg shadow-primary/20" 
+                    : "text-white/60 hover:text-white"
+                )}
+              >
+                LM Studio
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {activeModels.length === 0 ? (
-              <p className="text-xs text-white/40 text-center py-8 bg-black/20 rounded-xl border border-white/5">No active or installed models available.</p>
-            ) : (
-              activeModels.map(model => {
-                return (
-                  <div key={model.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-black/20 hover:bg-white/5 border border-white/5 rounded-xl transition-colors gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-bold text-white/90 flex items-center gap-2">
-                          {model.name}
-                          {model.isEnabled && <CheckCircle2 className="w-3.5 h-3.5 text-primary" />}
-                        </h3>
-                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", model.suitability.badgeColor)}>
-                          {model.suitability.statusText}
-                        </span>
+            {providerTab === 'ollama' ? (
+              activeModels.length === 0 ? (
+                <p className="text-xs text-white/40 text-center py-8 bg-black/20 rounded-xl border border-white/5">No active or installed Ollama models available.</p>
+              ) : (
+                activeModels.map(model => {
+                  return (
+                    <div key={model.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-black/20 hover:bg-white/5 border border-white/5 rounded-xl transition-colors gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-bold text-white/90 flex items-center gap-2">
+                            {model.name}
+                            {model.isEnabled && <CheckCircle2 className="w-3.5 h-3.5 text-primary" />}
+                          </h3>
+                          <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", model.suitability.badgeColor)}>
+                            {model.suitability.statusText}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-white/40 font-mono mt-1.5 flex gap-2 flex-wrap">
+                          {model.isCloud ? (
+                            <span className="text-indigo-300">Cloud Hosted API Resource</span>
+                          ) : (
+                            <>
+                              <span>Size: {model.size}</span>
+                              <span>|</span>
+                              <span>Params: {model.params}</span>
+                              <span>|</span>
+                              <span className="text-indigo-300">Min GPU: {model.suitability.minGpuLabel}</span>
+                            </>
+                          )}
+                        </p>
                       </div>
-                      <p className="text-[10px] text-white/40 font-mono mt-1.5 flex gap-2 flex-wrap">
-                        {model.isCloud ? (
-                          <span className="text-indigo-300">Cloud Hosted API Resource</span>
-                        ) : (
-                          <>
-                            <span>Size: {model.size}</span>
-                            <span>|</span>
-                            <span>Params: {model.params}</span>
-                            <span>|</span>
-                            <span className="text-indigo-300">Min GPU: {model.suitability.minGpuLabel}</span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => toggleModelEnable(model.name)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all",
-                          model.isEnabled ? "bg-primary/10 text-primary border-primary/30" : "bg-white/5 text-white/40 border-white/10 hover:text-white"
-                        )}
-                      >
-                        {model.isEnabled ? 'Enabled' : 'Disabled'}
-                      </button>
-                      {!model.isCloud && (
+                      <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => deleteModel(model.name)}
-                          disabled={isDeleting === model.name}
-                          className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all"
+                          onClick={() => toggleModelEnable(model.name)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all",
+                            model.isEnabled ? "bg-primary/10 text-primary border-primary/30" : "bg-white/5 text-white/40 border-white/10 hover:text-white"
+                          )}
                         >
-                          {isDeleting === model.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          {model.isEnabled ? 'Enabled' : 'Disabled'}
                         </button>
-                      )}
+                        {!model.isCloud && (
+                          <button 
+                            onClick={() => deleteModel(model.name)}
+                            disabled={isDeleting === model.name}
+                            className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all"
+                          >
+                            {isDeleting === model.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })
+              )
+            ) : (
+              // LM Studio List
+              lmLoading && lmModels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 bg-black/20 rounded-xl border border-white/5">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                  <p className="text-xs text-white/40">Querying LM Studio models list...</p>
+                </div>
+              ) : lmModels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-6 text-center bg-black/20 rounded-xl border border-white/5">
+                  <p className="text-xs text-white/40 mb-2">No models returned from LM Studio.</p>
+                  <p className="text-[10px] text-white/30 max-w-[340px] leading-relaxed">
+                    Make sure LM Studio is running at <code className="text-indigo-300">{getLmStudioEndpoint()}</code>.
+                    <br /><br />
+                    {config?.activeSource === 'localhost' ? (
+                      <>
+                        No Windows 11 installation is needed! LM Studio runs completely inside your local Linux environment. 
+                        Make sure the local LM Studio service is enabled in your <span className="text-indigo-400 font-semibold">Infrastructure Services</span> panel, or manually run <code className="text-indigo-300 font-mono">lms server start</code> in WSL2.
+                      </>
+                    ) : (
+                      <>
+                        Make sure your GCP VM is running, LM Studio CLI is started on the VM (via <code className="text-indigo-300 font-mono">lms server start</code>), and Port <code className="text-indigo-300 font-mono">1234</code> is open in your GCP VPC firewall rules.
+                      </>
+                    )}
+                  </p>
+                  <button 
+                    onClick={fetchLmModels}
+                    className="mt-4 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-[10px] font-bold uppercase tracking-wider rounded-lg border border-white/10 text-white/80 transition-all"
+                  >
+                    Retry Connection
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {lmModels.map(model => {
+                    const mId = model.id;
+                    const isEnabled = config.enabledModels.includes(mId);
+                    const isLoaded = model.is_loaded ?? true;
+                    
+                    return (
+                      <div key={mId} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-black/20 hover:bg-white/5 border border-white/5 rounded-xl transition-colors gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-bold text-white/90 truncate max-w-full flex items-center gap-2" title={mId}>
+                              {mId}
+                              {isEnabled && <CheckCircle2 className="w-3.5 h-3.5 text-primary" />}
+                            </h3>
+                            <span className={cn(
+                              "text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider",
+                              isLoaded ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-white/5 text-white/40 border-white/10"
+                            )}>
+                              {isLoaded ? 'Loaded' : 'Not Loaded'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-white/40 font-mono mt-1.5 flex gap-2 flex-wrap">
+                            <span className="text-indigo-300">LM Studio Developer Server Resource</span>
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => toggleModelEnable(mId)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all",
+                              isEnabled ? "bg-primary/10 text-primary border-primary/30" : "bg-white/5 text-white/40 border-white/10 hover:text-white"
+                            )}
+                          >
+                            {isEnabled ? 'Enabled' : 'Disabled'}
+                          </button>
+                          {isLoaded ? (
+                            <button
+                              onClick={() => unloadLmModel(mId)}
+                              disabled={isUnloadingModel === mId}
+                              className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isUnloadingModel === mId ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                              Unload
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => loadLmModel(mId)}
+                              disabled={isLoadingModel === mId}
+                              className="px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isLoadingModel === mId ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                              Load
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             )}
           </div>
         </div>
@@ -1087,104 +1454,395 @@ export function InferenceAdminPage() {
             )}
           </div>
 
-          <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
-            {registry.catalog.map(model => {
-              const isCloud = model.tags.includes('cloud');
-              const isInstalled = installedModels.some(m => m.name === model.name);
-              const isEnabled = config.enabledModels.includes(model.name);
-              const suitability = checkGpuSuitability(model.name, config.gcpHardware);
-              return (
-                <div key={model.name} className="flex flex-col p-4 bg-black/20 hover:bg-white/5 border border-white/5 rounded-xl transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-bold text-white/90">{model.name}</h3>
-                      <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", suitability.badgeColor)}>
-                        {suitability.statusText}
-                      </span>
-                    </div>
-                    {isCloud ? (
-                      <button 
-                        onClick={() => toggleModelEnable(model.name)}
-                        className={cn(
-                          "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all",
-                          isEnabled ? "bg-primary/10 text-primary border-primary/30" : "bg-white/5 text-white/40 border-white/10 hover:text-white"
-                        )}
+          {(() => {
+            // 1. Get registry catalog or empty array
+            const catalogList = registry?.catalog || [];
+
+            // 2. Filter by provider tab (ollama vs lmstudio)
+            const providerFiltered = catalogList.filter(model => {
+              if (providerTab === 'ollama') {
+                return (model.tags.includes('ollama') || model.tags.includes('cloud')) && !model.tags.includes('gguf');
+              } else if (providerTab === 'lmstudio') {
+                return model.tags.includes('gguf') || model.tags.includes('lmstudio') || model.tags.includes('cloud');
+              }
+              return true;
+            });
+
+            // 3. Extract dynamic top level groups for the dropdown from providerFiltered list
+            const dynamicGroups = Array.from(
+              new Set(providerFiltered.map(model => getModelGroupName(model.name)))
+            ).sort((a, b) => {
+              if (a === 'Other') return 1;
+              if (b === 'Other') return -1;
+              return a.localeCompare(b);
+            });
+
+            // 4. Apply filters (Text search and Top level model group filter)
+            const filteredModels = providerFiltered.filter(model => {
+              // Text pattern search
+              if (catalogSearch.trim() !== '') {
+                const query = catalogSearch.toLowerCase();
+                const matchesName = model.name.toLowerCase().includes(query);
+                const matchesDesc = model.description?.toLowerCase().includes(query) ?? false;
+                if (!matchesName && !matchesDesc) {
+                  return false;
+                }
+              }
+              
+              // Dropdown family filter
+              if (selectedTopLevelFilter !== 'All') {
+                const groupName = getModelGroupName(model.name);
+                if (groupName !== selectedTopLevelFilter) {
+                  return false;
+                }
+              }
+              
+              return true;
+            });
+
+            // 5. Group the remaining models by family heading
+            const groupedModels: Record<string, typeof filteredModels> = {};
+            filteredModels.forEach(model => {
+              const groupName = getModelGroupName(model.name);
+              if (!groupedModels[groupName]) {
+                groupedModels[groupName] = [];
+              }
+              groupedModels[groupName].push(model);
+            });
+
+            // Helper to match an LM Studio model case-insensitively with catalog model name
+            const matchLmModel = (m: any, catalogModelName: string): boolean => {
+              const cleanId = (m.id || '').toLowerCase();
+              const cleanPath = (m.path || '').toLowerCase();
+              const cleanName = catalogModelName.toLowerCase();
+              return cleanId === cleanName || 
+                     cleanName.includes(cleanId) || 
+                     cleanId.includes(cleanName) ||
+                     cleanPath.includes(cleanName) ||
+                     cleanName.includes(cleanPath);
+            };
+
+            // Helper to check if model is installed
+            const getIsInstalled = (modelName: string): boolean => {
+              if (providerTab === 'lmstudio') {
+                return lmModels.some(m => matchLmModel(m, modelName));
+              }
+              return installedModels.some(m => m.name === modelName);
+            };
+
+            // Helper to resolve model timestamp
+            const getModelTimestamp = (modelName: string): number => {
+              if (providerTab === 'ollama') {
+                const installed = installedModels.find(m => m.name === modelName);
+                if (installed && installed.modified_at) {
+                  return new Date(installed.modified_at).getTime();
+                }
+              } else if (providerTab === 'lmstudio') {
+                const installed = lmModels.find(m => matchLmModel(m, modelName));
+                if (installed) {
+                  return installed.is_loaded ? 2 : 1;
+                }
+              }
+              return 0;
+            };
+
+            // Helper to get size in bytes
+            const getModelSizeInBytes = (model: typeof filteredModels[0]): number => {
+              if (providerTab === 'ollama') {
+                const installed = installedModels.find(m => m.name === model.name);
+                if (installed && installed.size) {
+                  return installed.size;
+                }
+              }
+              return parseSizeToBytes(model.size);
+            };
+
+            // Sort function for the models
+            const sortModels = (models: typeof filteredModels) => {
+              return [...models].sort((a, b) => {
+                if (catalogSortBy === 'name-asc') {
+                  return a.name.localeCompare(b.name);
+                }
+                if (catalogSortBy === 'name-desc') {
+                  return b.name.localeCompare(a.name);
+                }
+                if (catalogSortBy === 'size-asc') {
+                  return getModelSizeInBytes(a) - getModelSizeInBytes(b);
+                }
+                if (catalogSortBy === 'size-desc') {
+                  return getModelSizeInBytes(b) - getModelSizeInBytes(a);
+                }
+                if (catalogSortBy === 'timestamp-desc') {
+                  const timeA = getModelTimestamp(a.name);
+                  const timeB = getModelTimestamp(b.name);
+                  if (timeA !== timeB) {
+                    return timeB - timeA;
+                  }
+                  return a.name.localeCompare(b.name);
+                }
+                if (catalogSortBy === 'installed') {
+                  const isInstA = getIsInstalled(a.name) ? 1 : 0;
+                  const isInstB = getIsInstalled(b.name) ? 1 : 0;
+                  if (isInstA !== isInstB) {
+                    return isInstB - isInstA;
+                  }
+                  return a.name.localeCompare(b.name);
+                }
+                return 0;
+              });
+            };
+
+            // 6. Get sorted group names
+            const sortedGroupNames = Object.keys(groupedModels).sort((a, b) => {
+              if (a === 'Other') return 1;
+              if (b === 'Other') return -1;
+              return a.localeCompare(b);
+            });
+
+            return (
+              <div className="space-y-4">
+                {/* Control bar */}
+                <div className="flex items-center justify-between gap-2.5 p-3 bg-white/[0.02] border border-white/5 rounded-xl w-full flex-nowrap overflow-x-auto xl:overflow-x-visible custom-scrollbar-horizontal">
+                  {/* Search Input */}
+                  <div className="relative flex-1 min-w-[120px]">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                      <Search className="w-4 h-4 text-white/40" />
+                    </span>
+                    <input
+                      type="text"
+                      value={catalogSearch}
+                      onChange={(e) => setCatalogSearch(e.target.value)}
+                      placeholder="Search catalog..."
+                      className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-8 py-1.5 text-xs text-white/90 outline-none focus:border-indigo-500 transition-all font-mono placeholder:text-white/30"
+                    />
+                    {catalogSearch && (
+                      <button
+                        onClick={() => setCatalogSearch('')}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-white/40 hover:text-white transition-colors"
                       >
-                        {isEnabled ? 'Enabled' : 'Disabled'}
-                      </button>
-                    ) : isInstalled ? (
-                      <span className="text-[10px] font-black uppercase tracking-widest text-green-400 flex items-center gap-1 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
-                        <CheckCircle2 className="w-3 h-3" /> Installed
-                      </span>
-                    ) : isPulling === model.name ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-                        <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">
-                          {pullProgress[model.name]?.pct ?? 0}%
-                        </span>
-                        <button
-                          onClick={abortPull}
-                          className="p-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all ml-1"
-                          title="Abort Pull"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => pullModel(model.name)}
-                        disabled={config.activeSource === 'gcp' && config.vmStatus === 'STOPPED'}
-                        title={config.activeSource === 'gcp' && config.vmStatus === 'STOPPED' ? "GCP VM is offline. Start the VM or switch active source to Localhost to pull models." : undefined}
-                        className="flex items-center gap-1 px-3 py-1 bg-white/5 hover:bg-white/10 text-white/80 text-[10px] font-black uppercase tracking-widest rounded-lg border border-white/10 transition-all disabled:opacity-50"
-                      >
-                        <Download className="w-3 h-3" />
-                        Pull
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-white/60 mb-3">{model.description}</p>
-                  {isPulling === model.name && pullProgress[model.name] && (
-                    <div className="mb-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-mono text-indigo-300/80 uppercase tracking-wider">
-                          {pullProgress[model.name].status}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {pullProgress[model.name].completed != null && pullProgress[model.name].total != null && pullProgress[model.name].total! > 0 && (
-                            <span className="text-[9px] font-mono text-white/50">
-                              {formatSize(pullProgress[model.name].completed!)} / {formatSize(pullProgress[model.name].total!)}
-                            </span>
-                          )}
-                          <span className="text-[9px] font-bold font-mono text-indigo-300">
-                            {pullProgress[model.name].pct}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300"
-                          style={{ width: `${pullProgress[model.name].pct}%` }}
-                        />
-                      </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Family Selector */}
+                    <div className="relative">
+                      <select
+                        value={selectedTopLevelFilter}
+                        onChange={(e) => setSelectedTopLevelFilter(e.target.value)}
+                        className="bg-black/30 border border-white/10 hover:border-white/20 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white/80 outline-none focus:border-indigo-500/50 transition-all cursor-pointer appearance-none min-w-[115px] sm:min-w-[140px]"
+                      >
+                        <option value="All" className="bg-[#0d0d11] text-white/90">All Families</option>
+                        {dynamicGroups.map(group => (
+                          <option key={group} value={group} className="bg-[#0d0d11] text-white/90">{group}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-white/40 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {!isCloud && (
-                      <>
-                        <span className="text-[9px] font-mono text-white/40 bg-white/5 px-2 py-0.5 rounded">Size: {model.size}</span>
-                        <span className="text-[9px] font-mono text-indigo-300 bg-indigo-500/5 border border-indigo-500/10 px-2 py-0.5 rounded">Min GPU: {suitability.minGpuLabel}</span>
-                      </>
-                    )}
-                    {model.tags.map(tag => (
-                      <span key={tag} className="text-[9px] font-mono text-indigo-400/60 bg-indigo-500/5 border border-indigo-500/10 px-2 py-0.5 rounded">
-                        {tag}
-                      </span>
-                    ))}
+
+                    {/* Sort Selector */}
+                    <div className="relative">
+                      <select
+                        value={catalogSortBy}
+                        onChange={(e) => setCatalogSortBy(e.target.value)}
+                        className="bg-black/30 border border-white/10 hover:border-white/20 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white/80 outline-none focus:border-indigo-500/50 transition-all cursor-pointer appearance-none min-w-[125px] sm:min-w-[155px]"
+                      >
+                        <option value="default" className="bg-[#0d0d11] text-white/90">Sort: Default</option>
+                        <option value="name-asc" className="bg-[#0d0d11] text-white/90">Name (A-Z)</option>
+                        <option value="name-desc" className="bg-[#0d0d11] text-white/90">Name (Z-A)</option>
+                        <option value="size-desc" className="bg-[#0d0d11] text-white/90">Size (Largest)</option>
+                        <option value="size-asc" className="bg-[#0d0d11] text-white/90">Size (Smallest)</option>
+                        <option value="installed" className="bg-[#0d0d11] text-white/90">Installed First</option>
+                        <option value="timestamp-desc" className="bg-[#0d0d11] text-white/90">Recent Updates</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-white/40 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+
+                    {/* Expand/Collapse Buttons */}
+                    <div className="flex border border-white/10 rounded-lg overflow-hidden bg-black/20 shrink-0">
+                      <button
+                        onClick={() => {
+                          const next: Record<string, boolean> = {};
+                          sortedGroupNames.forEach(g => { next[g] = true; });
+                          setExpandedGroups(next);
+                        }}
+                        className="p-2 text-white/60 hover:text-white hover:bg-white/5 transition-all border-r border-white/5 flex items-center justify-center"
+                        title="Expand All Families"
+                      >
+                        <ChevronsUpDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setExpandedGroups({})}
+                        className="p-2 text-white/60 hover:text-white hover:bg-white/5 transition-all flex items-center justify-center"
+                        title="Collapse All Families"
+                      >
+                        <ChevronsDownUp className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Collapsible Listing */}
+                <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                  {sortedGroupNames.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-8 text-center bg-black/20 rounded-xl border border-dashed border-white/10">
+                      <SlidersHorizontal className="w-8 h-8 text-white/20 mb-2 animate-pulse" />
+                      <h4 className="text-xs font-bold text-white/80">No Models Found</h4>
+                      <p className="text-[11px] text-white/40 mt-1 max-w-xs">
+                        No models match your search query or top-level filter. Try resetting them.
+                      </p>
+                    </div>
+                  ) : (
+                    sortedGroupNames.map(groupName => {
+                      const groupModels = groupedModels[groupName];
+                      const sortedModelsInGroup = sortModels(groupModels);
+                      const isExpanded = expandedGroups[groupName] === true;
+                      const installedInGroup = sortedModelsInGroup.filter(m => getIsInstalled(m.name)).length;
+
+                      return (
+                        <div key={groupName} className="border border-white/5 rounded-xl bg-white/[0.01] hover:bg-white/[0.02] overflow-hidden transition-all duration-200">
+                          {/* Collapsible Header */}
+                          <button
+                            onClick={() => toggleGroupExpand(groupName)}
+                            className="w-full flex items-center justify-between p-4 bg-white/[0.02] hover:bg-white/5 transition-all text-left"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-indigo-400" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-white/40" />
+                              )}
+                              <div>
+                                <h3 className="text-xs font-black text-white/95 uppercase tracking-widest flex items-center gap-2">
+                                  {groupName}
+                                  <span className="text-[10px] font-normal text-white/40 font-mono tracking-normal normal-case">
+                                    ({sortedModelsInGroup.length} {sortedModelsInGroup.length === 1 ? 'model' : 'models'})
+                                  </span>
+                                </h3>
+                                <p className="text-[10px] text-white/40 mt-0.5">
+                                  {installedInGroup > 0 ? (
+                                    <span className="text-green-400/80 font-medium">
+                                      {installedInGroup} of {sortedModelsInGroup.length} installed
+                                    </span>
+                                  ) : (
+                                    <span>Not installed</span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+
+                          {/* Collapsible Body */}
+                          {isExpanded && (
+                            <div className="p-3 bg-black/20 border-t border-white/5 space-y-3">
+                              {sortedModelsInGroup.map(model => {
+                                const isCloud = model.tags.includes('cloud');
+                                const isInstalled = getIsInstalled(model.name);
+                                const isEnabled = config.enabledModels.includes(model.name);
+                                const suitability = checkGpuSuitability(model.name, config.gcpHardware);
+
+                                return (
+                                  <div key={model.name} className="flex flex-col p-4 bg-black/20 hover:bg-white/5 border border-white/5 rounded-xl transition-colors">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="text-sm font-bold text-white/90">{model.name}</h3>
+                                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", suitability.badgeColor)}>
+                                          {suitability.statusText}
+                                        </span>
+                                      </div>
+                                      {isCloud ? (
+                                        <button 
+                                          onClick={() => toggleModelEnable(model.name)}
+                                          className={cn(
+                                            "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all",
+                                            isEnabled ? "bg-primary/10 text-primary border-primary/30" : "bg-white/5 text-white/40 border-white/10 hover:text-white"
+                                          )}
+                                        >
+                                          {isEnabled ? 'Enabled' : 'Disabled'}
+                                        </button>
+                                      ) : isInstalled ? (
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-green-400 flex items-center gap-1 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+                                          <CheckCircle2 className="w-3 h-3" /> Installed
+                                        </span>
+                                      ) : isPulling === model.name ? (
+                                        <div className="flex items-center gap-2">
+                                          <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
+                                          <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">
+                                            {pullProgress[model.name]?.pct ?? 0}%
+                                          </span>
+                                          <button
+                                            onClick={abortPull}
+                                            className="p-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all ml-1"
+                                            title="Abort Pull"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button 
+                                          onClick={() => pullModel(model.name)}
+                                          disabled={config.activeSource === 'gcp' && config.vmStatus === 'STOPPED'}
+                                          title={config.activeSource === 'gcp' && config.vmStatus === 'STOPPED' ? "GCP VM is offline. Start the VM or switch active source to Localhost to pull models." : undefined}
+                                          className="flex items-center gap-1 px-3 py-1 bg-white/5 hover:bg-white/10 text-white/80 text-[10px] font-black uppercase tracking-widest rounded-lg border border-white/10 transition-all disabled:opacity-50"
+                                        >
+                                          <Download className="w-3 h-3" />
+                                          Pull
+                                        </button>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-white/60 mb-3">{model.description}</p>
+                                    {pullProgress[model.name] && (
+                                      <div className="mb-3 space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[9px] font-mono text-indigo-300/80 uppercase tracking-wider">
+                                            {pullProgress[model.name].status}
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            {pullProgress[model.name].completed != null && pullProgress[model.name].total != null && pullProgress[model.name].total! > 0 && (
+                                              <span className="text-[9px] font-mono text-white/50">
+                                                {formatSize(pullProgress[model.name].completed!)} / {formatSize(pullProgress[model.name].total!)}
+                                              </span>
+                                            )}
+                                            <span className="text-[9px] font-bold font-mono text-indigo-300">
+                                              {pullProgress[model.name].pct}%
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300"
+                                            style={{ width: `${pullProgress[model.name].pct}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-2">
+                                      {!isCloud && (
+                                        <>
+                                          <span className="text-[9px] font-mono text-white/40 bg-white/5 px-2 py-0.5 rounded">Size: {model.size}</span>
+                                          <span className="text-[9px] font-mono text-indigo-300 bg-indigo-500/5 border border-indigo-500/10 px-2 py-0.5 rounded">Min GPU: {suitability.minGpuLabel}</span>
+                                        </>
+                                      )}
+                                      {model.tags.map(tag => (
+                                        <span key={tag} className="text-[9px] font-mono text-indigo-400/60 bg-indigo-500/5 border border-indigo-500/10 px-2 py-0.5 rounded">
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
       {/* Centered Start Confirmation Modal */}

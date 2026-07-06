@@ -83,7 +83,7 @@ export function SuiteProvider({ children }: { children: React.ReactNode }) {
                         }
                       }
                       // Ensure project is set and updated to sovereign GCP project
-                      if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2') {
+                      if (!app.project || app.project === 'heidless-apps-0' || app.project === 'heidless-apps-2' || app.project === 'stillwater-sovereign-01') {
                         app.project = 'stillwater-sovereign-02';
                         needsSync = true;
                       }

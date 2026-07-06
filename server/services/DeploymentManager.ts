@@ -565,7 +565,9 @@ export class DeploymentManager extends EventEmitter {
         'persona': 'persona',
         'persona-bridge': 'persona',
         'urlshortener': 'urlshortener',
-        'inferencegateway': 'inferencegateway'
+        'inferencegateway': 'inferencegateway',
+        'ollama-service': 'ollama',
+        'lmstudio-service': 'lmstudio'
     };
 
     private async isPortListening(port: number): Promise<boolean> {

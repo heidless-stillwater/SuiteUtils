@@ -120,6 +120,20 @@
         "dbId": "persona-db-0",
         "projectPath": "~/projects/Persona",
         "hostingTarget": "stillwater-persona"
+      },
+      {
+        "id": "ollama-service",
+        "name": "Ollama Local Service",
+        "projectPath": "~/projects/SuiteUtils",
+        "hostingTarget": "ollama",
+        "port": 11434
+      },
+      {
+        "id": "lmstudio-service",
+        "name": "LM Studio Local Service",
+        "projectPath": "~/projects/SuiteUtils",
+        "hostingTarget": "lmstudio",
+        "port": 1234
       }
     ]
   },

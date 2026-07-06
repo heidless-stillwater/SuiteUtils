@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Mail, 
@@ -326,10 +326,9 @@ export function BroadcastAdminPage() {
                 {filteredBroadcasts.map((b) => {
                   const isExpanded = expandedId === b.id;
                   return (
-                    <>
+                    <Fragment key={b.id}>
                       {/* Row Header Trigger */}
                       <tr 
-                        key={b.id} 
                         onClick={() => handleToggleExpand(b.id)}
                         className={`hover:bg-white/[0.02] cursor-pointer transition-colors ${isExpanded ? 'bg-white/[0.02]' : ''}`}
                       >
@@ -488,7 +487,7 @@ export function BroadcastAdminPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

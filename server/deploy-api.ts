@@ -2164,17 +2164,35 @@ async function syncCloudModelsInRegistry() {
       const data = docSnap.data();
       const catalog = data?.catalog || [];
       
-      const cloudModelsToAdd = [
+      const modelsToAdd = [
         { name: 'gemini-2.5-flash', tags: ['cloud', 'google'], size: 'N/A', description: 'Google high-speed model.' },
         { name: 'gpt-4o', tags: ['cloud', 'openai'], size: 'N/A', description: 'OpenAI flagship omni model.' },
         { name: 'claude-3.5-sonnet', tags: ['cloud', 'anthropic'], size: 'N/A', description: 'Anthropic high-reasoning model.' },
-        { name: 'deepseek-v3', tags: ['cloud', 'deepseek'], size: 'N/A', description: 'DeepSeek reasoning model.' }
+        { name: 'deepseek-v3', tags: ['cloud', 'deepseek'], size: 'N/A', description: 'DeepSeek reasoning model.' },
+        { name: 'lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF', tags: ['gguf', 'lmstudio'], size: '4.65 GB', description: 'Meta Llama 3 8B Instruct - high performance, already installed.' },
+        { name: 'lmstudio-community/Qwen2.5-1.5B-Instruct-GGUF', tags: ['gguf', 'lmstudio'], size: '1.1 GB', description: 'Qwen 2.5 1.5B Instruct - small, lightweight, ultra-fast.' },
+        { name: 'lmstudio-community/Llama-3.2-1B-Instruct-GGUF', tags: ['gguf', 'lmstudio'], size: '1.2 GB', description: 'Llama 3.2 1B Instruct - very small and responsive.' },
+        // Gemma 4 Ollama native models
+        { name: 'gemma4:e2b', tags: ['ollama', 'gemma4'], size: '1.6 GB', description: 'Google Gemma 4 Effective 2B - ultra-lightweight, high-speed edge model.' },
+        { name: 'gemma4:e4b', tags: ['ollama', 'gemma4'], size: '3.0 GB', description: 'Google Gemma 4 Effective 4B - standard lightweight assistant.' },
+        { name: 'gemma4:12b', tags: ['ollama', 'gemma4'], size: '7.6 GB', description: 'Google Gemma 4 12B - balanced workstation intelligence.' },
+        { name: 'gemma4:26b', tags: ['ollama', 'gemma4'], size: '15.0 GB', description: 'Google Gemma 4 26B MoE - high capacity mixture-of-experts.' },
+        { name: 'gemma4:31b', tags: ['ollama', 'gemma4'], size: '18.0 GB', description: 'Google Gemma 4 31B - high performance flagship model.' },
+        // Gemma 4 LM Studio GGUF models
+        { name: 'google/gemma-4-e2b', tags: ['gguf', 'lmstudio', 'gemma4'], size: '4.4 GB', description: 'Google Gemma 4 Effective 2B - ultra-lightweight and efficient.' },
+        { name: 'google/gemma-4-e4b', tags: ['gguf', 'lmstudio', 'gemma4'], size: '3.0 GB', description: 'Google Gemma 4 Effective 4B - lightweight and fast.' },
+        { name: 'google/gemma-4-12b', tags: ['gguf', 'lmstudio', 'gemma4'], size: '7.6 GB', description: 'Google Gemma 4 12B - balanced workstation intelligence.' },
+        { name: 'google/gemma-4-26b-a4b', tags: ['gguf', 'lmstudio', 'gemma4'], size: '15.0 GB', description: 'Google Gemma 4 26B MoE - mixture-of-experts format.' },
+        { name: 'google/gemma-4-31b', tags: ['gguf', 'lmstudio', 'gemma4'], size: '18.0 GB', description: 'Google Gemma 4 31B - high performance flagship model.' }
       ];
       
-      let updated = false;
-      const newCatalog = [...catalog];
-      for (const model of cloudModelsToAdd) {
-        if (!catalog.some((m: any) => m.name === model.name)) {
+      // Filter out any broken lmstudio-community/gemma-4 models
+      const filteredCatalog = catalog.filter((m: any) => !m.name.startsWith('lmstudio-community/gemma-4'));
+      let updated = catalog.length !== filteredCatalog.length;
+      
+      const newCatalog = [...filteredCatalog];
+      for (const model of modelsToAdd) {
+        if (!filteredCatalog.some((m: any) => m.name === model.name)) {
           newCatalog.push(model);
           updated = true;
         }
@@ -2185,11 +2203,11 @@ async function syncCloudModelsInRegistry() {
           catalog: newCatalog,
           updatedAt: new Date().toISOString()
         });
-        console.log('[Inference Sync] Successfully registered cloud models in database.');
+        console.log('[Inference Sync] Successfully registered cloud & GGUF models in database (removed broken Gemma-4 paths).');
       }
     }
   } catch (err: any) {
-    console.error('[Inference Sync] Error syncing cloud models in registry:', err.message);
+    console.error('[Inference Sync] Error syncing models in registry:', err.message);
   }
 }
 syncCloudModelsInRegistry();
@@ -2408,6 +2426,14 @@ app.get('/api/ollama/tags', async (req, res) => {
     res.json(data);
   } catch (err: any) {
     console.error(`[Ollama Proxy Tags] Error:`, err.message);
+    const isNetworkError = err.code === 'ECONNREFUSED' || 
+                           err.code === 'ENOTFOUND' || 
+                           err.code === 'ETIMEDOUT' ||
+                           err.message?.includes('fetch failed') ||
+                           err.message?.includes('connect');
+    if (isNetworkError) {
+      return res.json({ models: [], offline: true });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -2507,11 +2533,741 @@ app.post('/api/ollama/generate', async (req, res) => {
       res.end();
     }
   }
+});
 
-  req.on('close', () => {
-    console.log(`[Ollama Generate] Client disconnected`);
+// Proxy endpoint for getting LM Studio models
+app.get('/api/lmstudio/models', async (req, res) => {
+  const { endpoint } = req.query as { endpoint: string };
+  if (!endpoint) {
+    return res.status(400).json({ error: 'endpoint query parameter is required' });
+  }
+  try {
+    const response = await fetch(`${endpoint}/v1/models`);
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    console.error(`[LM Studio Proxy Models] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy endpoint for getting LM Studio disk cache models via 'lms ls --json'
+app.get('/api/lmstudio/cache', async (req, res) => {
+  const { endpoint } = req.query as { endpoint: string };
+  if (!endpoint) {
+    return res.status(400).json({ error: 'endpoint query parameter is required' });
+  }
+  try {
+    const isLocal = endpoint.includes('localhost') || endpoint.includes('127.0.0.1');
+    const { exec } = await import('child_process');
+    const cmd = isLocal
+      ? '/home/heidless/.lmstudio/bin/lms ls --json'
+      : 'gcloud compute ssh ollama-inference-vm --zone us-central1-a --command "/home/heidless/.lmstudio/bin/lms ls --json"';
+
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`[LM Studio Proxy Cache] exec error:`, error);
+        return res.status(500).json({ error: error.message, stderr });
+      }
+      try {
+        const cleanOutput = stdout.trim();
+        const jsonStartIndex = cleanOutput.indexOf('[');
+        const jsonEndIndex = cleanOutput.lastIndexOf(']');
+        if (jsonStartIndex !== -1 && jsonEndIndex !== -1 && jsonEndIndex > jsonStartIndex) {
+          const jsonStr = cleanOutput.substring(jsonStartIndex, jsonEndIndex + 1);
+          const data = JSON.parse(jsonStr);
+          res.json(data);
+        } else {
+          res.json([]);
+        }
+      } catch (parseErr: any) {
+        console.error(`[LM Studio Proxy Cache] Parse error:`, parseErr);
+        res.status(500).json({ error: `Failed to parse LMS output: ${parseErr.message}`, stdout });
+      }
+    });
+  } catch (err: any) {
+    console.error(`[LM Studio Proxy Cache] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Proxy endpoint for loading an LM Studio model
+app.post('/api/lmstudio/load', async (req, res) => {
+  const { modelKey, endpoint } = req.body as { modelKey: string; endpoint: string };
+  if (!modelKey || !endpoint) {
+    return res.status(400).json({ error: 'modelKey and endpoint are required' });
+  }
+  try {
+    const response = await fetch(`${endpoint}/api/v0/model/load`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelKey })
+    });
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    console.error(`[LM Studio Proxy Load] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy endpoint for unloading an LM Studio model
+app.post('/api/lmstudio/unload', async (req, res) => {
+  const { modelKey, endpoint } = req.body as { modelKey: string; endpoint: string };
+  if (!modelKey || !endpoint) {
+    return res.status(400).json({ error: 'modelKey and endpoint are required' });
+  }
+  try {
+    const response = await fetch(`${endpoint}/api/v0/model/unload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelKey })
+    });
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    console.error(`[LM Studio Proxy Unload] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy endpoint for downloading/pulling an LM Studio GGUF model via 'lms get'
+app.post('/api/lmstudio/pull', async (req, res) => {
+  const { modelName, endpoint } = req.body as { modelName: string; endpoint: string };
+  if (!modelName || !endpoint) {
+    return res.status(400).json({ error: 'modelName and endpoint are required' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendEvent = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  sendEvent({ status: 'starting', message: 'Resolving download plan...' });
+
+  const isLocal = endpoint.includes('localhost') || endpoint.includes('127.0.0.1');
+  const { spawn } = await import('child_process');
+  let child: any;
+
+  // Translate shorthand repo name to direct Hugging Face URL to prevent headless resolution/permission failures
+  let targetModel = modelName;
+  if (modelName.includes('/') && !modelName.startsWith('http://') && !modelName.startsWith('https://')) {
+    targetModel = `https://huggingface.co/${modelName}`;
+  }
+
+  if (isLocal) {
+    const fs = await import('fs');
+    const lmsPath = '/home/heidless/.lmstudio/bin/lms';
+    if (!fs.existsSync(lmsPath)) {
+      console.error(`[LM Studio Pull] Local LMS CLI not found at ${lmsPath}`);
+      sendEvent({ 
+        status: 'error', 
+        error: `LM Studio CLI (lms) not found locally at ${lmsPath}. Please make sure LM Studio is installed on your localhost machine, or switch the Active Source to GCP where it is installed.` 
+      });
+      res.end();
+      return;
+    }
+    console.log(`[LM Studio Pull] Spawning local pull of '${targetModel}'`);
+    child = spawn(lmsPath, ['get', targetModel, '-y']);
+  } else {
+    console.log(`[LM Studio Pull] Spawning GCP SSH pull of '${targetModel}'`);
+    child = spawn('gcloud', [
+      'compute', 'ssh', 'ollama-inference-vm',
+      '--zone', 'us-central1-a',
+      '--command', `/home/heidless/.lmstudio/bin/lms get ${targetModel} -y`
+    ]);
+  }
+
+  child.on('error', (err: any) => {
+    console.error(`[LM Studio Pull] Spawn error:`, err);
+    sendEvent({ status: 'error', error: `Failed to spawn LMS process: ${err.message}` });
+  });
+
+  let buffer = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const cleanLine = line.trim();
+      if (!cleanLine) continue;
+
+      // Match pattern like: [=====================================] 100% (4.65/4.65 GB) or simply 45%
+      const progressMatch = cleanLine.match(/(\d+)%\s*\(([\d.]+)\/([\d.]+)\s*([KMGT]B)\)/i) || cleanLine.match(/(\d+)%/);
+      if (progressMatch) {
+        const pct = parseInt(progressMatch[1], 10);
+        sendEvent({
+          status: 'downloading',
+          pct,
+          completed: progressMatch[2] ? parseFloat(progressMatch[2]) * 1024 * 1024 * 1024 : null, // Convert GB to bytes roughly
+          total: progressMatch[3] ? parseFloat(progressMatch[3]) * 1024 * 1024 * 1024 : null
+        });
+      }
+    }
+  });
+
+  let stderrBuffer = '';
+  let errorSent = false;
+
+  child.stderr.on('data', (chunk: Buffer) => {
+    const text = chunk.toString();
+    stderrBuffer += text;
+    if (text.includes('Error')) {
+      sendEvent({ status: 'error', error: text.trim() });
+      errorSent = true;
+    }
+  });
+
+  child.on('close', (code: number) => {
+    if (code === 0) {
+      sendEvent({ status: 'success', pct: 100 });
+    } else {
+      if (!errorSent) {
+        const errorMsg = stderrBuffer.trim() || `Process exited with code ${code}`;
+        sendEvent({ status: 'error', error: errorMsg });
+      }
+    }
+    res.end();
   });
 });
+
+// Proxy endpoint for LM Studio generate — streams and translates OpenAI SSE format to Ollama-like JSON SSE
+app.post('/api/lmstudio/generate', async (req, res) => {
+  const { model, prompt, endpoint } = req.body as {
+    model: string;
+    prompt: string;
+    endpoint: string;
+  };
+
+  if (!model || !prompt || !endpoint) {
+    return res.status(400).json({ error: 'model, prompt, and endpoint are required' });
+  }
+
+  try {
+    const upstream = await fetch(`${endpoint}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: true
+      })
+    });
+
+    if (!upstream.ok) {
+      const errText = await upstream.text();
+      return res.status(upstream.status).json({ error: errText || `Upstream returned ${upstream.status}` });
+    }
+
+    if (!upstream.body) {
+      return res.status(502).json({ error: 'No response body from LM Studio' });
+    }
+
+    // Stream as SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const reader = (upstream.body as any).getReader ? (upstream.body as any).getReader() : null;
+    if (!reader) {
+      return res.status(502).json({ error: 'Streaming not supported by upstream' });
+    }
+
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (trimmed.startsWith('data: ')) {
+            const content = trimmed.substring(6).trim();
+            if (content === '[DONE]') {
+              break;
+            }
+            try {
+              const parsed = JSON.parse(content);
+              const deltaContent = parsed.choices?.[0]?.delta?.content;
+              if (deltaContent) {
+                res.write(`data: ${JSON.stringify({ response: deltaContent })}\n\n`);
+              }
+            } catch { /* skip non-JSON lines */ }
+          }
+        }
+      }
+    } finally {
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
+  } catch (err: any) {
+    console.error('[LM Studio Proxy Generate] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+// ==========================================
+// 🛸 HERMES AGENT CONTROL PLANE & PROXY ROUTES
+// ==========================================
+
+let hermesChild: any = null;
+let hermesActiveModel: string | null = null;
+let hermesLogBuffer: string[] = [];
+const MAX_HERMES_LOG_LINES = 500;
+const hermesLogListeners = new Set<(log: string) => void>();
+
+function findHermesExecutable(): string | null {
+  try {
+    const whichPath = execSync('which hermes', { encoding: 'utf8' }).trim();
+    if (whichPath && fs.existsSync(whichPath)) {
+      return whichPath;
+    }
+  } catch { /* ignore and check common paths */ }
+
+  const home = process.env.HOME || '/home/heidless';
+  const userPath = path.join(home, '.local/bin/hermes');
+  if (fs.existsSync(userPath)) {
+    return userPath;
+  }
+
+  const sysPath = '/usr/local/bin/hermes';
+  if (fs.existsSync(sysPath)) {
+    return sysPath;
+  }
+
+  return null;
+}
+
+function appendHermesLog(text: string) {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line || lines.length === 1) {
+      hermesLogBuffer.push(line);
+    }
+  }
+  if (hermesLogBuffer.length > MAX_HERMES_LOG_LINES) {
+    hermesLogBuffer = hermesLogBuffer.slice(hermesLogBuffer.length - MAX_HERMES_LOG_LINES);
+  }
+
+  try {
+    const logFilePath = path.join(process.cwd(), 'logs', 'hermes-agent.log');
+    // Ensure logs folder exists
+    fs.ensureDirSync(path.dirname(logFilePath));
+    fs.appendFileSync(logFilePath, text, 'utf8');
+  } catch (err: any) {
+    console.error('[Hermes Log Writer] Failed to write to log file:', err.message);
+  }
+
+  for (const listener of hermesLogListeners) {
+    try {
+      listener(text);
+    } catch { /* ignore broken sockets */ }
+  }
+}
+
+// 1. Status Check
+app.get('/api/hermes/status', (req, res) => {
+  const executable = findHermesExecutable();
+  res.json({
+    installed: executable !== null,
+    executablePath: executable,
+    running: hermesChild !== null && hermesChild.exitCode === null,
+    activeModel: hermesActiveModel || 'google/gemma-4-e2b'
+  });
+});
+
+// 2. Installation (SSE stream)
+app.post('/api/hermes/install', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendEvent = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  sendEvent({ status: 'starting', message: 'Starting Hermes Agent installation via official script...' });
+
+  try {
+    console.log('[Hermes Installer] Spawning installation command...');
+    const child = spawn('bash', ['-c', 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash']);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      sendEvent({ status: 'installing', log: chunk.toString() });
+    });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      sendEvent({ status: 'installing', log: chunk.toString() });
+    });
+
+    child.on('close', (code: number) => {
+      if (code === 0) {
+        sendEvent({ status: 'success', message: 'Hermes Agent installed successfully!' });
+      } else {
+        sendEvent({ status: 'error', error: `Installation failed with exit code ${code}` });
+      }
+      res.end();
+    });
+
+    child.on('error', (err: any) => {
+      sendEvent({ status: 'error', error: err.message });
+      res.end();
+    });
+  } catch (err: any) {
+    sendEvent({ status: 'error', error: err.message });
+    res.end();
+  }
+});
+
+// 3. Dynamic Binder (Configure yaml & set in-memory route)
+app.post('/api/hermes/bind', async (req, res) => {
+  const { modelId } = req.body as { modelId: string };
+  if (!modelId) {
+    return res.status(400).json({ error: 'modelId is required' });
+  }
+
+  try {
+    hermesActiveModel = modelId;
+    
+    const home = process.env.HOME || '/home/heidless';
+    const hermesConfigDir = path.join(home, '.hermes');
+    fs.ensureDirSync(hermesConfigDir);
+    
+    const configPath = path.join(hermesConfigDir, 'config.yaml');
+    const yamlContent = `model: "gateway-active-model"\nbase_url: "http://localhost:5185/v1"\napi_key: "ig_local_dev"\n`;
+    fs.writeFileSync(configPath, yamlContent, 'utf8');
+
+    console.log(`[Hermes Binder] Dynamic route set to '${modelId}' and config.yaml initialized at ${configPath}`);
+    res.json({ status: 'success', activeModel: modelId });
+  } catch (err: any) {
+    console.error('[Hermes Binder] Configuration failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Start Background Daemon
+app.post('/api/hermes/start', (req, res) => {
+  if (hermesChild && hermesChild.exitCode === null) {
+    return res.json({ status: 'already_running', message: 'Hermes Agent is already running.' });
+  }
+
+  const hermesPath = findHermesExecutable();
+  if (!hermesPath) {
+    return res.status(400).json({ error: 'Hermes executable not found. Please install it first.' });
+  }
+
+  try {
+    console.log(`[Hermes Daemon] Spawning: ${hermesPath} --yolo`);
+    hermesChild = spawn(hermesPath, ['--yolo'], {
+      env: {
+        ...process.env,
+        FORCE_COLOR: '1'
+      }
+    });
+
+    appendHermesLog(`\n🚀 Starting Hermes Agent (PID: ${hermesChild.pid})...\n`);
+
+    hermesChild.stdout.on('data', (chunk: Buffer) => {
+      appendHermesLog(chunk.toString());
+    });
+
+    hermesChild.stderr.on('data', (chunk: Buffer) => {
+      appendHermesLog(chunk.toString());
+    });
+
+    hermesChild.on('close', (code: number) => {
+      appendHermesLog(`\n🛑 Hermes Agent process exited with code ${code}\n`);
+      hermesChild = null;
+    });
+
+    res.json({ status: 'started', pid: hermesChild.pid });
+  } catch (err: any) {
+    console.error('[Hermes Daemon] Start failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Stop Background Daemon
+app.post('/api/hermes/stop', (req, res) => {
+  if (!hermesChild || hermesChild.exitCode !== null) {
+    return res.json({ status: 'not_running', message: 'Hermes Agent is not running.' });
+  }
+
+  try {
+    console.log(`[Hermes Daemon] Terminating PID ${hermesChild.pid}`);
+    hermesChild.kill('SIGINT');
+    
+    const checkHandle = hermesChild;
+    setTimeout(() => {
+      if (checkHandle && checkHandle.exitCode === null) {
+        checkHandle.kill('SIGKILL');
+      }
+    }, 1500);
+
+    res.json({ status: 'stopping' });
+  } catch (err: any) {
+    console.error('[Hermes Daemon] Stop failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Send Stdin Input
+app.post('/api/hermes/input', (req, res) => {
+  const { text } = req.body as { text: string };
+  if (!text) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+
+  if (!hermesChild || hermesChild.exitCode !== null) {
+    return res.status(400).json({ error: 'Hermes Agent is not currently running.' });
+  }
+
+  try {
+    hermesChild.stdin.write(text + '\n');
+    appendHermesLog(`\n> ${text}\n`);
+    res.json({ status: 'success' });
+  } catch (err: any) {
+    console.error('[Hermes Daemon] Input pipe failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Get Recent Logs (JSON)
+app.get('/api/hermes/logs', (req, res) => {
+  res.json({ logs: hermesLogBuffer.join('\n') });
+});
+
+// 8. Stream Real-time Logs (SSE)
+app.get('/api/hermes/logs/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  res.write(`data: ${JSON.stringify({ type: 'backlog', logs: hermesLogBuffer.join('\n') })}\n\n`);
+
+  const listener = (text: string) => {
+    res.write(`data: ${JSON.stringify({ type: 'log', text })}\n\n`);
+  };
+
+  hermesLogListeners.add(listener);
+
+  req.on('close', () => {
+    hermesLogListeners.delete(listener);
+  });
+});
+
+// 9. Dynamic Completions Proxy Endpoint (with Firestore telemetry logging)
+app.post('/v1/chat/completions', async (req, res) => {
+  const reqModel = req.body?.model;
+  const activeModel = (reqModel && reqModel !== 'gateway-active-model')
+    ? reqModel
+    : (hermesActiveModel || 'google/gemma-4-e2b');
+
+  console.log(`[Inference Gateway Proxy] Received completion request for model: ${activeModel}`);
+
+  let targetUrl = '';
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  let requestBody = { ...req.body };
+  requestBody.model = activeModel;
+
+  if (activeModel.includes('/') && !activeModel.startsWith('google/gemma-4')) {
+    targetUrl = 'http://localhost:1234/v1/chat/completions';
+  } else if (activeModel.startsWith('google/gemma-4') || activeModel.startsWith('lmstudio-community/')) {
+    targetUrl = 'http://localhost:1234/v1/chat/completions';
+  } else if (activeModel.startsWith('gemma4:') || activeModel.startsWith('llama3.2') || activeModel.includes(':')) {
+    targetUrl = 'http://localhost:11434/v1/chat/completions';
+  } else if (activeModel.startsWith('gemini-')) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      return res.status(401).json({ error: 'GEMINI_API_KEY is not configured in backend .env' });
+    }
+    targetUrl = `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=${key}`;
+  } else if (activeModel.startsWith('gpt-')) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) {
+      return res.status(401).json({ error: 'OPENAI_API_KEY is not configured in backend .env' });
+    }
+    targetUrl = 'https://api.openai.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${key}`;
+  } else if (activeModel.startsWith('deepseek-')) {
+    const key = process.env.DEEPSEEK_API_KEY;
+    if (!key) {
+      return res.status(401).json({ error: 'DEEPSEEK_API_KEY is not configured in backend .env' });
+    }
+    targetUrl = 'https://api.deepseek.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${key}`;
+  } else {
+    targetUrl = 'http://localhost:11434/v1/chat/completions';
+  }
+
+  const startTime = Date.now();
+
+  try {
+    const upstreamRes = await fetch(targetUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!upstreamRes.ok) {
+      const errText = await upstreamRes.text();
+      return res.status(upstreamRes.status).json({ error: errText || `Upstream returned ${upstreamRes.status}` });
+    }
+
+    const latencyMs = Date.now() - startTime;
+    console.log(`[Inference Gateway Proxy] Request completed in ${latencyMs}ms`);
+
+    const isStream = req.body.stream === true;
+    if (isStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      const reader = (upstreamRes.body as any).getReader ? (upstreamRes.body as any).getReader() : null;
+      if (!reader) {
+        (upstreamRes.body as any).pipe(res);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let totalTokensOut = 0;
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunkStr = decoder.decode(value, { stream: true });
+          res.write(chunkStr);
+          totalTokensOut += 1;
+        }
+      } finally {
+        res.end();
+        try {
+          const docRef = inferenceDb.collection('request_logs');
+          await docRef.add({
+            userId: 'hermes-agent',
+            timestamp: new Date().toISOString(),
+            model: activeModel,
+            tokensIn: 200,
+            tokensOut: totalTokensOut,
+            costSimulated: 0.00,
+            latencyMs,
+            status: 'success'
+          });
+        } catch (dbErr: any) {
+          console.error('[Telemetry Log] Failed to save usage log:', dbErr.message);
+        }
+      }
+    } else {
+      const data = await upstreamRes.json();
+      res.json(data);
+
+      try {
+        const tokensIn = data.usage?.prompt_tokens || 100;
+        const tokensOut = data.usage?.completion_tokens || 100;
+        const docRef = inferenceDb.collection('request_logs');
+        await docRef.add({
+          userId: 'hermes-agent',
+          timestamp: new Date().toISOString(),
+          model: activeModel,
+          tokensIn,
+          tokensOut,
+          costSimulated: 0.00,
+          latencyMs,
+          status: 'success'
+        });
+      } catch (dbErr: any) {
+        console.error('[Telemetry Log] Failed to save usage log:', dbErr.message);
+      }
+    }
+  } catch (err: any) {
+    console.error('[Inference Gateway Proxy] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+app.get('/api/inference/gcp/live-status', async (req, res) => {
+  try {
+    const instanceName = 'ollama-inference-vm';
+    const zone = 'us-central1-a';
+    let gcloudOutput: any;
+    try {
+      const output = execSync(`gcloud compute instances describe ${instanceName} --zone=${zone} --format="json(status,networkInterfaces[0].accessConfigs[0].natIP)"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+      gcloudOutput = JSON.parse(output);
+    } catch (gcloudErr: any) {
+      console.log('[Live Status Check] VM not found or gcloud failed:', gcloudErr.message);
+      gcloudOutput = { status: 'ABSENT' };
+    }
+
+    const liveStatus = gcloudOutput.status === 'RUNNING' ? 'RUNNING' : 'STOPPED';
+    const liveIp = gcloudOutput.networkInterfaces?.[0]?.accessConfigs?.[0]?.natIP || '';
+
+    // Update Firestore to align status
+    try {
+      const updateData: any = {
+        vmStatus: liveStatus,
+        updatedAt: new Date().toISOString()
+      };
+      if (liveStatus === 'RUNNING' && liveIp) {
+        updateData.gcpEndpoint = `http://${liveIp}:11434`;
+      }
+      await inferenceDb.collection('admin').doc('inferenceConfig').update(updateData);
+      console.log('[Live Status Sync] Firestore updated with live VM status:', updateData);
+    } catch (dbErr: any) {
+      console.error('[Live Status Sync] Failed to update Firestore:', dbErr.message);
+    }
+
+    res.json({
+      success: true,
+      liveStatus,
+      liveIp,
+      gcloudStatus: gcloudOutput.status
+    });
+  } catch (err: any) {
+    console.error('[Live Status Check] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // SPA fallback: handle client-side routing (must be LAST)
 app.get('*any', (req, res) => {

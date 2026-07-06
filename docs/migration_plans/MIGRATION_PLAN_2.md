@@ -58,3 +58,4 @@ We will introduce a new directory `scripts/migration/` inside `SuiteUtils` to ho
 - Log into the apps with existing credentials to verify Authentication migrated successfully.
 - Ensure all historical data (Storage images, Firestore documents) load properly.
 - Perform heavy composite queries in `PromptTool` and `PromptResources` to confirm indexes were successfully created and no "Index required" errors are thrown.
+

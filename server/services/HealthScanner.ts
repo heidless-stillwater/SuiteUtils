@@ -122,7 +122,9 @@ export class HealthScanner {
       'persona-bridge': 5005,
       'urlshortener': 3006,
       'tokenmarket': 3007,
-      'inferencegateway': 3009
+      'inferencegateway': 3009,
+      'ollama-service': 11434,
+      'lmstudio-service': 1234
     };
 
     const port = portMap[id];
